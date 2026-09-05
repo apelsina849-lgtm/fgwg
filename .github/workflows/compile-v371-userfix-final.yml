@@ -1,0 +1,203 @@
+name: Compile OLDSAMPRP V3.7.1 USERFIX FINAL
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/compile-v371-userfix-final.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout V371 payload
+        uses: actions/checkout@v4
+        with:
+          ref: oldsamprp-v371-final
+          fetch-depth: 0
+
+      - name: Reconstruct proven V371 source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $parts=@('payload/current/chunk00','payload/current/part00','payload/current/part01','payload/final/part02','payload/final/p03_0','payload/final/p03_1','payload/final/p03_2','payload/final/p03_3','payload/current/part04','payload/final/part05','payload/current/part06','payload/final/part07')
+          $b64=($parts|ForEach-Object{[IO.File]::ReadAllText((Resolve-Path $_))})-join''
+          [IO.File]::WriteAllBytes('source.tar.xz',[Convert]::FromBase64String($b64))
+          tar -xf source.tar.xz
+          python patches/compile_fix_v370.py
+          if($LASTEXITCODE-ne 0){throw 'v370 compile patch failed'}
+          python patches/warning_cleanup_v370.py
+          if($LASTEXITCODE-ne 0){throw 'v370 warning patch failed'}
+          python -c "import base64,lzma,pathlib;pathlib.Path('v371.patch').write_bytes(lzma.decompress(base64.b64decode(pathlib.Path('patches/v371_compile_only.patch.xz.b64').read_text())))"
+          git apply --check --directory=server v371.patch
+          if($LASTEXITCODE-ne 0){throw 'v371 patch check failed'}
+          git apply --directory=server v371.patch
+          if($LASTEXITCODE-ne 0){throw 'v371 patch apply failed'}
+          python -c "import base64,pathlib;pathlib.Path('v371_newfiles.tar.xz').write_bytes(base64.b64decode(pathlib.Path('patches/v371_newfiles_fixed.tar.xz.b64').read_text()))"
+          tar -C server -xf v371_newfiles.tar.xz
+
+      - name: Apply requested final fixes and security hardening
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          from pathlib import Path
+          import re
+
+          root=Path('server')
+          p=root/'source/gamemodes/oldsamprp.pwn'
+          s=p.read_text(encoding='utf-8')
+
+          # Release marker.
+          s=re.sub(r'#define\s+GM_VERSION\s+"[^"]+"', '#define GM_VERSION              "3.7.1-donor-merge-final"', s, count=1)
+
+          # /showlic decline response: SA-MP/open.mp cannot sync an arbitrary physical U key,
+          # so a single U chat reply is consumed as decline; KEY_NO and /u remain fallbacks.
+          if 'gV360DocOfferType[playerid] != V360_DOC_NONE && !strcmp(text, "u", true)' not in s:
+              anchor='''public OnPlayerText(playerid, text[])\n{\n    if (!PlayerData[playerid][pLogged]) return 0;\n'''
+              insert='''public OnPlayerText(playerid, text[])\n{\n    if (!PlayerData[playerid][pLogged]) return 0;\n\n    if (gV360DocOfferType[playerid] != V360_DOC_NONE && !strcmp(text, "u", true))\n    {\n        V360_RejectDocumentOffer(playerid);\n        return 0;\n    }\n'''
+              if anchor not in s:
+                  raise SystemExit('OnPlayerText anchor not found')
+              s=s.replace(anchor,insert,1)
+
+          # Permission-matrix editing is itself security-sensitive: owner only.
+          for cmd in ('setcmd','redcmd'):
+              m=re.search(r'if \(!strcmp\(command, "/'+cmd+r'", true\)\)\s*\{(?P<body>.*?)\n\s*\}', s, re.S)
+              if not m:
+                  raise SystemExit('/'+cmd+' handler missing')
+              body=m.group('body')
+              if 'RequireOwnerOnly(playerid)' not in body:
+                  body=re.sub(r'\n\s*if \(!RequireStaffPosition\(playerid, STAFF_ZGA_POSITION\)\) return true;', '', body, count=1)
+                  body=re.sub(r'\n\s*if \(!RequireCommandPermission\(playerid, CMDPERM_ADMIN_MANAGE, 10\)\) return true;', '', body, count=1)
+                  body='\n        if (!RequireOwnerOnly(playerid)) return true;'+body
+                  s=s[:m.start('body')]+body+s[m.end('body'):]
+
+          p.write_text(s,encoding='utf-8',newline='\n')
+
+          law=root/'source/include/oldsamprp/v360_vehicle_house_law.inc'
+          t=law.read_text(encoding='utf-8')
+          t=t.replace('хочет показать вам свои лицензии. {63CB00}Y — принять, {FF5555}N — отклонить. {AFAFAF}/u — отклонить.',
+                      'хочет показать вам свои лицензии. {63CB00}Y — принять, {FF5555}U — отклонить. {AFAFAF}Введите U в чат (N или /u — резерв).')
+          t=t.replace('хочет показать вам паспорт. {63CB00}Y — принять, {FF5555}N — отклонить. {AFAFAF}/u — отклонить.',
+                      'хочет показать вам паспорт. {63CB00}Y — принять, {FF5555}U — отклонить. {AFAFAF}Введите U в чат (N или /u — резерв).')
+          law.write_text(t,encoding='utf-8',newline='\n')
+
+          cfg=root/'server.cfg'
+          if cfg.exists():
+              c=cfg.read_text(encoding='utf-8',errors='replace')
+              c=re.sub(r'(?im)^filterscripts\s+.*$', 'filterscripts mapfix', c)
+              cfg.write_text(c,encoding='utf-8',newline='\n')
+          fs=root/'source/filterscripts'
+          for name in ('map.amx','maps.amx'):
+              f=fs/name
+              if f.exists(): f.rename(fs/(name+'.disabled'))
+          '@ | Set-Content -Encoding UTF8 apply_userfix.py
+          python apply_userfix.py
+          if($LASTEXITCODE-ne 0){throw 'final userfix patch failed'}
+
+      - name: Static requirement audit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          from pathlib import Path
+          import re,sys
+          root=Path('server')
+          pwn=(root/'source/gamemodes/oldsamprp.pwn').read_text(encoding='utf-8')
+          incs='\n'.join(p.read_text(encoding='utf-8',errors='ignore') for p in (root/'source/include/oldsamprp').glob('*.inc'))
+          alltext=pwn+'\n'+incs
+          checks={
+            'showlic command':'/showlic',
+            'Y accept':'KEY_YES',
+            'U decline chat':'gV360DocOfferType[playerid] != V360_DOC_NONE && !strcmp(text, "u", true)',
+            'garage ownership flag':'HouseHasGarage',
+            'faction help':'ShowHelpCategoryDialog',
+            'faction vehicles':'faction_vehicles',
+            'market':'/carsell',
+            'auction':'/auction',
+            'auction bid':'/bid',
+          }
+          for name,needle in checks.items():
+              if needle not in alltext:
+                  print('MISSING',name,needle);sys.exit(2)
+              print('OK',name)
+          for cmd in ('/setmoney','/givemoney','/gmx','/restart','/banip','/setadmin','/makeadmin','/removeadmin','/setdonate','/givedonate','/setrubles','/giverubles','/giverub','/givecoins','/serverlock','/serverunlock','/dostup','/setcmd','/redcmd'):
+              pos=pwn.find('if (!strcmp(command, "'+cmd+'", true)')
+              if pos<0:
+                  # commands with combined handlers still contain literal, just search nearby first occurrence.
+                  pos=pwn.find('"'+cmd+'"')
+              if pos<0:
+                  print('MISSING critical command',cmd);sys.exit(3)
+              chunk=pwn[pos:pos+1800]
+              if 'RequireOwnerOnly(playerid)' not in chunk:
+                  print('NOT OWNER ONLY',cmd);sys.exit(4)
+              print('OWNER-ONLY',cmd)
+          cfg=(root/'server.cfg').read_text(encoding='utf-8',errors='ignore')
+          if 'filterscripts mapfix' not in cfg: raise SystemExit('mapfix config missing')
+          print('STATIC AUDIT PASSED')
+          '@ | Set-Content -Encoding UTF8 audit_userfix.py
+          python audit_userfix.py
+          if($LASTEXITCODE-ne 0){throw 'static audit failed'}
+
+      - name: Convert Pawn source to cp1251
+        shell: pwsh
+        run: |
+          $cp=[Text.Encoding]::GetEncoding(1251);$u=New-Object Text.UTF8Encoding($false)
+          Get-ChildItem 'server/source' -Recurse -File|Where-Object{$_.Extension -in '.pwn','.inc'}|ForEach-Object{$t=[IO.File]::ReadAllText($_.FullName,$u);[IO.File]::WriteAllText($_.FullName,$t,$cp)}
+
+      - name: Install Pawn dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest 'https://github.com/openmultiplayer/open.mp/releases/download/v1.5.8.3079/open.mp-win-x86.zip' -OutFile openmp.zip
+          Expand-Archive openmp.zip openmp -Force
+          $pawncc=Get-ChildItem openmp -Recurse -Filter pawncc.exe|Select-Object -First 1
+          if(!$pawncc){throw 'pawncc missing'}
+          $inc=Join-Path $pawncc.Directory.FullName include
+          New-Item -ItemType Directory -Force (Join-Path $inc oldsamprp)|Out-Null
+          Copy-Item 'server/source/include/oldsamprp/*.inc' (Join-Path $inc oldsamprp) -Force
+          Invoke-WebRequest 'https://github.com/pBlueG/SA-MP-MySQL/releases/download/R41-4/mysql-R41-4-win32.zip' -OutFile mysql.zip
+          Expand-Archive mysql.zip mysql -Force
+          Invoke-WebRequest 'https://github.com/Y-Less/sscanf/releases/download/v2.13.8/sscanf-2.13.8-win32.zip' -OutFile sscanf.zip
+          Expand-Archive sscanf.zip sscanf -Force
+          Invoke-WebRequest 'https://github.com/samp-incognito/samp-streamer-plugin/releases/download/v2.9.6/samp-streamer-plugin-2.9.6.zip' -OutFile streamer.zip
+          Expand-Archive streamer.zip streamer -Force
+          Invoke-WebRequest 'https://raw.githubusercontent.com/lassir/bcrypt-samp/v2.2.3/pawn/bcrypt.inc' -OutFile (Join-Path $inc bcrypt.inc)
+          function C($r,$n){$f=Get-ChildItem $r -Recurse -Filter $n|Select-Object -First 1;if(!$f){throw "$n missing"};Copy-Item $f.FullName (Join-Path $inc $n) -Force}
+          C mysql a_mysql.inc; C sscanf sscanf2.inc; C streamer streamer.inc
+          "PAWNCC=$($pawncc.FullName)"|Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PAWNINC=$inc"|Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Compile zero errors zero warnings
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force compiled|Out-Null
+          $out='-o'+(Join-Path $PWD 'compiled/oldsamprp');$inc='-i'+$env:PAWNINC
+          & $env:PAWNCC '.\server\source\gamemodes\oldsamprp.pwn' '-;+' '-(+' '-Z-' '-d3' '-O2' $inc $out 2>&1|Tee-Object compiled/compile.log
+          if($LASTEXITCODE-ne 0){exit $LASTEXITCODE}
+          if(!(Test-Path compiled/oldsamprp.amx)){throw 'AMX missing'}
+          if(Select-String compiled/compile.log -Pattern 'warning [0-9]+:' -Quiet){Get-Content compiled/compile.log;throw 'warnings remain'}
+          Write-Host "AMX $((Get-Item compiled/oldsamprp.amx).Length) bytes; 0 errors; 0 warnings"
+
+      - name: Restore source files to UTF-8 for artifact
+        shell: pwsh
+        run: |
+          $cp=[Text.Encoding]::GetEncoding(1251);$u=New-Object Text.UTF8Encoding($false)
+          Get-ChildItem 'server/source' -Recurse -File|Where-Object{$_.Extension -in '.pwn','.inc'}|ForEach-Object{$t=[IO.File]::ReadAllText($_.FullName,$cp);[IO.File]::WriteAllText($_.FullName,$t,$u)}
+          Copy-Item compiled/oldsamprp.amx server/source/gamemodes/oldsamprp.amx -Force
+
+      - name: Upload compiled source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: OLDSAMPRP-V371-USERFIX-COMPILED-SOURCE
+          path: |
+            compiled/oldsamprp.amx
+            compiled/compile.log
+            server/source/gamemodes/oldsamprp.pwn
+            server/source/include/oldsamprp/*.inc
+            server/server.cfg
+          if-no-files-found: error
