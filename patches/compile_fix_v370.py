@@ -1,0 +1,24 @@
+from pathlib import Path
+p = Path('server/source/include/oldsamprp/arizona_factions_pro.inc')
+s = p.read_text(encoding='utf-8')
+if 'forward bool:FG_IsTopLeader(playerid);' not in s:
+    s = s.replace('forward bool:FG_IsLeader(playerid);\n', 'forward bool:FG_IsLeader(playerid);\nforward bool:FG_IsTopLeader(playerid);\n', 1)
+repls = {
+'''        format(body,sizeof body,\n            "{FFFFFF}Организация: {FFCC00}%s\\n"\n            "{FFFFFF}Ранг: %d/10\\n"\n            "{FFFFFF}Подразделение: %s\\n"\n            "{FFFFFF}Выговоры: %d/3\\n"\n            "{FFFFFF}Служба: %s\\n\\n"\n            "{BFC0C2}/members — онлайн состав\\n/duty — форма\\n/pr — чат подразделения\\n/fhq — штаб",''':
+'''        format(body,sizeof body,\n            "{FFFFFF}Организация: {FFCC00}%s\\n{FFFFFF}Ранг: %d/10\\n{FFFFFF}Подразделение: %s\\n{FFFFFF}Выговоры: %d/3\\n{FFFFFF}Служба: %s\\n\\n{BFC0C2}/members — онлайн состав\\n/duty — форма\\n/pr — чат подразделения\\n/fhq — штаб",''',
+'''    format(body,sizeof body,\n        "{FFFFFF}Полный состав организации\\n"\n        "{FFFFFF}Онлайн состав\\n"\n        "{FFFFFF}Офлайн состав из MySQL\\n"\n        "{63CB00}Принять сотрудника\\n"\n        "{EA4335}Уволить сотрудника\\n"\n        "{FFFFFF}Повысить сотрудника\\n"\n        "{FFFFFF}Понизить сотрудника\\n"\n        "{FFFFFF}Выдать выговор\\n"\n        "{63CB00}Снять выговор\\n"\n        "{FFFFFF}Заместители\\n"\n        "{FFFFFF}Подразделения\\n"\n        "{FFFFFF}Руководители подразделений\\n"\n        "{FFFFFF}Собеседования %s\\n"\n        "{FFFFFF}HQ: %s\\n"\n        "{FFFFFF}Склад организации\\n"\n        "{FFFFFF}Казна организации\\n"\n        "{FFFFFF}Фракционный транспорт\\n"\n        "{FFFFFF}Формы / duty\\n"\n        "{FFFFFF}Настройки рангов\\n"\n        "{FFFFFF}Права рангов\\n"\n        "{FFFFFF}Логи руководства\\n"\n        "{FFFFFF}Статистика организации",''':
+'''    format(body,sizeof body,\n        "{FFFFFF}Полный состав организации\\n{FFFFFF}Онлайн состав\\n{FFFFFF}Офлайн состав из MySQL\\n{63CB00}Принять сотрудника\\n{EA4335}Уволить сотрудника\\n{FFFFFF}Повысить сотрудника\\n{FFFFFF}Понизить сотрудника\\n{FFFFFF}Выдать выговор\\n{63CB00}Снять выговор\\n{FFFFFF}Заместители\\n{FFFFFF}Подразделения\\n{FFFFFF}Руководители подразделений\\n{FFFFFF}Собеседования %s\\n{FFFFFF}HQ: %s\\n{FFFFFF}Склад организации\\n{FFFFFF}Казна организации\\n{FFFFFF}Фракционный транспорт\\n{FFFFFF}Формы / duty\\n{FFFFFF}Настройки рангов\\n{FFFFFF}Права рангов\\n{FFFFFF}Логи руководства\\n{FFFFFF}Статистика организации",''',
+'''    format(body,sizeof body,\n        "{FFFFFF}%s собеседование\\n"\n        "{FFFFFF}Текст объявления: {BFC0C2}%s\\n"\n        "{FFFFFF}Требования: {BFC0C2}%s\\n"\n        "{FFFFFF}Минимальный уровень: {FFCC00}%d\\n"\n        "{FFFFFF}Время / автоокончание: {FFCC00}%d сек.\\n"\n        "{FFFFFF}Место: {BFC0C2}%s\\n"\n        "{FFFFFF}Отправить объявление + GPS\\n"\n        "{FFFFFF}Показать активные /sobes",''':
+'''    format(body,sizeof body,\n        "{FFFFFF}%s собеседование\\n{FFFFFF}Текст объявления: {BFC0C2}%s\\n{FFFFFF}Требования: {BFC0C2}%s\\n{FFFFFF}Минимальный уровень: {FFCC00}%d\\n{FFFFFF}Время / автоокончание: {FFCC00}%d сек.\\n{FFFFFF}Место: {BFC0C2}%s\\n{FFFFFF}Отправить объявление + GPS\\n{FFFFFF}Показать активные /sobes",''',
+'''    format(body,sizeof body,\n        "{FFFFFF}Материалы: {FFCC00}%d\\n"\n        "{FFFFFF}Патроны: {FFCC00}%d\\n"\n        "{FFFFFF}Аптечки: {FFCC00}%d\\n"\n        "{63CB00}Получить аптечку\\n"\n        "{FFFFFF}Сдать аптечку\\n"\n        "{63CB00}Получить 100 патронов на текущее оружие\\n"\n        "{FFFFFF}Сдать 100 патронов текущего оружия",''':
+'''    format(body,sizeof body,\n        "{FFFFFF}Материалы: {FFCC00}%d\\n{FFFFFF}Патроны: {FFCC00}%d\\n{FFFFFF}Аптечки: {FFCC00}%d\\n{63CB00}Получить аптечку\\n{FFFFFF}Сдать аптечку\\n{63CB00}Получить 100 патронов на текущее оружие\\n{FFFFFF}Сдать 100 патронов текущего оружия",''',
+'''    format(body,sizeof body,\n        "{FFFFFF}Закрыть/открыть транспорт\\n"\n        "{FFFFFF}Припарковать на текущей позиции\\n"\n        "{FFFFFF}Респавн на парковку\\n"\n        "{FFFFFF}Минимальный ранг: {FFCC00}%d\\n"\n        "{FFFFFF}Подразделение: {FFCC00}%d\\n"\n        "{BFC0C2}Настройки сохраняются в существующей faction_vehicles.",''':
+'''    format(body,sizeof body,\n        "{FFFFFF}Закрыть/открыть транспорт\\n{FFFFFF}Припарковать на текущей позиции\\n{FFFFFF}Респавн на парковку\\n{FFFFFF}Минимальный ранг: {FFCC00}%d\\n{FFFFFF}Подразделение: {FFCC00}%d\\n{BFC0C2}Настройки сохраняются в существующей faction_vehicles.",''',
+}
+for old,new in repls.items():
+    if old not in s:
+        print('WARN replacement pattern missing:', old.splitlines()[0])
+    else:
+        s=s.replace(old,new,1)
+p.write_text(s,encoding='utf-8',newline='\n')
+print('patched',p)
