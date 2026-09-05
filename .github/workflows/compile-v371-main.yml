@@ -16,13 +16,13 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout compile payload branch
+      - name: Checkout V3.7.1 payload branch
         uses: actions/checkout@v4
         with:
-          ref: oldsamprp-v370-compile-final
-          fetch-depth: 1
+          ref: oldsamprp-v371-final
+          fetch-depth: 0
 
-      - name: Reconstruct V3.7.0 clean baseline and apply V3.7.1 patch
+      - name: Reconstruct V3.7.0 compiled-final source
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -31,34 +31,27 @@ jobs:
             'payload/final/part02','payload/final/p03_0','payload/final/p03_1','payload/final/p03_2','payload/final/p03_3',
             'payload/current/part04','payload/final/part05','payload/current/part06','payload/final/part07'
           )
-          foreach ($p in $parts) { if (!(Test-Path $p)) { throw "Missing V3.7.0 payload: $p" } }
+          foreach ($p in $parts) { if (!(Test-Path $p)) { throw "Missing payload part: $p" } }
           $b64 = ($parts | ForEach-Object { [IO.File]::ReadAllText((Resolve-Path $_)) }) -join ''
           [IO.File]::WriteAllBytes('source.tar.xz', [Convert]::FromBase64String($b64))
           tar -xf source.tar.xz
-          if (!(Test-Path 'server/source/gamemodes/oldsamprp.pwn')) { throw 'V3.7.0 oldsamprp.pwn not reconstructed' }
+          if (!(Test-Path 'server/source/gamemodes/oldsamprp.pwn')) { throw 'oldsamprp.pwn not reconstructed' }
           python patches/compile_fix_v370.py
           if ($LASTEXITCODE -ne 0) { throw 'V3.7.0 compile patch failed' }
           python patches/warning_cleanup_v370.py
           if ($LASTEXITCODE -ne 0) { throw 'V3.7.0 warning cleanup failed' }
 
-          $patchParts = @(
-            'payload/v371/patchpart00.txt',
-            'payload/v371/patchpart01.txt',
-            'payload/v371/patchpart02.txt',
-            'payload/v371/patchpart03.txt'
-          )
-          foreach ($p in $patchParts) { if (!(Test-Path $p)) { throw "Missing V3.7.1 patch part: $p" } }
-          $patchB64 = ($patchParts | ForEach-Object { [IO.File]::ReadAllText((Resolve-Path $_)).Trim() }) -join ''
-          [IO.File]::WriteAllBytes('v371_patch.tar.xz', [Convert]::FromBase64String($patchB64))
-          tar -xf v371_patch.tar.xz
-          if (!(Test-Path 'v371_git.patch')) { throw 'V3.7.1 patch not decoded' }
+      - name: Apply V3.7.1 donor integration patch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -c "import base64,lzma,pathlib; p=pathlib.Path('patches/v371_final_source.patch.xz.b64'); pathlib.Path('v371.patch').write_bytes(lzma.decompress(base64.b64decode(p.read_text())))"
           Push-Location server
-          git apply --check ..\v371_git.patch
-          if ($LASTEXITCODE -ne 0) { throw 'V3.7.1 git apply --check failed' }
-          git apply ..\v371_git.patch
-          if ($LASTEXITCODE -ne 0) { throw 'V3.7.1 git apply failed' }
+          git apply --check '..\v371.patch'
+          git apply '..\v371.patch'
           Pop-Location
-          if (!(Test-Path 'server/source/include/oldsamprp/game_life_donor_market.inc')) { throw 'V3.7.1 donor market include missing after patch' }
+          if (!(Test-Path 'server/source/include/oldsamprp/game_life_donor_market.inc')) { throw 'V3.7.1 include missing after patch' }
+          if (!(Select-String -Path 'server/source/gamemodes/oldsamprp.pwn' -Pattern '3.7.1-donor-integration-fixes' -Quiet)) { throw 'V3.7.1 version marker missing' }
           Write-Host "V3.7.1 source ready: $((Get-Item 'server/source/gamemodes/oldsamprp.pwn').Length) bytes"
 
       - name: Convert Pawn sources to Windows-1251
@@ -79,7 +72,7 @@ jobs:
           Invoke-WebRequest 'https://github.com/openmultiplayer/open.mp/releases/download/v1.5.8.3079/open.mp-win-x86.zip' -OutFile 'openmp.zip'
           Expand-Archive 'openmp.zip' 'openmp' -Force
           $pawncc = Get-ChildItem 'openmp' -Recurse -Filter 'pawncc.exe' | Select-Object -First 1
-          if (!$pawncc) { throw 'pawncc.exe not found' }
+          if (!$pawncc) { throw 'pawncc.exe not found in open.mp archive' }
           $inc = Join-Path $pawncc.Directory.FullName 'include'
           New-Item -ItemType Directory -Force (Join-Path $inc 'oldsamprp') | Out-Null
           Copy-Item 'server/source/include/oldsamprp/*.inc' (Join-Path $inc 'oldsamprp') -Force
@@ -117,6 +110,7 @@ jobs:
             throw 'Pawn warnings remain in V3.7.1'
           }
           Write-Host "AMX size: $((Get-Item 'compiled/oldsamprp.amx').Length)"
+          Write-Host 'Pawn compile: 0 errors / 0 warnings'
 
       - name: Upload clean V3.7.1 artifact
         uses: actions/upload-artifact@v4
