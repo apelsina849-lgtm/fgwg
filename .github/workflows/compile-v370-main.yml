@@ -22,30 +22,35 @@ jobs:
           ref: oldsamprp-v370-compile-final
           fetch-depth: 0
 
-      - name: Reconstruct V3.7.0 source archive
+      - name: Reconstruct and patch V3.7.0 source
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $parts = @(
-            'payload/current/chunk00',
-            'payload/current/part00',
-            'payload/current/part01',
-            'payload/final/part02',
-            'payload/final/p03_0',
-            'payload/final/p03_1',
-            'payload/final/p03_2',
-            'payload/final/p03_3',
-            'payload/current/part04',
-            'payload/final/part05',
-            'payload/current/part06',
-            'payload/final/part07'
+            'payload/current/chunk00','payload/current/part00','payload/current/part01',
+            'payload/final/part02','payload/final/p03_0','payload/final/p03_1','payload/final/p03_2','payload/final/p03_3',
+            'payload/current/part04','payload/final/part05','payload/current/part06','payload/final/part07'
           )
           foreach ($p in $parts) { if (!(Test-Path $p)) { throw "Missing payload part: $p" } }
           $b64 = ($parts | ForEach-Object { [IO.File]::ReadAllText((Resolve-Path $_)) }) -join ''
           [IO.File]::WriteAllBytes('source.tar.xz', [Convert]::FromBase64String($b64))
           tar -xf source.tar.xz
           if (!(Test-Path 'server/source/gamemodes/oldsamprp.pwn')) { throw 'oldsamprp.pwn not reconstructed' }
-          Write-Host "Source reconstructed: $((Get-Item 'server/source/gamemodes/oldsamprp.pwn').Length) bytes"
+          python patches/compile_fix_v370.py
+          if ($LASTEXITCODE -ne 0) { throw 'Compile patch failed' }
+          Write-Host "Source reconstructed and patched: $((Get-Item 'server/source/gamemodes/oldsamprp.pwn').Length) bytes"
+
+      - name: Convert Pawn sources to Windows-1251
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cp1251 = [Text.Encoding]::GetEncoding(1251)
+          $utf8 = New-Object Text.UTF8Encoding($false)
+          Get-ChildItem 'server/source' -Recurse -File | Where-Object { $_.Extension -in '.pwn','.inc' } | ForEach-Object {
+            $text = [IO.File]::ReadAllText($_.FullName, $utf8)
+            [IO.File]::WriteAllText($_.FullName, $text, $cp1251)
+          }
+          Write-Host 'Pawn source encoding: Windows-1251'
 
       - name: Download open.mp and Pawn dependencies
         shell: pwsh
@@ -58,7 +63,6 @@ jobs:
           $inc = Join-Path $pawncc.Directory.FullName 'include'
           New-Item -ItemType Directory -Force (Join-Path $inc 'oldsamprp') | Out-Null
           Copy-Item 'server/source/include/oldsamprp/*.inc' (Join-Path $inc 'oldsamprp') -Force
-
           Invoke-WebRequest 'https://github.com/pBlueG/SA-MP-MySQL/releases/download/R41-4/mysql-R41-4-win32.zip' -OutFile 'mysql.zip'
           Expand-Archive 'mysql.zip' 'mysql' -Force
           Invoke-WebRequest 'https://github.com/Y-Less/sscanf/releases/download/v2.13.8/sscanf-2.13.8-win32.zip' -OutFile 'sscanf.zip'
@@ -66,10 +70,9 @@ jobs:
           Invoke-WebRequest 'https://github.com/samp-incognito/samp-streamer-plugin/releases/download/v2.9.6/samp-streamer-plugin-2.9.6.zip' -OutFile 'streamer.zip'
           Expand-Archive 'streamer.zip' 'streamer' -Force
           Invoke-WebRequest 'https://raw.githubusercontent.com/lassir/bcrypt-samp/v2.2.3/pawn/bcrypt.inc' -OutFile (Join-Path $inc 'bcrypt.inc')
-
-          function Copy-Include([string]$root, [string]$name) {
-            $f = Get-ChildItem $root -Recurse -Filter $name | Select-Object -First 1
-            if (!$f) { throw "Required include not found: $name" }
+          function Copy-Include([string]$root,[string]$name) {
+            $f=Get-ChildItem $root -Recurse -Filter $name | Select-Object -First 1
+            if(!$f){throw "Required include not found: $name"}
             Copy-Item $f.FullName (Join-Path $inc $name) -Force
           }
           Copy-Include 'mysql' 'a_mysql.inc'
@@ -82,29 +85,27 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force 'compiled' | Out-Null
-          $outArg = '-o' + (Join-Path $PWD 'compiled/oldsamprp')
-          $incArg = '-i' + $env:PAWNINC
+          $outArg='-o'+(Join-Path $PWD 'compiled/oldsamprp')
+          $incArg='-i'+$env:PAWNINC
           & $env:PAWNCC '.\server\source\gamemodes\oldsamprp.pwn' '-;+' '-(+' '-Z-' '-d3' '-O2' $incArg $outArg 2>&1 | Tee-Object -FilePath 'compiled/compile.log'
-          $code = $LASTEXITCODE
+          $code=$LASTEXITCODE
           Write-Host "pawncc exit code: $code"
-          if ($code -ne 0) { exit $code }
-          if (!(Test-Path 'compiled/oldsamprp.amx')) { throw 'AMX missing' }
+          if($code -ne 0){exit $code}
+          if(!(Test-Path 'compiled/oldsamprp.amx')){throw 'AMX missing'}
           Write-Host "AMX size: $((Get-Item 'compiled/oldsamprp.amx').Length)"
 
       - name: Encode AMX and publish output
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
+          $ErrorActionPreference='Stop'
           New-Item -ItemType Directory -Force 'compiled/b64' | Out-Null
-          $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path 'compiled/oldsamprp.amx')))
-          $chunkSize = 200000
-          $count = 0
-          for ($offset=0; $offset -lt $b64.Length; $offset += $chunkSize) {
-            $len = [Math]::Min($chunkSize, $b64.Length-$offset)
-            [IO.File]::WriteAllText(('compiled/b64/chunk{0:D3}.txt' -f $count), $b64.Substring($offset,$len))
-            $count++
+          $b64=[Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path 'compiled/oldsamprp.amx')))
+          $chunkSize=200000;$count=0
+          for($offset=0;$offset -lt $b64.Length;$offset+=$chunkSize){
+            $len=[Math]::Min($chunkSize,$b64.Length-$offset)
+            [IO.File]::WriteAllText(('compiled/b64/chunk{0:D3}.txt' -f $count),$b64.Substring($offset,$len));$count++
           }
-          [IO.File]::WriteAllText('compiled/b64/manifest.txt', "chunks=$count`namx_bytes=$((Get-Item 'compiled/oldsamprp.amx').Length)`n")
+          [IO.File]::WriteAllText('compiled/b64/manifest.txt',"chunks=$count`namx_bytes=$((Get-Item 'compiled/oldsamprp.amx').Length)`n")
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add compiled/compile.log compiled/b64
