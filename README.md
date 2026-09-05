@@ -1,3 +1,3 @@
 # Temporary OLDSAMPRP build workspace
 
-Used to compile the OLDSAMPRP Pawn gamemode in CI.
+V3.7.0 final compile payload assembled for Windows Pawn/open.mp CI.
