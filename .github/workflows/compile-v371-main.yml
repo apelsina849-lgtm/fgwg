@@ -30,10 +30,8 @@ jobs:
           python patches/compile_fix_v370.py; if($LASTEXITCODE-ne 0){throw 'v370 compile patch failed'}
           python patches/warning_cleanup_v370.py; if($LASTEXITCODE-ne 0){throw 'v370 warning patch failed'}
           python -c "import base64,lzma,pathlib;pathlib.Path('v371.patch').write_bytes(lzma.decompress(base64.b64decode(pathlib.Path('patches/v371_compile_only.patch.xz.b64').read_text())))"
-          Push-Location server
-          git apply --check '..\v371.patch'; if($LASTEXITCODE-ne 0){throw 'v371 patch check failed'}
-          git apply '..\v371.patch'; if($LASTEXITCODE-ne 0){throw 'v371 patch apply failed'}
-          Pop-Location
+          git apply --check --directory=server v371.patch; if($LASTEXITCODE-ne 0){throw 'v371 patch check failed'}
+          git apply --directory=server v371.patch; if($LASTEXITCODE-ne 0){throw 'v371 patch apply failed'}
           python -c "import base64,pathlib;pathlib.Path('v371_newfiles.tar.xz').write_bytes(base64.b64decode(pathlib.Path('patches/v371_newfiles.tar.xz.b64').read_text()))"
           tar -C server -xf v371_newfiles.tar.xz
           if(!(Test-Path 'server/source/include/oldsamprp/game_life_donor_market.inc')){throw 'market include missing'}
