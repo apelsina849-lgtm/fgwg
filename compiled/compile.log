@@ -1,0 +1,12 @@
+.\server\source\gamemodes\oldsamprp.pwn(216) : warning 203: symbol is never used: "FG_PendingTarget"
+.\server\source\gamemodes\oldsamprp.pwn(49) : warning 203: symbol is never used: "gV350_LastTick"
+.\server\source\gamemodes\oldsamprp.pwn(508) : warning 204: symbol is assigned a value that is never used: "gV350_RecruitActor"
+Pawn compiler 3.10.11	 	 	Copyright (c) 1997-2006, ITB CompuPhase
+
+Header size:           9588 bytes
+Code size:           659392 bytes
+Data size:          9853220 bytes
+Stack/heap size:    1048576 bytes; estimated max. usage=18817 cells (75268 bytes)
+Total requirements:11570776 bytes
+
+3 Warnings.

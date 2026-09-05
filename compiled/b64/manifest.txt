@@ -1,0 +1,2 @@
+chunks=22
+amx_bytes=3246345
