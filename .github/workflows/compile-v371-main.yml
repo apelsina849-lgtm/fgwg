@@ -40,9 +40,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'V3.7.0 compile patch failed' }
           python patches/warning_cleanup_v370.py
           if ($LASTEXITCODE -ne 0) { throw 'V3.7.0 warning cleanup failed' }
-          $patchB64 = [IO.File]::ReadAllText((Resolve-Path 'payload/v371/source_patch.xz.b64')).Trim()
-          [IO.File]::WriteAllBytes('v371_source.patch.xz', [Convert]::FromBase64String($patchB64))
-          tar -xJf v371_source.patch.xz
+
+          $patchParts = @(
+            'payload/v371/patchpart00.txt',
+            'payload/v371/patchpart01.txt',
+            'payload/v371/patchpart02.txt',
+            'payload/v371/patchpart03.txt'
+          )
+          foreach ($p in $patchParts) { if (!(Test-Path $p)) { throw "Missing V3.7.1 patch part: $p" } }
+          $patchB64 = ($patchParts | ForEach-Object { [IO.File]::ReadAllText((Resolve-Path $_)).Trim() }) -join ''
+          [IO.File]::WriteAllBytes('v371_patch.tar.xz', [Convert]::FromBase64String($patchB64))
+          tar -xf v371_patch.tar.xz
           if (!(Test-Path 'v371_git.patch')) { throw 'V3.7.1 patch not decoded' }
           Push-Location server
           git apply --check ..\v371_git.patch
