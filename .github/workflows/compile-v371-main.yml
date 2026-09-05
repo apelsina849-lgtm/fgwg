@@ -32,7 +32,7 @@ jobs:
           python -c "import base64,lzma,pathlib;pathlib.Path('v371.patch').write_bytes(lzma.decompress(base64.b64decode(pathlib.Path('patches/v371_compile_only.patch.xz.b64').read_text())))"
           git apply --check --directory=server v371.patch; if($LASTEXITCODE-ne 0){throw 'v371 patch check failed'}
           git apply --directory=server v371.patch; if($LASTEXITCODE-ne 0){throw 'v371 patch apply failed'}
-          python -c "import base64,pathlib;pathlib.Path('v371_newfiles.tar.xz').write_bytes(base64.b64decode(pathlib.Path('patches/v371_newfiles.tar.xz.b64').read_text()))"
+          python -c "import base64,pathlib;pathlib.Path('v371_newfiles.tar.xz').write_bytes(base64.b64decode(pathlib.Path('patches/v371_newfiles_fixed.tar.xz.b64').read_text()))"
           tar -C server -xf v371_newfiles.tar.xz
           if(!(Test-Path 'server/source/include/oldsamprp/game_life_donor_market.inc')){throw 'market include missing'}
           if(!(Select-String -Path 'server/source/gamemodes/oldsamprp.pwn' -Pattern '3.7.1-donor-integration-fixes' -Quiet)){throw 'v371 marker missing'}
