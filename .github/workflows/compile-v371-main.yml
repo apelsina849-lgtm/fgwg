@@ -2,10 +2,8 @@ name: Compile OLDSAMPRP V3.7.1 FINAL
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/compile-v371-main.yml'
+    branches: [main]
+    paths: ['.github/workflows/compile-v371-main.yml']
   workflow_dispatch:
 
 permissions:
@@ -16,109 +14,62 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout V3.7.1 payload branch
+      - name: Checkout V371 payload
         uses: actions/checkout@v4
         with:
           ref: oldsamprp-v371-final
           fetch-depth: 0
 
-      - name: Reconstruct V3.7.0 compiled-final source
+      - name: Reconstruct and patch source
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $parts = @(
-            'payload/current/chunk00','payload/current/part00','payload/current/part01',
-            'payload/final/part02','payload/final/p03_0','payload/final/p03_1','payload/final/p03_2','payload/final/p03_3',
-            'payload/current/part04','payload/final/part05','payload/current/part06','payload/final/part07'
-          )
-          foreach ($p in $parts) { if (!(Test-Path $p)) { throw "Missing payload part: $p" } }
-          $b64 = ($parts | ForEach-Object { [IO.File]::ReadAllText((Resolve-Path $_)) }) -join ''
-          [IO.File]::WriteAllBytes('source.tar.xz', [Convert]::FromBase64String($b64))
-          tar -xf source.tar.xz
-          if (!(Test-Path 'server/source/gamemodes/oldsamprp.pwn')) { throw 'oldsamprp.pwn not reconstructed' }
-          python patches/compile_fix_v370.py
-          if ($LASTEXITCODE -ne 0) { throw 'V3.7.0 compile patch failed' }
-          python patches/warning_cleanup_v370.py
-          if ($LASTEXITCODE -ne 0) { throw 'V3.7.0 warning cleanup failed' }
-
-      - name: Apply V3.7.1 donor integration patch
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          python -c "import base64,lzma,pathlib; p=pathlib.Path('patches/v371_final_source.patch.xz.b64'); pathlib.Path('v371.patch').write_bytes(lzma.decompress(base64.b64decode(p.read_text())))"
-          Push-Location server
-          git apply --check '..\v371.patch'
-          git apply '..\v371.patch'
-          Pop-Location
-          python -c "import base64,pathlib; p=pathlib.Path('patches/v371_newfiles.tar.xz.b64'); pathlib.Path('v371_newfiles.tar.xz').write_bytes(base64.b64decode(p.read_text()))"
+          $ErrorActionPreference='Stop'
+          $parts=@('payload/current/chunk00','payload/current/part00','payload/current/part01','payload/final/part02','payload/final/p03_0','payload/final/p03_1','payload/final/p03_2','payload/final/p03_3','payload/current/part04','payload/final/part05','payload/current/part06','payload/final/part07')
+          $b64=($parts|ForEach-Object{[IO.File]::ReadAllText((Resolve-Path $_))})-join''
+          [IO.File]::WriteAllBytes('source.tar.xz',[Convert]::FromBase64String($b64)); tar -xf source.tar.xz
+          python patches/compile_fix_v370.py; if($LASTEXITCODE-ne 0){throw 'v370 compile patch failed'}
+          python patches/warning_cleanup_v370.py; if($LASTEXITCODE-ne 0){throw 'v370 warning patch failed'}
+          python -c "import base64,lzma,pathlib;pathlib.Path('v371.patch').write_bytes(lzma.decompress(base64.b64decode(pathlib.Path('patches/v371_final_source.patch.xz.b64').read_text())))"
+          git apply --check --directory=server v371.patch
+          git apply --directory=server v371.patch
+          python -c "import base64,pathlib;pathlib.Path('v371_newfiles.tar.xz').write_bytes(base64.b64decode(pathlib.Path('patches/v371_newfiles.tar.xz.b64').read_text()))"
           tar -C server -xf v371_newfiles.tar.xz
-          if (!(Test-Path 'server/source/include/oldsamprp/game_life_donor_market.inc')) { throw 'V3.7.1 include missing after patch' }
-          if (!(Test-Path 'server/source/database/migrate_v370_to_v371_game_life_donor.sql')) { throw 'V3.7.1 SQL migration missing after patch' }
-          if (!(Select-String -Path 'server/source/gamemodes/oldsamprp.pwn' -Pattern '3.7.1-donor-integration-fixes' -Quiet)) { throw 'V3.7.1 version marker missing' }
-          Write-Host "V3.7.1 source ready: $((Get-Item 'server/source/gamemodes/oldsamprp.pwn').Length) bytes"
+          if(!(Test-Path 'server/source/include/oldsamprp/game_life_donor_market.inc')){throw 'market include missing'}
+          if(!(Select-String 'server/source/gamemodes/oldsamprp.pwn' '3.7.1-donor-integration-fixes' -Quiet)){throw 'v371 marker missing'}
 
-      - name: Convert Pawn sources to Windows-1251
+      - name: Convert source encoding
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $cp1251 = [Text.Encoding]::GetEncoding(1251)
-          $utf8 = New-Object Text.UTF8Encoding($false)
-          Get-ChildItem 'server/source' -Recurse -File | Where-Object { $_.Extension -in '.pwn','.inc' } | ForEach-Object {
-            $text = [IO.File]::ReadAllText($_.FullName, $utf8)
-            [IO.File]::WriteAllText($_.FullName, $text, $cp1251)
-          }
+          $cp=[Text.Encoding]::GetEncoding(1251);$u=New-Object Text.UTF8Encoding($false)
+          Get-ChildItem 'server/source' -Recurse -File|Where-Object{$_.Extension -in '.pwn','.inc'}|ForEach-Object{$t=[IO.File]::ReadAllText($_.FullName,$u);[IO.File]::WriteAllText($_.FullName,$t,$cp)}
 
-      - name: Download open.mp and Pawn dependencies
+      - name: Install Pawn dependencies
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          Invoke-WebRequest 'https://github.com/openmultiplayer/open.mp/releases/download/v1.5.8.3079/open.mp-win-x86.zip' -OutFile 'openmp.zip'
-          Expand-Archive 'openmp.zip' 'openmp' -Force
-          $pawncc = Get-ChildItem 'openmp' -Recurse -Filter 'pawncc.exe' | Select-Object -First 1
-          if (!$pawncc) { throw 'pawncc.exe not found in open.mp archive' }
-          $inc = Join-Path $pawncc.Directory.FullName 'include'
-          New-Item -ItemType Directory -Force (Join-Path $inc 'oldsamprp') | Out-Null
-          Copy-Item 'server/source/include/oldsamprp/*.inc' (Join-Path $inc 'oldsamprp') -Force
-          Invoke-WebRequest 'https://github.com/pBlueG/SA-MP-MySQL/releases/download/R41-4/mysql-R41-4-win32.zip' -OutFile 'mysql.zip'
-          Expand-Archive 'mysql.zip' 'mysql' -Force
-          Invoke-WebRequest 'https://github.com/Y-Less/sscanf/releases/download/v2.13.8/sscanf-2.13.8-win32.zip' -OutFile 'sscanf.zip'
-          Expand-Archive 'sscanf.zip' 'sscanf' -Force
-          Invoke-WebRequest 'https://github.com/samp-incognito/samp-streamer-plugin/releases/download/v2.9.6/samp-streamer-plugin-2.9.6.zip' -OutFile 'streamer.zip'
-          Expand-Archive 'streamer.zip' 'streamer' -Force
-          Invoke-WebRequest 'https://raw.githubusercontent.com/lassir/bcrypt-samp/v2.2.3/pawn/bcrypt.inc' -OutFile (Join-Path $inc 'bcrypt.inc')
-          function Copy-Include([string]$root,[string]$name) {
-            $f=Get-ChildItem $root -Recurse -Filter $name | Select-Object -First 1
-            if(!$f){throw "Required include not found: $name"}
-            Copy-Item $f.FullName (Join-Path $inc $name) -Force
-          }
-          Copy-Include 'mysql' 'a_mysql.inc'
-          Copy-Include 'sscanf' 'sscanf2.inc'
-          Copy-Include 'streamer' 'streamer.inc'
-          "PAWNCC=$($pawncc.FullName)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "PAWNINC=$inc" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest 'https://github.com/openmultiplayer/open.mp/releases/download/v1.5.8.3079/open.mp-win-x86.zip' -OutFile openmp.zip; Expand-Archive openmp.zip openmp -Force
+          $pawncc=Get-ChildItem openmp -Recurse -Filter pawncc.exe|Select-Object -First 1;if(!$pawncc){throw 'pawncc missing'}
+          $inc=Join-Path $pawncc.Directory.FullName include;New-Item -ItemType Directory -Force (Join-Path $inc oldsamprp)|Out-Null;Copy-Item 'server/source/include/oldsamprp/*.inc' (Join-Path $inc oldsamprp) -Force
+          Invoke-WebRequest 'https://github.com/pBlueG/SA-MP-MySQL/releases/download/R41-4/mysql-R41-4-win32.zip' -OutFile mysql.zip;Expand-Archive mysql.zip mysql -Force
+          Invoke-WebRequest 'https://github.com/Y-Less/sscanf/releases/download/v2.13.8/sscanf-2.13.8-win32.zip' -OutFile sscanf.zip;Expand-Archive sscanf.zip sscanf -Force
+          Invoke-WebRequest 'https://github.com/samp-incognito/samp-streamer-plugin/releases/download/v2.9.6/samp-streamer-plugin-2.9.6.zip' -OutFile streamer.zip;Expand-Archive streamer.zip streamer -Force
+          Invoke-WebRequest 'https://raw.githubusercontent.com/lassir/bcrypt-samp/v2.2.3/pawn/bcrypt.inc' -OutFile (Join-Path $inc bcrypt.inc)
+          function C($r,$n){$f=Get-ChildItem $r -Recurse -Filter $n|Select-Object -First 1;if(!$f){throw "$n missing"};Copy-Item $f.FullName (Join-Path $inc $n) -Force};C mysql a_mysql.inc;C sscanf sscanf2.inc;C streamer streamer.inc
+          "PAWNCC=$($pawncc.FullName)"|Out-File $env:GITHUB_ENV -Append -Encoding utf8;"PAWNINC=$inc"|Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Compile V3.7.1 oldsamprp.pwn with zero warnings
+      - name: Compile zero errors zero warnings
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force 'compiled' | Out-Null
-          $outArg='-o'+(Join-Path $PWD 'compiled/oldsamprp')
-          $incArg='-i'+$env:PAWNINC
-          & $env:PAWNCC '.\server\source\gamemodes\oldsamprp.pwn' '-;+' '-(+' '-Z-' '-d3' '-O2' $incArg $outArg 2>&1 | Tee-Object -FilePath 'compiled/compile.log'
-          $code=$LASTEXITCODE
-          Write-Host "pawncc exit code: $code"
-          if($code -ne 0){exit $code}
-          if(!(Test-Path 'compiled/oldsamprp.amx')){throw 'AMX missing'}
-          if(Select-String -Path 'compiled/compile.log' -Pattern 'warning [0-9]+:' -Quiet){
-            Get-Content 'compiled/compile.log'
-            throw 'Pawn warnings remain in V3.7.1'
-          }
-          Write-Host "AMX size: $((Get-Item 'compiled/oldsamprp.amx').Length)"
-          Write-Host 'Pawn compile: 0 errors / 0 warnings'
+          New-Item -ItemType Directory -Force compiled|Out-Null;$out='-o'+(Join-Path $PWD 'compiled/oldsamprp');$inc='-i'+$env:PAWNINC
+          & $env:PAWNCC '.\server\source\gamemodes\oldsamprp.pwn' '-;+' '-(+' '-Z-' '-d3' '-O2' $inc $out 2>&1|Tee-Object compiled/compile.log
+          if($LASTEXITCODE-ne 0){exit $LASTEXITCODE};if(!(Test-Path compiled/oldsamprp.amx)){throw 'AMX missing'}
+          if(Select-String compiled/compile.log -Pattern 'warning [0-9]+:' -Quiet){Get-Content compiled/compile.log;throw 'warnings remain'}
+          Write-Host "AMX $((Get-Item compiled/oldsamprp.amx).Length) bytes; 0 errors; 0 warnings"
 
-      - name: Upload clean V3.7.1 artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OLDSAMPRP-V371-COMPILED-CLEAN
+          name: OLDSAMPRP-V371-COMPILED-CLEAN-FINAL
           path: |
             compiled/oldsamprp.amx
             compiled/compile.log
