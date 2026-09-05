@@ -50,7 +50,10 @@ jobs:
           git apply --check '..\v371.patch'
           git apply '..\v371.patch'
           Pop-Location
+          python -c "import base64,pathlib; p=pathlib.Path('patches/v371_newfiles.tar.xz.b64'); pathlib.Path('v371_newfiles.tar.xz').write_bytes(base64.b64decode(p.read_text()))"
+          tar -C server -xf v371_newfiles.tar.xz
           if (!(Test-Path 'server/source/include/oldsamprp/game_life_donor_market.inc')) { throw 'V3.7.1 include missing after patch' }
+          if (!(Test-Path 'server/source/database/migrate_v370_to_v371_game_life_donor.sql')) { throw 'V3.7.1 SQL migration missing after patch' }
           if (!(Select-String -Path 'server/source/gamemodes/oldsamprp.pwn' -Pattern '3.7.1-donor-integration-fixes' -Quiet)) { throw 'V3.7.1 version marker missing' }
           Write-Host "V3.7.1 source ready: $((Get-Item 'server/source/gamemodes/oldsamprp.pwn').Length) bytes"
 
