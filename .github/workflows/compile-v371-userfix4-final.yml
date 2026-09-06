@@ -1,0 +1,167 @@
+name: Compile OLDSAMPRP V3.7.1 DONOR MERGE FINAL 3
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/compile-v371-userfix4-final.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: oldsamprp-v371-final
+          fetch-depth: 0
+
+      - name: Reconstruct V371
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $parts=@('payload/current/chunk00','payload/current/part00','payload/current/part01','payload/final/part02','payload/final/p03_0','payload/final/p03_1','payload/final/p03_2','payload/final/p03_3','payload/current/part04','payload/final/part05','payload/current/part06','payload/final/part07')
+          $b64=($parts|%{[IO.File]::ReadAllText((Resolve-Path $_))})-join''
+          [IO.File]::WriteAllBytes('source.tar.xz',[Convert]::FromBase64String($b64)); tar -xf source.tar.xz
+          python patches/compile_fix_v370.py; if($LASTEXITCODE-ne 0){exit $LASTEXITCODE}
+          python patches/warning_cleanup_v370.py; if($LASTEXITCODE-ne 0){exit $LASTEXITCODE}
+          python -c "import base64,lzma,pathlib;pathlib.Path('v371.patch').write_bytes(lzma.decompress(base64.b64decode(pathlib.Path('patches/v371_compile_only.patch.xz.b64').read_text())))"
+          git apply --check --directory=server v371.patch; if($LASTEXITCODE-ne 0){exit $LASTEXITCODE}
+          git apply --directory=server v371.patch; if($LASTEXITCODE-ne 0){exit $LASTEXITCODE}
+          python -c "import base64,pathlib;pathlib.Path('v371_newfiles.tar.xz').write_bytes(base64.b64decode(pathlib.Path('patches/v371_newfiles_fixed.tar.xz.b64').read_text()))"
+          tar -C server -xf v371_newfiles.tar.xz
+
+      - name: Integrate final systems safely
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          import base64,re,sys
+          root=Path('server'); inc=root/'source/include/oldsamprp'; p=root/'source/gamemodes/oldsamprp.pwn'
+
+          # Restore donor market + timed auction module from the tested payload chunks.
+          b=''.join((Path('patches')/f'dm_market_b64_{i:02}.txt').read_text().strip() for i in range(4))
+          (inc/'donor_market_auction.inc').write_bytes(base64.b64decode(b))
+
+          s=p.read_text(encoding='utf-8')
+          s=re.sub(r'#define\s+GM_VERSION\s+"[^"]+"','#define GM_VERSION              "3.7.1-donor-merge-final"',s,count=1)
+
+          # Early callbacks cannot directly reference globals declared by late includes.
+          # Use forward/public bridges, whose implementations are appended after all includes.
+          fanchor='forward BinderSystem_Init();'
+          bridge_forwards=(
+              'forward V360_ChatRejectBridge(playerid, const text[]);\n'
+              'forward DM_BridgeInit();\n'
+              'forward DM_BridgeExit();\n'
+              'forward DM_BridgeCommand(playerid, const command[], const params[]);\n'
+          )
+          if 'forward V360_ChatRejectBridge' not in s:
+              if fanchor not in s: sys.exit('forward anchor missing')
+              s=s.replace(fanchor,bridge_forwards+fanchor,1)
+
+          if 'V360_ChatRejectBridge(playerid, text)' not in s:
+              a='public OnPlayerText(playerid, text[])\n{\n    if (!PlayerData[playerid][pLogged]) return 0;\n'
+              z='public OnPlayerText(playerid, text[])\n{\n    if (!PlayerData[playerid][pLogged]) return 0;\n\n    if (V360_ChatRejectBridge(playerid, text)) return 0;\n'
+              if a not in s: sys.exit('OnPlayerText anchor missing')
+              s=s.replace(a,z,1)
+
+          # /setcmd and /redcmd are owner-only without relying on a late/undefined helper.
+          owner_check='if (PlayerData[playerid][pStaffPosition] != STAFF_OWNER_POSITION) { SendClientMessage(playerid, COLOR_RED, "Команда доступна только Владельцу сервера."); return true; }'
+          for cmd in ('setcmd','redcmd'):
+              m=re.search(r'if \(!strcmp\(command, "/'+cmd+r'", true\)\)\s*\{(?P<body>.*?)\n\s*\}',s,re.S)
+              if not m: sys.exit('/'+cmd+' missing')
+              body=m.group('body')
+              body=re.sub(r'\n\s*if \(!RequireStaffPosition\(playerid, STAFF_ZGA_POSITION\)\) return true;','',body,count=1)
+              body=re.sub(r'\n\s*if \(!RequireCommandPermission\(playerid, CMDPERM_ADMIN_MANAGE, 10\)\) return true;','',body,count=1)
+              body=body.replace('if (!RequireOwnerOnly(playerid)) return true;',owner_check)
+              if owner_check not in body:
+                  body='\n        '+owner_check+body
+              s=s[:m.start('body')]+body+s[m.end('body'):]
+
+          # Wire market/auction through bridge calls visible before the include implementation.
+          if '    DM_BridgeInit();' not in s:
+              a='    V360_Init();\n'
+              if a not in s: sys.exit('init anchor missing')
+              s=s.replace(a,a+'    DM_BridgeInit();\n',1)
+          if '    DM_BridgeExit();' not in s:
+              a='    V361_Exit();\n'
+              if a not in s: sys.exit('exit anchor missing')
+              s=s.replace(a,a+'    DM_BridgeExit();\n',1)
+          if 'if (DM_BridgeCommand(playerid, command, params)) return 1;' not in s:
+              a='    if (HandleAdminCommandV3(playerid, command, params)) return 1;\n'
+              if a not in s: sys.exit('command anchor missing')
+              s=s.replace(a,a+'    if (DM_BridgeCommand(playerid, command, params)) return 1;\n',1)
+          if '#include <oldsamprp/donor_market_auction>' not in s:
+              a='#include <oldsamprp/v361_extra_rp_systems>'
+              if a not in s: sys.exit('include anchor missing')
+              s=s.replace(a,'#include <oldsamprp/donor_market_auction>\n'+a,1)
+
+          bridge_impl='''\n\npublic V360_ChatRejectBridge(playerid, const text[])\n{\n    if (gV360DocOfferType[playerid] != V360_DOC_NONE && !strcmp(text, "u", true))\n    {\n        V360_RejectDocumentOffer(playerid);\n        return 1;\n    }\n    return 0;\n}\n\npublic DM_BridgeInit()\n{\n    return DM_Init();\n}\n\npublic DM_BridgeExit()\n{\n    return DM_Exit();\n}\n\npublic DM_BridgeCommand(playerid, const command[], const params[])\n{\n    return DM_Command(playerid, command, params);\n}\n'''
+          if 'public V360_ChatRejectBridge' not in s:
+              s=s.rstrip()+bridge_impl+'\n'
+
+          p.write_text(s,encoding='utf-8',newline='\n')
+
+          law=inc/'v360_vehicle_house_law.inc'; t=law.read_text(encoding='utf-8')
+          t=t.replace('хочет показать вам свои лицензии. {63CB00}Y — принять, {FF5555}N — отклонить. {AFAFAF}/u — отклонить.','хочет показать вам свои лицензии. {63CB00}Y — принять, {FF5555}U — отклонить. {AFAFAF}Введите U в чат (N или /u — резерв).')
+          t=t.replace('хочет показать вам паспорт. {63CB00}Y — принять, {FF5555}N — отклонить. {AFAFAF}/u — отклонить.','хочет показать вам паспорт. {63CB00}Y — принять, {FF5555}U — отклонить. {AFAFAF}Введите U в чат (N или /u — резерв).')
+          law.write_text(t,encoding='utf-8',newline='\n')
+
+          alltxt=s+'\n'+''.join(x.read_text(encoding='utf-8',errors='ignore') for x in inc.glob('*.inc'))
+          checks=['/showlic','KEY_YES','V360_ChatRejectBridge(playerid, text)','HouseHasGarage','ShowHelpCategoryDialog','faction_vehicles','/carsell','/carbuy','/auction','/auctioncar','/bid','DM_BridgeInit();','DM_BridgeCommand(playerid, command, params)']
+          miss=[x for x in checks if x not in alltxt]
+          if miss: sys.exit('missing: '+repr(miss))
+          if 'RequireOwnerOnly(playerid)' in s: sys.exit('obsolete RequireOwnerOnly remains')
+          print('FINAL STATIC AUDIT PASSED')
+          '@ | Set-Content -Encoding UTF8 integrate.py
+          python integrate.py
+          if($LASTEXITCODE-ne 0){exit $LASTEXITCODE}
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: OLDSAMPRP-V371-DONOR-MERGE-SOURCE-FINAL
+          path: |
+            server/source/gamemodes/oldsamprp.pwn
+            server/source/include/oldsamprp/*.inc
+
+      - name: Convert source to cp1251
+        shell: pwsh
+        run: |
+          $cp=[Text.Encoding]::GetEncoding(1251);$u=New-Object Text.UTF8Encoding($false)
+          Get-ChildItem 'server/source' -Recurse -File|?{$_.Extension -in '.pwn','.inc'}|%{$t=[IO.File]::ReadAllText($_.FullName,$u);[IO.File]::WriteAllText($_.FullName,$t,$cp)}
+
+      - name: Dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest 'https://github.com/openmultiplayer/open.mp/releases/download/v1.5.8.3079/open.mp-win-x86.zip' -OutFile openmp.zip; Expand-Archive openmp.zip openmp -Force
+          $pawncc=Get-ChildItem openmp -Recurse -Filter pawncc.exe|Select-Object -First 1;if(!$pawncc){throw 'pawncc missing'}
+          $inc=Join-Path $pawncc.Directory.FullName include;New-Item -ItemType Directory -Force (Join-Path $inc oldsamprp)|Out-Null;Copy-Item 'server/source/include/oldsamprp/*.inc' (Join-Path $inc oldsamprp) -Force
+          Invoke-WebRequest 'https://github.com/pBlueG/SA-MP-MySQL/releases/download/R41-4/mysql-R41-4-win32.zip' -OutFile mysql.zip;Expand-Archive mysql.zip mysql -Force
+          Invoke-WebRequest 'https://github.com/Y-Less/sscanf/releases/download/v2.13.8/sscanf-2.13.8-win32.zip' -OutFile sscanf.zip;Expand-Archive sscanf.zip sscanf -Force
+          Invoke-WebRequest 'https://github.com/samp-incognito/samp-streamer-plugin/releases/download/v2.9.6/samp-streamer-plugin-2.9.6.zip' -OutFile streamer.zip;Expand-Archive streamer.zip streamer -Force
+          Invoke-WebRequest 'https://raw.githubusercontent.com/lassir/bcrypt-samp/v2.2.3/pawn/bcrypt.inc' -OutFile (Join-Path $inc bcrypt.inc)
+          function C($r,$n){$f=Get-ChildItem $r -Recurse -Filter $n|Select-Object -First 1;if(!$f){throw "$n missing"};Copy-Item $f.FullName (Join-Path $inc $n) -Force};C mysql a_mysql.inc;C sscanf sscanf2.inc;C streamer streamer.inc
+          "PAWNCC=$($pawncc.FullName)"|Out-File $env:GITHUB_ENV -Append -Encoding utf8;"PAWNINC=$inc"|Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Compile 0 errors 0 warnings
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force compiled|Out-Null;$out='-o'+(Join-Path $PWD 'compiled/oldsamprp');$inc='-i'+$env:PAWNINC
+          & $env:PAWNCC '.\server\source\gamemodes\oldsamprp.pwn' '-;+' '-(+' '-Z-' '-d3' '-O2' $inc $out 2>&1|Tee-Object compiled/compile.log
+          if($LASTEXITCODE-ne 0){exit $LASTEXITCODE};if(!(Test-Path compiled/oldsamprp.amx)){throw 'AMX missing'}
+          if(Select-String compiled/compile.log -Pattern 'warning [0-9]+:' -Quiet){Get-Content compiled/compile.log;throw 'warnings remain'}
+          Write-Host "AMX $((Get-Item compiled/oldsamprp.amx).Length) bytes; 0 errors; 0 warnings"
+
+      - name: Upload compiled
+        uses: actions/upload-artifact@v4
+        with:
+          name: OLDSAMPRP-V371-DONOR-MERGE-COMPILED-FINAL
+          path: |
+            compiled/oldsamprp.amx
+            compiled/compile.log
+          if-no-files-found: error
