@@ -5,9 +5,11 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONUTF8=1
 
 WORKDIR /app
-COPY app.zip /tmp/app.zip
-RUN python -m zipfile -e /tmp/app.zip /app \
-    && rm /tmp/app.zip \
+COPY payload.part00 payload.part01 payload.part02 payload.part03 payload.part04 payload.part05 /tmp/payload/
+RUN cat /tmp/payload/payload.part00 /tmp/payload/payload.part01 /tmp/payload/payload.part02 /tmp/payload/payload.part03 /tmp/payload/payload.part04 /tmp/payload/payload.part05 > /tmp/payload.b64 \
+    && python -c "import base64,hashlib; raw=base64.b64decode(open('/tmp/payload.b64','rb').read()); assert hashlib.sha256(raw).hexdigest()=='208b8df976f79c73d6b5cb9e09e3c86b53b63465241e966bbaa540c030eebb52'; open('/tmp/app.zip','wb').write(raw)" \
+    && python -m zipfile -e /tmp/app.zip /app \
+    && rm -rf /tmp/payload /tmp/payload.b64 /tmp/app.zip \
     && pip install --no-cache-dir -r /app/requirements.txt
 
 CMD ["python", "/app/bot.py"]
