@@ -9,17 +9,11 @@ COPY referral_start_patch.py /tmp/referral_start_patch.py
 COPY maintenance_patch.py /tmp/maintenance_patch.py
 
 # Restore the last known-good bot archive from commit bbcb53f9.
+COPY app.zip.b64 /tmp/app.zip.b64
 RUN python - <<'PY'
 from pathlib import Path
-from urllib.request import urlopen
 import base64
-base='https://raw.githubusercontent.com/apelsina849-lgtm/fgwg/main/'
-parts=[]
-for i in range(6):
-    url=base+'payload.part'+str(i).zfill(2)
-    with urlopen(url,timeout=30) as r:
-        parts.append(r.read().strip())
-data=base64.b64decode(b''.join(parts))
+data=base64.b64decode(Path('/tmp/app.zip.b64').read_text())
 print('decoded app.zip bytes',len(data),'magic',data[:4])
 if data[:2] != b'PK':
     raise RuntimeError('Unexpected app.zip payload')
