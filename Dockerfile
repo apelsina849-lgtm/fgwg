@@ -19,8 +19,24 @@ if data[:2] != b'PK':
     raise RuntimeError('Unexpected app.zip payload')
 Path('/tmp/app.zip').write_bytes(data)
 PY
-RUN python -m zipfile -t /tmp/app.zip
-RUN python -m zipfile -e /tmp/app.zip /app
+RUN python - <<'PY'
+from pathlib import Path
+import struct,zlib
+b=Path('/tmp/app.zip').read_bytes(); p=0; count=0
+while p+30<=len(b):
+    if b[p:p+4] != b'PK\\x03\\x04': break
+    sig,ver,flag,method,tm,dt,crc,cs,us,nl,xl=struct.unpack_from('<4s5H3L2H',b,p)
+    name=b[p+30:p+30+nl].decode('utf-8','replace')
+    start=p+30+nl+xl
+    if not cs or start+cs>len(b): raise RuntimeError('Invalid local ZIP record: '+name)
+    raw=b[start:start+cs]
+    data=zlib.decompress(raw,-15) if method==8 else raw
+    out=Path('/app')/name
+    out.parent.mkdir(parents=True,exist_ok=True); out.write_bytes(data)
+    p=start+cs; count+=1
+print('restored local ZIP records',count)
+if count < 3: raise RuntimeError('Archive restore found too few files')
+PY
 RUN python /tmp/referral_start_patch.py
 RUN python /tmp/maintenance_patch.py
 RUN pip install --no-cache-dir -r /app/requirements.txt
