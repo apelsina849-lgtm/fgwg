@@ -24,7 +24,7 @@ from pathlib import Path
 import struct,zlib
 b=Path('/tmp/app.zip').read_bytes(); p=0; count=0
 while p+30<=len(b):
-    if b[p:p+4] != b'PK\\x03\\x04': break
+    if b[p:p+4] != bytes((80,75,3,4)): break
     sig,ver,flag,method,tm,dt,crc,cs,us,nl,xl=struct.unpack_from('<4s5H3L2H',b,p)
     name=b[p+30:p+30+nl].decode('utf-8','replace')
     start=p+30+nl+xl
