@@ -41,6 +41,18 @@ public partial class MainWindow : Window
         _timer.Start();
     }
 
+    private void LoadWindowIcon()
+    {
+        try
+        {
+            if (!File.Exists(Payload.IconPath)) return;
+            using var fs = new FileStream(Payload.IconPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var decoder = new IconBitmapDecoder(fs, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            if (decoder.Frames.Count > 0) Icon = decoder.Frames.OrderByDescending(x => x.PixelWidth).First();
+        }
+        catch { }
+    }
+
     private sealed class SettingsModel
     {
         public string GamePath { get; set; } = "";
