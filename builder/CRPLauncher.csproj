@@ -6,9 +6,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>CRPLauncher</AssemblyName>
+    <AssemblyName>CRP Launcher</AssemblyName>
     <RootNamespace>CRPLauncher</RootNamespace>
-    <ApplicationIcon>Assets\launcher.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 </Project>
