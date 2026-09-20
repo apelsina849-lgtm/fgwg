@@ -253,7 +253,7 @@ public partial class MainWindow : Window
         string nick = NickBox.Text.Trim();
         if (nick.Length < 3)
         {
-            MessageBox.Show("Введите ник минимум из 3 символов.", "CRP Launcher");
+            System.Windows.MessageBox.Show("Введите ник минимум из 3 символов.", "CRP Launcher");
             return;
         }
 
@@ -271,7 +271,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Не удалось запустить GTA:\n" + ex.Message, "CRP Launcher");
+            System.Windows.MessageBox.Show("Не удалось запустить GTA:\n" + ex.Message, "CRP Launcher");
         }
     }
 
