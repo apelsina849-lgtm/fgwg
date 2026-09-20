@@ -7,7 +7,7 @@ namespace CRPLauncher;
 internal static class Payload
 {
     private const string Magic = "CRP_PAYLOAD_V1!!";
-    private const int FooterSize = 16 + 8 + 8;
+    private const int FooterSize = 16 + 8 + 8 + 8;
 
     public static string BaseDir { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -15,6 +15,7 @@ internal static class Payload
 
     public static string CorePath => Path.Combine(BaseDir, "CRP Launcher Core.exe");
     public static string ImagePath => Path.Combine(BaseDir, "loading.png");
+    public static string MoonInstallerPath => Path.Combine(BaseDir, "install-moonloader.ps1");
 
     public static void EnsureExtracted()
     {
@@ -33,12 +34,14 @@ internal static class Payload
 
         long coreLength = br.ReadInt64();
         long imageLength = br.ReadInt64();
-        long payloadStart = fs.Length - FooterSize - coreLength - imageLength;
-        if (coreLength <= 0 || imageLength <= 0 || payloadStart < 0)
+        long scriptLength = br.ReadInt64();
+        long payloadStart = fs.Length - FooterSize - coreLength - imageLength - scriptLength;
+        if (coreLength <= 0 || imageLength <= 0 || scriptLength <= 0 || payloadStart < 0)
             throw new InvalidDataException("Встроенный пакет CRP повреждён.");
 
         ExtractPart(fs, payloadStart, coreLength, CorePath);
         ExtractPart(fs, payloadStart + coreLength, imageLength, ImagePath);
+        ExtractPart(fs, payloadStart + coreLength + imageLength, scriptLength, MoonInstallerPath);
     }
 
     private static void ExtractPart(FileStream fs, long offset, long length, string destination)
@@ -60,6 +63,7 @@ internal static class Payload
                 remaining -= read;
             }
         }
+
         File.Move(tmp, destination, true);
     }
 }
