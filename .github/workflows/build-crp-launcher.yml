@@ -1,0 +1,31 @@
+name: Build CRP Launcher
+
+on:
+  push:
+    branches:
+      - chatgpt-crp-launcher-build
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish Windows launcher
+        shell: pwsh
+        run: |
+          dotnet publish builder/CRPLauncher.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true -o publish
+          Get-ChildItem publish
+
+      - name: Upload launcher EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: CRP-Launcher-Windows
+          path: publish/CRP Launcher.exe
+          if-no-files-found: error
