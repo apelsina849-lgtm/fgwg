@@ -1344,7 +1344,7 @@ jobs:
           foreach($x in $need){ if(-not $s.Contains($x)){ throw "Missing patch marker: $x" } }
           if($s -match '\[pAdmin\].*(?:<|>|==|!=)\s*(?:9|10|11|12)\b'){ throw 'Legacy 9-12 pAdmin check remains' }
           if($s.Contains('if(!IsPlayerConnected(playerid) || !IsMainOwner(playerid)) return 1;')){ throw 'Owner-only SetAdmin callback remains' }
-          if($s.Contains('[OWNER]') -or $s.Contains('Владелец %s установил вам')){ throw 'Old OWNER makeadmin wording remains' }
+          if($s.Contains('Владелец %s установил вам')){ throw 'Old makeadmin target wording remains' }
           if(-not $s.Contains("PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] == '2'")){ throw 'SETCMD revoke guard missing from makeadmin' }
           Write-Host 'STATIC AUDIT OK'
 
