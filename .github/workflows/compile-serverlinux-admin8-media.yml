@@ -1771,7 +1771,7 @@ jobs:
               return 0;
           }
           
-          stock CRPFamilyUpgradeCapturesRequired(familyid)
+          stock CRPFamilyUpgradeCaptureReq(familyid)
           {
               switch(CRPFamilyLevel[familyid])
               {
@@ -1797,26 +1797,17 @@ jobs:
           
               if(CRPFamilyLevel[fam] < 1) CRPFamilyLevel[fam] = 1;
           
-              new text[512], cost = CRPFamilyUpgradeCost(fam), req = CRPFamilyUpgradeCapturesRequired(fam);
+              new text[512], cost = CRPFamilyUpgradeCost(fam), req = CRPFamilyUpgradeCaptureReq(fam);
               if(CRPFamilyLevel[fam] >= 5)
               {
-                  format(text, sizeof(text),
-                      "{FFFFFF}Семья: {FFD700}%s\n{FFFFFF}Уровень: {7CFC00}5/5\n"
-                      "{FFFFFF}Очки битв: {7CFC00}%d\n{FFFFFF}Победы: {7CFC00}%d\n"
-                      "{FFFFFF}Семейный банк: {7CFC00}%d вирт\n{FFFFFF}Автопарк: {7CFC00}%d машин\n\n"
-                      "{FFD700}Максимальный уровень семьи уже достигнут.",
+                  format(text, sizeof(text), "{FFFFFF}Семья: {FFD700}%s\n{FFFFFF}Уровень: {7CFC00}5/5\n{FFFFFF}Очки битв: {7CFC00}%d\n{FFFFFF}Победы: {7CFC00}%d\n{FFFFFF}Семейный банк: {7CFC00}%d вирт\n{FFFFFF}Автопарк: {7CFC00}%d машин\n\n{FFD700}Максимальный уровень семьи уже достигнут.",
                       family_info[fam][f_name], CRPFamilyBattlePoints[fam], CRPFamilyCaptures[fam],
                       CRPFamilyBank[fam], CRPFamilyVehicleSlots(fam));
                   return ShowPlayerDialog(playerid, DIALOG_CRP_FAMILY_UPGRADE, DIALOG_STYLE_MSGBOX,
                       "{FFD700}Прокачка семьи", text, "Закрыть", "");
               }
           
-              format(text, sizeof(text),
-                  "{FFFFFF}Семья: {FFD700}%s\n{FFFFFF}Уровень: {7CFC00}%d/5\n"
-                  "{FFFFFF}Очки битв: {7CFC00}%d\n{FFFFFF}Победы: {7CFC00}%d\n"
-                  "{FFFFFF}Семейный банк: {7CFC00}%d вирт\n{FFFFFF}Автопарк: {7CFC00}%d машин\n\n"
-                  "{FFFFFF}Следующий уровень: {FFD700}%d\n"
-                  "{FFFFFF}Стоимость: {7CFC00}%d вирт\n{FFFFFF}Нужно побед в битвах семей: {7CFC00}%d",
+              format(text, sizeof(text), "{FFFFFF}Семья: {FFD700}%s\n{FFFFFF}Уровень: {7CFC00}%d/5\n{FFFFFF}Очки битв: {7CFC00}%d\n{FFFFFF}Победы: {7CFC00}%d\n{FFFFFF}Семейный банк: {7CFC00}%d вирт\n{FFFFFF}Автопарк: {7CFC00}%d машин\n\n{FFFFFF}Следующий уровень: {FFD700}%d\n{FFFFFF}Стоимость: {7CFC00}%d вирт\n{FFFFFF}Нужно побед в битвах семей: {7CFC00}%d",
                   family_info[fam][f_name], CRPFamilyLevel[fam], CRPFamilyBattlePoints[fam],
                   CRPFamilyCaptures[fam], CRPFamilyBank[fam], CRPFamilyVehicleSlots(fam),
                   CRPFamilyLevel[fam] + 1, cost, req);
@@ -1833,7 +1824,7 @@ jobs:
               if(CRPFamilyLevel[fam] >= 5) return SendClientMessage(playerid, -1, "У семьи уже максимальный уровень.");
           
               new cost = CRPFamilyUpgradeCost(fam);
-              new req = CRPFamilyUpgradeCapturesRequired(fam);
+              new req = CRPFamilyUpgradeCaptureReq(fam);
               if(CRPFamilyCaptures[fam] < req)
                   return SendMes(playerid, -1, "Для следующего уровня нужно минимум %d побед в битвах семей.", req);
               if(CRPFamilyBank[fam] < cost)
