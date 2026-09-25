@@ -2466,7 +2466,7 @@ jobs:
                   raise SystemExit("OnPlayerConnect runtime anchor not found")
               s = s.replace(connect_anchor, connect_anchor + '\n    CRPFamilyResetPlayerRuntime(playerid);', 1)
 
-          goserver_anchor = '    if(PlayerInfo[playerid][pFamily]) family_info [ PlayerInfo[playerid][pFamily] ] [ f_online ]++;'
+          goserver_anchor = 'if(PlayerInfo[playerid][pFamily]) family_info [ PlayerInfo[playerid][pFamily] ] [ f_online ]++;'
           goserver_add = r'''
               if(PlayerInfo[playerid][pFamily])
               {
