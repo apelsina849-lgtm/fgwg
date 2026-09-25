@@ -1,4 +1,4 @@
-name: Compile SERVER_LINUX ADMIN8 MOBILE SAFE LOGIN
+name: Compile SERVER_LINUX ADMIN8 MOBILE REG COMPACT
 
 on:
   push:
@@ -295,6 +295,219 @@ jobs:
           python mobile_login_hotfix.py
           if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
 
+
+      - name: Apply compact registration dialog hotfix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $py = @'
+          from pathlib import Path
+          import re
+
+          p = Path(r"bundle/gamemodes/west.pwn")
+          s = p.read_bytes().decode("cp1251").replace("\r\n", "\n")
+
+          def block(text, signature):
+              start = text.find(signature)
+              if start < 0:
+                  raise SystemExit(f"Missing block: {signature}")
+              brace = text.find("{", start)
+              depth = 0
+              for i in range(brace, len(text)):
+                  if text[i] == "{":
+                      depth += 1
+                  elif text[i] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          return start, i + 1
+              raise SystemExit(f"Unclosed block: {signature}")
+
+          # Replace the oversized new-account registration dialog with a compact one.
+          a, b = block(s, "publics: OnPlayerRegCheck(playerid)")
+          new_reg = r'''publics: OnPlayerRegCheck(playerid)
+          {
+              new rows, fields;
+              cache_get_data(rows, fields);
+
+              new crpAuthVersion[32];
+              GetPlayerVersion(playerid, crpAuthVersion, sizeof(crpAuthVersion));
+              printf("[JOIN-DIAG] %s[%d] auth-dialog rows=%d client=%s", PlayerInfo[playerid][pNames], playerid, rows, crpAuthVersion);
+
+              if(rows)
+              {
+                  new string[192];
+                  cache_get_field_content(0, "password", PlayerInfo[playerid][pPassword], connects, 65);
+                  cache_get_field_content(0, "salt", PlayerInfo[playerid][pSalt], connects, 11);
+                  format(string, sizeof(string), "Аккаунт: %s\nВведите пароль:", PlayerInfo[playerid][pNames]);
+                  ShowPlayerDialog(playerid, 1, DIALOG_STYLE_PASSWORD, "Center RolePlay | Вход", string, "Войти", "Выход");
+                  printf("[JOIN-DIAG] %s[%d] login-dialog-sent", PlayerInfo[playerid][pNames], playerid);
+              }
+              else
+              {
+                  PlayerRegMode[playerid] = 2;
+                  ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT,
+                      "Center RolePlay | Регистрация",
+                      "Придумайте пароль (6-64 символа):",
+                      "Далее", "Выход");
+                  printf("[JOIN-DIAG] %s[%d] registration-dialog-sent", PlayerInfo[playerid][pNames], playerid);
+              }
+              return true;
+          }'''
+          s = s[:a] + new_reg + s[b:]
+
+          # Replace only registration case 2 in OnDialogResponse.
+          od = s.find("public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])")
+          if od < 0:
+              raise SystemExit("OnDialogResponse not found")
+          m = re.search(r'(?m)^\s*case\s+2:\s*\n\s*\{', s[od:])
+          if not m:
+              raise SystemExit("Registration case 2 not found")
+          cs = od + m.start()
+          brace = s.find("{", cs)
+          depth = 0
+          ce = None
+          for i in range(brace, len(s)):
+              if s[i] == "{":
+                  depth += 1
+              elif s[i] == "}":
+                  depth -= 1
+                  if depth == 0:
+                      ce = i + 1
+                      break
+          if ce is None:
+              raise SystemExit("Registration case 2 unclosed")
+
+          new_case = r'''        case 2:
+              {
+                  printf("[JOIN-DIAG] %s[%d] dialog-response id=2 response=%d mode=%d inputlen=%d",
+                      PlayerInfo[playerid][pNames], playerid, response, PlayerRegMode[playerid], strlen(inputtext));
+
+                  if(!response) return KickEx(playerid);
+
+                  if(PlayerRegMode[playerid] == 2)
+                  {
+                      if(strlen(inputtext) < 6 || strlen(inputtext) > 64)
+                      {
+                          ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT,
+                              "Center RolePlay | Регистрация",
+                              "Пароль должен содержать 6-64 символа.",
+                              "Далее", "Выход");
+                          return 1;
+                      }
+
+                      strmid(CheckPass[playerid], inputtext, 0, strlen(inputtext), 65);
+                      PlayerRegMode[playerid] = 3;
+                      ShowPlayerDialog(playerid, 2, DIALOG_STYLE_LIST,
+                          "Регистрация | Пол",
+                          "Мужской\nЖенский",
+                          "Далее", "Назад");
+                      return 1;
+                  }
+
+                  if(PlayerRegMode[playerid] == 3)
+                  {
+                      PlayerInfo[playerid][pSex] = listitem + 1;
+                      PlayerRegMode[playerid] = 4;
+                      ShowPlayerDialog(playerid, 2, DIALOG_STYLE_LIST,
+                          "Регистрация | Национальность",
+                          "Американец\nИтальянец\nНемец\nИспанец\nФранцуз\nРусский\nКитаец\nЯпонец",
+                          "Далее", "Назад");
+                      return 1;
+                  }
+
+                  if(PlayerRegMode[playerid] == 4)
+                  {
+                      PlayerInfo[playerid][pNational] = listitem + 1;
+                      PlayerRegMode[playerid] = 5;
+                      ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT,
+                          "Регистрация | Возраст",
+                          "Введите возраст персонажа: 15-90",
+                          "Готово", "Назад");
+                      return 1;
+                  }
+
+                  if(PlayerRegMode[playerid] == 5)
+                  {
+                      if(strval(inputtext) < 15 || strval(inputtext) > 90)
+                      {
+                          ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT,
+                              "Регистрация | Возраст",
+                              "Введите число от 15 до 90.",
+                              "Готово", "Назад");
+                          return 1;
+                      }
+
+                      PlayerInfo[playerid][pAge] = strval(inputtext);
+                      PlayerInfo[playerid][pEmail][0] = EOS;
+                      PlayerRegMode[playerid] = 0;
+                      SetPVarInt(playerid, "Registration", 1);
+
+                      SpawnPlayer(playerid);
+                      SetPlayerVirtualWorldEx(playerid, playerid + 10);
+                      SetPlayerInteriorEx(playerid, 0);
+
+                      if(PlayerInfo[playerid][pSex] == 1)
+                      {
+                          new ran = random(7);
+                          SetPlayerSkin(playerid, SkinMen[ran][0]);
+                      }
+                      else
+                      {
+                          new ran = random(5);
+                          SetPlayerSkin(playerid, SkinMale[ran][0]);
+                      }
+
+                      TogglePlayerControllable(playerid, true);
+                      PlayerInfo[playerid][pChar] = GetPlayerSkin(playerid);
+                      PlayerRegisterMySQL(playerid);
+                      printf("[JOIN-DIAG] %s[%d] registration-complete", PlayerInfo[playerid][pNames], playerid);
+                      return 1;
+                  }
+
+                  PlayerRegMode[playerid] = 2;
+                  ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT,
+                      "Center RolePlay | Регистрация",
+                      "Придумайте пароль (6-64 символа):",
+                      "Далее", "Выход");
+                  return 1;
+              }'''
+          s = s[:cs] + new_case + s[ce:]
+
+          # Remove nonessential pre-auth RPCs/messages. Authentication dialog is now the first meaningful UI packet.
+          a, b = block(s, "public OnPlayerConnect(playerid)")
+          opc = s[a:b]
+          opc_lines = []
+          for line in opc.splitlines(True):
+              if 'SendClientMessage(playerid, COLOR_WHITE,"Вы выиграли промокод' in line:
+                  continue
+              if 'SendClientMessage(playerid, COLOR_WHITE,"{FFCC66}Используйте команды' in line:
+                  continue
+              if 'SendClientMessage(playerid, COLOR_WHITE,"{ffff00}Выполняйте квесты' in line:
+                  continue
+              if re.search(r'\bSetPlayerArmour\(playerid,\s*0\);', line):
+                  continue
+              if re.search(r'\bSetPlayerColor\(playerid,\s*COLOR_WHITE\);', line):
+                  continue
+              opc_lines.append(line)
+          s = s[:a] + "".join(opc_lines) + s[b:]
+
+          # Camera setup is also delayed; some Android clients are fragile before the first dialog response.
+          a, b = block(s, "publics: OnPlayerBanipCheck(playerid)")
+          ban = s[a:b]
+          ban = re.sub(r'\s*SetPlayerCameraPos\(playerid,[^;]+;\n', '\n', ban, count=1)
+          ban = re.sub(r'\s*SetPlayerCameraLookAt\(playerid,[^;]+;\n', '\n', ban, count=1)
+          s = s[:a] + ban + s[b:]
+
+          # New build marker.
+          s = s.replace("ADMIN8-MOBILE-SAFE-LOGIN-20260925", "ADMIN8-MOBILE-REG-COMPACT-20260925")
+
+          p.write_bytes(s.replace("\n", "\r\n").encode("cp1251"))
+          print("COMPACT REGISTRATION HOTFIX APPLIED")
+          '@
+          Set-Content -LiteralPath 'compact_registration_hotfix.py' -Value $py -Encoding UTF8
+          python compact_registration_hotfix.py
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
       - name: Static audit
         shell: pwsh
         run: |
@@ -313,13 +526,16 @@ jobs:
             'case ROLE_YOUTUBE: format(output, size, "YouTube")',
             'case ROLE_TIKTOK: format(output, size, "TikTok")',
             'CMD:build(playerid, params[])',
-            'ADMIN8-MOBILE-SAFE-LOGIN-20260925',
+            'ADMIN8-MOBILE-REG-COMPACT-20260925',
             'stock ApplyCRPRemovedBuildings(playerid)',
             'GetPlayerIp(playerid, PlayerInfo[playerid][pIP], 16)',
             'CRPMapRemovalsApplied',
             'CRPMobileSafeUI',
             'GetPlayerVersion(playerid, crpClientVersion, sizeof(crpClientVersion))',
             'auth-dialog rows=%d client=%s',
+            'registration-dialog-sent',
+            'dialog-response id=2 response=%d mode=%d inputlen=%d',
+            'registration-complete',
             '{FFFFFF}%s[%d]\t{%s}%s\n'
           )
           foreach($x in $need){ if(-not $s.Contains($x)){ throw "Missing patch marker: $x" } }
@@ -348,7 +564,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SERVER_LINUX_ADMIN8_MOBILE_SAFE_COMPILED
+          name: SERVER_LINUX_ADMIN8_MOBILE_REG_COMPACT_COMPILED
           path: |
             bundle/west.amx
             bundle/gamemodes/west.pwn
