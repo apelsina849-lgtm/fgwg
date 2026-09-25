@@ -1233,51 +1233,62 @@ jobs:
           p = Path(r"bundle/gamemodes/west.pwn")
           s = p.read_bytes().decode("cp1251").replace("\r\n", "\n")
 
-          old_guard = 'if(!IsMainOwner(playerid) && PlayerInfo[playerid][pFull] < 2) return SendClientMessage(playerid, COLOR_GRAD1, "Команда /makeadmin доступна с Full Access 2.");'
-          new_guard = '''if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] == '2')
+          def rep(old, new, label):
+              global s
+              if old not in s:
+                  raise SystemExit(label + " not found")
+              s = s.replace(old, new, 1)
+
+          rep(
+              '    if(!IsMainOwner(playerid) && PlayerInfo[playerid][pFull] < 2) return SendClientMessage(playerid, COLOR_GRAD1, "Команда /makeadmin доступна с Full Access 2.");',
+              '''    if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] == '2')
               return SendClientMessage(playerid, COLOR_GRAD1, "{FF6666}[SETCMD] {FFFFFF}Доступ к /makeadmin у вас забран.");
-          if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] != '1' && PlayerInfo[playerid][pFull] < 2 && !IsMainOwner(playerid))
-              return SendClientMessage(playerid, COLOR_GRAD1, "Команда /makeadmin доступна с Full Access 2 или по выдаче через /setcmd.");'''
-          if old_guard not in s:
-              raise SystemExit("makeadmin FD2 guard not found")
-          s = s.replace(old_guard, new_guard, 1)
+              if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] != '1' && PlayerInfo[playerid][pFull] < 2 && !IsMainOwner(playerid))
+                  return SendClientMessage(playerid, COLOR_GRAD1, "Команда /makeadmin доступна с Full Access 2 или по выдаче через /setcmd.");''',
+              "makeadmin access guard"
+          )
 
-          old_cb = 'if(!IsPlayerConnected(playerid) || (!IsMainOwner(playerid) && PlayerInfo[playerid][pFull] < 2)) return 1;'
-          new_cb = '''if(!IsPlayerConnected(playerid)) return 1;
+          rep(
+              '    if(!IsPlayerConnected(playerid) || (!IsMainOwner(playerid) && PlayerInfo[playerid][pFull] < 2)) return 1;',
+              '''    if(!IsPlayerConnected(playerid)) return 1;
               if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] == '2') return 1;
-              if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] != '1' && PlayerInfo[playerid][pFull] < 2 && !IsMainOwner(playerid)) return 1;'''
-          if old_cb not in s:
-              raise SystemExit("SetAdmin FD2 callback guard not found")
-          s = s.replace(old_cb, new_cb, 1)
+              if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] != '1' && PlayerInfo[playerid][pFull] < 2 && !IsMainOwner(playerid)) return 1;''',
+              "SetAdmin callback guard"
+          )
 
-          old_online = '''SendMes(targetid, COLOR_LIGHTGREEN, "Владелец %s установил вам %d уровень администратора.", PlayerInfo[playerid][pNames], lvl);
-              SendMes(playerid, COLOR_LIGHTGREEN, "[MAKEADMIN] %s[%d] теперь администратор %d уровня.", PlayerInfo[targetid][pNames], targetid, lvl);
-              format(stringer1, sizeof(stringer1), "[OWNER] %s установил %s[%d] админ-уровень: %d", PlayerInfo[playerid][pNames], PlayerInfo[targetid][pNames], targetid, lvl);
-              SendAdminMessage(COLOR_LIGHTGREEN, stringer1);'''
-          new_online = '''SendMes(targetid, COLOR_LIGHTGREEN, "Администратор %s изменил ваш уровень администратора на %d.", PlayerInfo[playerid][pNames], lvl);
-              SendMes(playerid, COLOR_LIGHTGREEN, "Вы изменили %s[%d] уровень администратора на %d.", PlayerInfo[targetid][pNames], targetid, lvl);
-              format(stringer1, sizeof(stringer1), "Администратор %s изменил %s уровень администратора на %d.", PlayerInfo[playerid][pNames], PlayerInfo[targetid][pNames], lvl);
-              SendAdminMessage(COLOR_LIGHTGREEN, stringer1);'''
-          if old_online not in s:
-              raise SystemExit("online makeadmin messages not found")
-          s = s.replace(old_online, new_online, 1)
+          rep(
+              '        SendMes(targetid, COLOR_LIGHTGREEN, "Владелец %s установил вам %d уровень администратора.", PlayerInfo[playerid][pNames], lvl);',
+              '        SendMes(targetid, COLOR_LIGHTGREEN, "Администратор %s изменил ваш уровень администратора на %d.", PlayerInfo[playerid][pNames], lvl);',
+              "online target message"
+          )
+          rep(
+              '        SendMes(playerid, COLOR_LIGHTGREEN, "[MAKEADMIN] %s[%d] теперь администратор %d уровня.", PlayerInfo[targetid][pNames], targetid, lvl);',
+              '        SendMes(playerid, COLOR_LIGHTGREEN, "Администратор %s изменил %s уровень администратора на %d.", PlayerInfo[playerid][pNames], PlayerInfo[targetid][pNames], lvl);',
+              "online issuer message"
+          )
+          rep(
+              '        format(stringer1, sizeof(stringer1), "[OWNER] %s установил %s[%d] админ-уровень: %d", PlayerInfo[playerid][pNames], PlayerInfo[targetid][pNames], targetid, lvl);',
+              '        format(stringer1, sizeof(stringer1), "Администратор %s изменил %s уровень администратора на %d.", PlayerInfo[playerid][pNames], PlayerInfo[targetid][pNames], lvl);',
+              "online admin broadcast"
+          )
+          rep(
+              '        SendMes(i, COLOR_LIGHTGREEN, "Владелец %s установил вам %d уровень администратора.", PlayerInfo[playerid][pNames], lvl);',
+              '        SendMes(i, COLOR_LIGHTGREEN, "Администратор %s изменил ваш уровень администратора на %d.", PlayerInfo[playerid][pNames], lvl);',
+              "callback target message"
+          )
+          rep(
+              '    format(stringer1, sizeof(stringer1), "[OWNER] %s установил %s уровень администратора: %d", PlayerInfo[playerid][pNames], realName, lvl);',
+              '    format(stringer1, sizeof(stringer1), "Администратор %s изменил %s уровень администратора на %d.", PlayerInfo[playerid][pNames], realName, lvl);',
+              "callback admin broadcast"
+          )
+          rep(
+              '    SendMes(playerid, COLOR_LIGHTGREEN, "[MAKEADMIN] %s: установлен %d уровень.", realName, lvl);',
+              '    SendMes(playerid, COLOR_LIGHTGREEN, "Администратор %s изменил %s уровень администратора на %d.", PlayerInfo[playerid][pNames], realName, lvl);',
+              "callback issuer message"
+          )
 
-          old_offline_target = 'SendMes(i, COLOR_LIGHTGREEN, "Владелец %s установил вам %d уровень администратора.", PlayerInfo[playerid][pNames], lvl);'
-          new_offline_target = 'SendMes(i, COLOR_LIGHTGREEN, "Администратор %s изменил ваш уровень администратора на %d.", PlayerInfo[playerid][pNames], lvl);'
-          if old_offline_target not in s:
-              raise SystemExit("offline target message not found")
-          s = s.replace(old_offline_target, new_offline_target, 1)
-
-          old_offline_admin = '''format(stringer1, sizeof(stringer1), "[OWNER] %s установил %s уровень администратора: %d", PlayerInfo[playerid][pNames], realName, lvl);
-              SendAdminMessage(COLOR_LIGHTGREEN, stringer1);
-              SendMes(playerid, COLOR_LIGHTGREEN, "[MAKEADMIN] %s: установлен %d уровень.", realName, lvl);'''
-          new_offline_admin = '''format(stringer1, sizeof(stringer1), "Администратор %s изменил %s уровень администратора на %d.", PlayerInfo[playerid][pNames], realName, lvl);
-              SendAdminMessage(COLOR_LIGHTGREEN, stringer1);
-              SendMes(playerid, COLOR_LIGHTGREEN, "Вы изменили %s уровень администратора на %d.", realName, lvl);'''
-          if old_offline_admin not in s:
-              raise SystemExit("offline admin messages not found")
-          s = s.replace(old_offline_admin, new_offline_admin, 1)
-
+          if "ADMIN8-FD2-MAKEADMIN-20260925" not in s:
+              raise SystemExit("build marker not found")
           s = s.replace("ADMIN8-FD2-MAKEADMIN-20260925", "ADMIN8-FD2-MAKEADMIN-SETCMD-FIX-20260925", 1)
 
           p.write_bytes(s.replace("\n", "\r\n").encode("cp1251"))
@@ -1333,6 +1344,8 @@ jobs:
           foreach($x in $need){ if(-not $s.Contains($x)){ throw "Missing patch marker: $x" } }
           if($s -match '\[pAdmin\].*(?:<|>|==|!=)\s*(?:9|10|11|12)\b'){ throw 'Legacy 9-12 pAdmin check remains' }
           if($s.Contains('if(!IsPlayerConnected(playerid) || !IsMainOwner(playerid)) return 1;')){ throw 'Owner-only SetAdmin callback remains' }
+          if($s.Contains('[OWNER]') -or $s.Contains('Владелец %s установил вам')){ throw 'Old OWNER makeadmin wording remains' }
+          if(-not $s.Contains("PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] == '2'")){ throw 'SETCMD revoke guard missing from makeadmin' }
           Write-Host 'STATIC AUDIT OK'
 
       - name: Compile west.pwn with bundled Pawn compiler
