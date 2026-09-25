@@ -2652,6 +2652,17 @@ jobs:
           python family_v2_patch.py
           if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
 
+
+      - name: Fix Family V2 Pawn compile order
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $b64='H4sIADPWtmoC/+1WX2sjVRR/n09xWCmT0DRpIiJkzUNNUyk0dmhlcUlDuZm5Sa47c2e4d5I0ykLtsihYFEGfFER8Faxioeva+hVmvoKfxN+dSdq0EtcV33Qe2pl7/v/O75zcvgoDilg89EWPRBCFKiYHn5blUCN7K9i9kfR8XhmwgAehx3VlwnVcjibSLpLov1ipzI+EjnWhSNzXfKZfCWRc8VjMKn0WCH96OK4dhsrj6jCG4YK1pU0iZcWZd9ibQlgolj3uIkbBdqNq7bUqIige+czFyYE6kHbJPjCG1ivUDsec4iEnNwwin8ecHtRMmT4PuIxZLEJJPd4PVa4V+h5tZemQo0JiEVOxUURZig04TRSLIq502ZKco9yGXalQs/X2O6092tvdaZGzs/GQfj/+grY22ts7D8nZ20VE2wqE19DlvpBeIbcsWkAOp/QGrdctwqOYADj7Ux3zoHUk4oI984GMe37oPqKAqUdcwUprIQcGmRj5wa/KHJtcGv/mY5fWS0ixaHF5nb0djXq+cGlXvoVOt9GFbYlci3auKaTmWUq5so5N3s09Jwe1JWOuNuagFtCyKVcwszM0smoMHhQqQsj5a+7z7wEVmH4z6Q5DpReAyvBr6E4Wog7fXUvjs559d1d1B0f1LviiQN4x82nCNLE+sp1FNzwRMueIEgMhoaPDkXJ5Cf/nKaJmfmTqmGqCF+HlUXJpdzXLYtVwExHzQwRFVIeB6Jr0NOiFPvkiEPCl6dUquUOmdJ1GOmcwc2My/MM4AcC1eCRRHw25j0OSaAiYqQ0h5uMA6PfZmD/gQ+H6vAkXoYSlc+0Ds3Kjcy033FruxmFCxu+FvSVe5uJ8AvcBbZtrUw8DforzNaYGI0MAENpVYY4rxPPVUaaNcYjJCEZ+LHwheWXMlGAeWJcbuMz3USiGtWHbtqHELMg1o0q0Vi3RvQ+2tjZfX19/3Em+Tb5Mvk6+T37oEg7N8zj5JjlLj5NfkqvkJ/w9oxVdJiidpR8nF8llnVa8yoqHo6/w+XNynh4T/l0lPyZnMHiefoajE0qeJxfpR8ll+iT9lJJf59bpkzqZxcY8z2WKOtVKrVu+V8r4a57ZzhOyH3bw3u30D037uqWbYZmBvflmMxxhWKBV/LN03w+xWI2seB9YYC1N5pjglVwVOVgaIElbDzq12nr3fpYCFl7A4sItMYgs3udh//Zp8T8HozUnVNMXIClopbH671DrNkYZ9Nhg5udDhmYPkF62q6Lc7HouZqv9ZqcvzB38ldDGUhWTtMB2xeORkstIjyadA8Hz5Bnw+yR5Rgbo9ASQ/5Z3atYSSj9MrtKnODmD4ufJpVFPny6gj6Z9B7Fp7DmEp8YCrtPT5ML4gPhO7/NmzSosLfb5Ij1JT/+6l/+0YwuyHT7mfkaEZdPQxDpdNgoz2eIczI6K/8M6h9W6Q8AXDMkcwJeZEARCJfqlJ8QpT5SI+eySuPDrld8IzcUQV1F5++ZYtCKFn6vFO0Rzt+1s4y63u7eJa93W9ru04Tg7261NxP4DpJg6Ey8LAAA='
+          [IO.File]::WriteAllBytes('family_v2_order_fix.py.gz',[Convert]::FromBase64String($b64))
+          python -c "import gzip,pathlib; pathlib.Path('family_v2_order_fix.py').write_bytes(gzip.decompress(pathlib.Path('family_v2_order_fix.py.gz').read_bytes()))"
+          python family_v2_order_fix.py
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
       - name: Static audit
         shell: pwsh
         run: |
