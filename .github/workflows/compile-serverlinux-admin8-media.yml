@@ -1,4 +1,4 @@
-name: Compile SERVER_LINUX ADMIN8 DOSTUP ID MEDIA HOTFIX
+name: Compile SERVER_LINUX ADMIN8 JOIN STABILITY HOTFIX
 
 on:
   push:
@@ -91,6 +91,104 @@ jobs:
           python dostup_id_hotfix.py
           if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
 
+
+      - name: Apply join stability and sscanf overflow hotfix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $py = @'
+          from pathlib import Path
+          import re
+
+          p = Path(r"bundle/gamemodes/west.pwn")
+          raw = p.read_bytes()
+          s = raw.decode("cp1251").replace("\r\n", "\n")
+
+          # Unused geolocation include performs an HTTP lookup and parses its response
+          # through the ancient sscanf plugin on every join. It is not used elsewhere.
+          if "#include <player_geolocation>\n" not in s:
+              raise SystemExit("player_geolocation include not found")
+          s = s.replace("#include <player_geolocation>\n", "", 1)
+
+          # Locate the real OnPlayerConnect body.
+          m = re.search(r"public OnPlayerConnect\(playerid\)\s*\{", s)
+          if not m:
+              raise SystemExit("OnPlayerConnect not found")
+          brace = s.find("{", m.start())
+          depth = 0
+          end = None
+          for i in range(brace, len(s)):
+              if s[i] == "{":
+                  depth += 1
+              elif s[i] == "}":
+                  depth -= 1
+                  if depth == 0:
+                      end = i + 1
+                      break
+          if end is None:
+              raise SystemExit("OnPlayerConnect end not found")
+
+          opc = s[m.start():end]
+          lines = opc.splitlines(True)
+          removals = [line for line in lines if "RemoveBuildingForPlayer(playerid," in line]
+          if len(removals) != 435:
+              raise SystemExit(f"Expected 435 RemoveBuildingForPlayer calls, got {len(removals)}")
+          opc = "".join(line for line in lines if "RemoveBuildingForPlayer(playerid," not in line)
+
+          # Restore the real current IP. The original line was inside a large block comment.
+          name_line = "GetPlayerName(playerid, PlayerInfo[playerid][pNames], 24);"
+          idx = opc.find(name_line)
+          if idx < 0:
+              raise SystemExit("GetPlayerName join line not found")
+          idx += len(name_line)
+          opc = opc[:idx] + "\n\tGetPlayerIp(playerid, PlayerInfo[playerid][pIP], sizeof(PlayerInfo[playerid][pIP]));" + opc[idx:]
+
+          s = s[:m.start()] + opc + s[end:]
+
+          # Move the 435 map-removal RPCs out of the connection handshake.
+          apply_func = (
+              "stock ApplyCRPRemovedBuildings(playerid)\n"
+              "{\n" +
+              "".join(removals) +
+              "\treturn 1;\n"
+              "}\n\n"
+          )
+          pos = s.find("public OnPlayerConnect(playerid)")
+          if pos < 0:
+              raise SystemExit("OnPlayerConnect insertion point not found")
+          s = s[:pos] + apply_func + s[pos:]
+
+          # Apply the map only after successful authentication, before spawning.
+          gs = s.find("stock GoServer(playerid)")
+          if gs < 0:
+              raise SystemExit("GoServer not found")
+          marker = "\tgPlayerLogged[playerid] = 1;"
+          pos = s.find(marker, gs)
+          if pos < 0:
+              raise SystemExit("GoServer login marker not found")
+          call = (
+              "\tif(!GetPVarInt(playerid, \"CRPMapRemovalsApplied\"))\n"
+              "\t{\n"
+              "\t\tApplyCRPRemovedBuildings(playerid);\n"
+              "\t\tSetPVarInt(playerid, \"CRPMapRemovalsApplied\", 1);\n"
+              "\t}\n"
+          )
+          s = s[:pos] + call + s[pos:]
+
+          # Add lightweight diagnostics to distinguish server kick from client timeout.
+          dc = re.search(r"public OnPlayerDisconnect\(playerid,\s*reason\)\s*\{", s)
+          if dc:
+              bp = s.find("{", dc.start()) + 1
+              diag = '\n\tprintf("[JOIN-DIAG] %s[%d] disconnect reason=%d logged=%d", PlayerInfo[playerid][pNames], playerid, reason, gPlayerLogged[playerid]);'
+              s = s[:bp] + diag + s[bp:]
+
+          p.write_bytes(s.replace("\n", "\r\n").encode("cp1251"))
+          print("JOIN STABILITY HOTFIX APPLIED")
+          '@
+          Set-Content -LiteralPath 'join_stability_hotfix.py' -Value $py -Encoding UTF8
+          python join_stability_hotfix.py
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
       - name: Static audit
         shell: pwsh
         run: |
@@ -110,6 +208,9 @@ jobs:
             'case ROLE_TIKTOK: format(output, size, "TikTok")',
             'CMD:build(playerid, params[])',
             'ADMIN8-DOSTUP-ID-MEDIA-HOTFIX-20260925',
+            'stock ApplyCRPRemovedBuildings(playerid)',
+            'GetPlayerIp(playerid, PlayerInfo[playerid][pIP], sizeof(PlayerInfo[playerid][pIP]))',
+            'CRPMapRemovalsApplied',
             '{FFFFFF}%s[%d]\t{%s}%s\n'
           )
           foreach($x in $need){ if(-not $s.Contains($x)){ throw "Missing patch marker: $x" } }
@@ -137,7 +238,7 @@ jobs:
       - name: Upload compiled admin8 build
         uses: actions/upload-artifact@v4
         with:
-          name: SERVER_LINUX_ADMIN8_DOSTUP_ID_MEDIA_COMPILED
+          name: SERVER_LINUX_ADMIN8_JOIN_STABILITY_COMPILED
           path: |
             bundle/west.amx
             bundle/gamemodes/west.pwn
