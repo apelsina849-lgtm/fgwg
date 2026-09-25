@@ -2817,7 +2817,7 @@ H4sIAMPItmoC/+09a3PcxpHf+StG61O4G4Gr3SWXEklRVRQfMi/Uo7iUEoVk0eAuSCJaApsFaIqWWWVZ
           JMzKC5AaKArMHrk9NMB86Gv2I93O0RPK7Hk5Rdc2Klnm+M1ubW9mb9d2d9fqWVVWS3JVLbJTv/HZH6hZFgwKDKnGxl2hDCgrQS2z
           uHQHtgX2X9BKQUMRle8AqBQ0i+rfW7ljG/TO1sEJKJ/poARVZVIPbfjJ5HQTre90isUBSGUycyyoVYoHX3igEtqhRdYhslXbXblH
           altbMAGtQlP+Dcg5BzG10QAA
-'@
+          '@
           [IO.File]::WriteAllBytes('family_v2_patch.py.gz',[Convert]::FromBase64String(($b64 -replace '\s','')))
           python -c "import gzip,pathlib; pathlib.Path('family_v2_patch.py').write_bytes(gzip.decompress(pathlib.Path('family_v2_patch.py.gz').read_bytes()))"
           python family_v2_patch.py
