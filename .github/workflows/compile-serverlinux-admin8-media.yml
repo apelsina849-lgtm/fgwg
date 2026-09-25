@@ -110,7 +110,7 @@ jobs:
             'case ROLE_TIKTOK: format(output, size, "TikTok")',
             'CMD:build(playerid, params[])',
             'ADMIN8-DOSTUP-ID-MEDIA-HOTFIX-20260925',
-            '{FFFFFF}%s[%d]\\t{%s}%s\\n'
+            '{FFFFFF}%s[%d]\t{%s}%s\n'
           )
           foreach($x in $need){ if(-not $s.Contains($x)){ throw "Missing patch marker: $x" } }
           if($s -match '\[pAdmin\].*(?:<|>|==|!=)\s*(?:9|10|11|12)\b'){ throw 'Legacy 9-12 pAdmin check remains' }
