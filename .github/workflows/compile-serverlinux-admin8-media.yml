@@ -2391,8 +2391,7 @@ jobs:
               #pragma unused params
               new fam = PlayerInfo[playerid][pFamily];
               if(fam <= 0) return SendClientMessage(playerid, -1, "Вы не состоите в семье.");
-              return SendMes(playerid, -1, "Семейный автопарк: %d/%d активных машин. Уровень семьи: %d.",
-                  CRPFamilyActiveVehicleCount(fam), CRPFamilyVehicleSlots(fam), CRPFamilyLevel[fam]);
+              return SendMes(playerid, -1, "Семейный автопарк: %d/%d активных машин. Уровень семьи: %d.", CRPFamilyActiveVehicleCount(fam), CRPFamilyVehicleSlots(fam), CRPFamilyLevel[fam]);
           }
           CMD:fambattle(playerid, params[])
           {
