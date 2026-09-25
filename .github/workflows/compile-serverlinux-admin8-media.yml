@@ -1,4 +1,4 @@
-name: Compile SERVER_LINUX ADMIN8 MOBILE DETECT FIX
+name: Compile SERVER_LINUX ADMIN8 FD2 MAKEADMIN
 
 on:
   push:
@@ -1188,6 +1188,33 @@ jobs:
           python mobile_signature_fix.py
           if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
 
+
+      - name: Allow FD2 to use makeadmin
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $py = @'
+          from pathlib import Path
+
+          p = Path(r"bundle/gamemodes/west.pwn")
+          s = p.read_bytes().decode("cp1251").replace("\r\n", "\n")
+
+          old = 'if(!IsMainOwner(playerid)) return SendClientMessage(playerid, COLOR_GRAD1, "Команда /makeadmin доступна только Angel_Molon.");'
+          new = 'if(!IsMainOwner(playerid) && PlayerInfo[playerid][pFull] < 2) return SendClientMessage(playerid, COLOR_GRAD1, "Команда /makeadmin доступна с Full Access 2.");'
+
+          if old not in s:
+              raise SystemExit("/makeadmin owner-only guard not found")
+          s = s.replace(old, new, 1)
+
+          s = s.replace("ADMIN8-DUAL-AUTH-MOBILE-DETECT-20260925", "ADMIN8-FD2-MAKEADMIN-20260925")
+
+          p.write_bytes(s.replace("\n", "\r\n").encode("cp1251"))
+          print("FD2 MAKEADMIN PATCH APPLIED")
+          '@
+          Set-Content -LiteralPath 'fd2_makeadmin_patch.py' -Value $py -Encoding UTF8
+          python fd2_makeadmin_patch.py
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
       - name: Static audit
         shell: pwsh
         run: |
@@ -1200,13 +1227,15 @@ jobs:
             '#define ROLE_TIKTOK                     (23)',
             'PC_RegAlias("jetpack", "jp")',
             'CMD:makeadmin(playerid,params[])',
+            'Команда /makeadmin доступна с Full Access 2.',
+            'PlayerInfo[playerid][pFull] < 2',
             'CMD:uval(playerid, params[])',
             'for(new level = 1; level <= MAX_ADMIN_LEVEL; level++)',
             '8 LVL = все бывшие права 8-12 LVL',
             'case ROLE_YOUTUBE: format(output, size, "YouTube")',
             'case ROLE_TIKTOK: format(output, size, "TikTok")',
             'CMD:build(playerid, params[])',
-            'ADMIN8-DUAL-AUTH-MOBILE-DETECT-20260925',
+            'ADMIN8-FD2-MAKEADMIN-20260925',
             'stock ApplyCRPRemovedBuildings(playerid)',
             'GetPlayerIp(playerid, PlayerInfo[playerid][pIP], 16)',
             'CRPMapRemovalsApplied',
@@ -1253,7 +1282,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SERVER_LINUX_ADMIN8_MOBILE_DETECT_COMPILED
+          name: SERVER_LINUX_ADMIN8_FD2_MAKEADMIN_COMPILED
           path: |
             bundle/west.amx
             bundle/gamemodes/west.pwn
