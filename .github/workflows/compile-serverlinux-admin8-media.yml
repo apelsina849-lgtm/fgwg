@@ -2486,16 +2486,25 @@ jobs:
                   raise SystemExit("OnPlayerSpawn anchor not found")
               s = s.replace(spawn_anchor, '    CRPFamilyRefreshTag(playerid);\n' + spawn_anchor, 1)
 
-          disconnect_anchor = '    CrpCarsReset(playerid);'
+          disconnect_anchor = 'CrpCarsReset(playerid);'
           disconnect_add = r'''
               if(CRPFamilyBattleActive) CRPFamilyBattleDropPlayerPoints(playerid);
               CRPFamilyBattleDestroyHud(playerid);
               CRPFamilyDestroyTag(playerid);
           '''
-          if "CRPFamilyBattleDropPlayerPoints(playerid);" not in s[s.find("public OnPlayerDisconnect(playerid, reason)"):s.find("public OnPlayerDisconnect(playerid, reason)")+1200]:
-              if disconnect_anchor not in s:
-                  raise SystemExit("OnPlayerDisconnect anchor not found")
-              s = s.replace(disconnect_anchor, disconnect_add + disconnect_anchor, 1)
+          disconnect_start = s.find("public OnPlayerDisconnect(playerid, reason)")
+          disconnect_end = s.find("public ", disconnect_start + 10)
+          if disconnect_start < 0:
+              raise SystemExit("OnPlayerDisconnect callback not found")
+          if disconnect_end < 0:
+              disconnect_end = len(s)
+          disconnect_block = s[disconnect_start:disconnect_end]
+          if "CRPFamilyBattleDropPlayerPoints(playerid);" not in disconnect_block:
+              local_pos = disconnect_block.find(disconnect_anchor)
+              if local_pos < 0:
+                  raise SystemExit("OnPlayerDisconnect CrpCarsReset anchor not found")
+              global_pos = disconnect_start + local_pos
+              s = s[:global_pos] + disconnect_add + s[global_pos:]
 
           state_anchor = '    if(newstate == PLAYER_STATE_DRIVER) {'
           state_add = r'''
@@ -2564,7 +2573,7 @@ jobs:
                   raise SystemExit("family dialog handler anchor not found")
               s = s.replace(dialog_anchor, dialog_cases + dialog_anchor, 1)
 
-          create_anchor = '                PlayerInfo[playerid][pFamily] = family_count;'
+          create_anchor = 'PlayerInfo[playerid][pFamily] = family_count;'
           create_add = r'''
                   family_info[family_count][f_id] = family_count;
                   CRPFamilyLevel[family_count] = 1;
@@ -2576,7 +2585,7 @@ jobs:
                   raise SystemExit("family create anchor not found")
               s = s.replace(create_anchor, create_anchor + create_add, 1)
 
-          leave_anchor = '                    PlayerInfo[playerid][pFamily] = 0;'
+          leave_anchor = 'PlayerInfo[playerid][pFamily] = 0;'
           leave_new = r'''
                       if(CRPFamilyBattleActive) CRPFamilyBattleDropPlayerPoints(playerid);
                       PlayerInfo[playerid][pFamily] = 0;
@@ -2591,13 +2600,13 @@ jobs:
                   raise SystemExit("family leave anchor not found")
               s = s.replace(leave_anchor, leave_new, 1)
 
-          color_anchor = '            family_info [ PlayerInfo[playerid][pFamily] ] [ f_chat_color ] = listitem;'
+          color_anchor = 'family_info [ PlayerInfo[playerid][pFamily] ] [ f_chat_color ] = listitem;'
           if "CRPFamilyRefreshTagsForFamily(PlayerInfo[playerid][pFamily]);" not in s:
               if color_anchor not in s:
                   raise SystemExit("family color anchor not found")
               s = s.replace(color_anchor, color_anchor + '\n            CRPFamilyRefreshTagsForFamily(PlayerInfo[playerid][pFamily]);', 1)
 
-          join_anchor = '            PlayerInfo[playerid][pFamily] = GetPVarInt(playerid,"family_id");'
+          join_anchor = 'PlayerInfo[playerid][pFamily] = GetPVarInt(playerid,"family_id");'
           join_add = r'''
               CRPFamilyEnsureRow(PlayerInfo[playerid][pFamily]);
               CRPFamilyRefreshTag(playerid);
@@ -2611,7 +2620,7 @@ jobs:
                   raise SystemExit("family join anchor not found")
               s = s.replace(join_anchor, join_anchor + join_add, 1)
 
-          kick_anchor = '    PlayerInfo[params[0]][pFamily] = 0;'
+          kick_anchor = 'PlayerInfo[params[0]][pFamily] = 0;'
           kick_new = r'''
               if(CRPFamilyBattleActive) CRPFamilyBattleDropPlayerPoints(params[0]);
               PlayerInfo[params[0]][pFamily] = 0;
