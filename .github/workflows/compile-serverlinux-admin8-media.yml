@@ -1,4 +1,4 @@
-name: Compile SERVER_LINUX ADMIN8 FD2 MAKEADMIN
+name: Compile SERVER_LINUX ADMIN8 MAKEADMIN SETCMD FIX
 
 on:
   push:
@@ -1222,6 +1222,71 @@ jobs:
           if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
 
 
+
+      - name: Fix makeadmin messages and setcmd revoke priority
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $py = @'
+          from pathlib import Path
+
+          p = Path(r"bundle/gamemodes/west.pwn")
+          s = p.read_bytes().decode("cp1251").replace("\r\n", "\n")
+
+          old_guard = 'if(!IsMainOwner(playerid) && PlayerInfo[playerid][pFull] < 2) return SendClientMessage(playerid, COLOR_GRAD1, "Команда /makeadmin доступна с Full Access 2.");'
+          new_guard = '''if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] == '2')
+              return SendClientMessage(playerid, COLOR_GRAD1, "{FF6666}[SETCMD] {FFFFFF}Доступ к /makeadmin у вас забран.");
+          if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] != '1' && PlayerInfo[playerid][pFull] < 2 && !IsMainOwner(playerid))
+              return SendClientMessage(playerid, COLOR_GRAD1, "Команда /makeadmin доступна с Full Access 2 или по выдаче через /setcmd.");'''
+          if old_guard not in s:
+              raise SystemExit("makeadmin FD2 guard not found")
+          s = s.replace(old_guard, new_guard, 1)
+
+          old_cb = 'if(!IsPlayerConnected(playerid) || (!IsMainOwner(playerid) && PlayerInfo[playerid][pFull] < 2)) return 1;'
+          new_cb = '''if(!IsPlayerConnected(playerid)) return 1;
+              if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] == '2') return 1;
+              if(PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] != '1' && PlayerInfo[playerid][pFull] < 2 && !IsMainOwner(playerid)) return 1;'''
+          if old_cb not in s:
+              raise SystemExit("SetAdmin FD2 callback guard not found")
+          s = s.replace(old_cb, new_cb, 1)
+
+          old_online = '''SendMes(targetid, COLOR_LIGHTGREEN, "Владелец %s установил вам %d уровень администратора.", PlayerInfo[playerid][pNames], lvl);
+              SendMes(playerid, COLOR_LIGHTGREEN, "[MAKEADMIN] %s[%d] теперь администратор %d уровня.", PlayerInfo[targetid][pNames], targetid, lvl);
+              format(stringer1, sizeof(stringer1), "[OWNER] %s установил %s[%d] админ-уровень: %d", PlayerInfo[playerid][pNames], PlayerInfo[targetid][pNames], targetid, lvl);
+              SendAdminMessage(COLOR_LIGHTGREEN, stringer1);'''
+          new_online = '''SendMes(targetid, COLOR_LIGHTGREEN, "Администратор %s изменил ваш уровень администратора на %d.", PlayerInfo[playerid][pNames], lvl);
+              SendMes(playerid, COLOR_LIGHTGREEN, "Вы изменили %s[%d] уровень администратора на %d.", PlayerInfo[targetid][pNames], targetid, lvl);
+              format(stringer1, sizeof(stringer1), "Администратор %s изменил %s уровень администратора на %d.", PlayerInfo[playerid][pNames], PlayerInfo[targetid][pNames], lvl);
+              SendAdminMessage(COLOR_LIGHTGREEN, stringer1);'''
+          if old_online not in s:
+              raise SystemExit("online makeadmin messages not found")
+          s = s.replace(old_online, new_online, 1)
+
+          old_offline_target = 'SendMes(i, COLOR_LIGHTGREEN, "Владелец %s установил вам %d уровень администратора.", PlayerInfo[playerid][pNames], lvl);'
+          new_offline_target = 'SendMes(i, COLOR_LIGHTGREEN, "Администратор %s изменил ваш уровень администратора на %d.", PlayerInfo[playerid][pNames], lvl);'
+          if old_offline_target not in s:
+              raise SystemExit("offline target message not found")
+          s = s.replace(old_offline_target, new_offline_target, 1)
+
+          old_offline_admin = '''format(stringer1, sizeof(stringer1), "[OWNER] %s установил %s уровень администратора: %d", PlayerInfo[playerid][pNames], realName, lvl);
+              SendAdminMessage(COLOR_LIGHTGREEN, stringer1);
+              SendMes(playerid, COLOR_LIGHTGREEN, "[MAKEADMIN] %s: установлен %d уровень.", realName, lvl);'''
+          new_offline_admin = '''format(stringer1, sizeof(stringer1), "Администратор %s изменил %s уровень администратора на %d.", PlayerInfo[playerid][pNames], realName, lvl);
+              SendAdminMessage(COLOR_LIGHTGREEN, stringer1);
+              SendMes(playerid, COLOR_LIGHTGREEN, "Вы изменили %s уровень администратора на %d.", realName, lvl);'''
+          if old_offline_admin not in s:
+              raise SystemExit("offline admin messages not found")
+          s = s.replace(old_offline_admin, new_offline_admin, 1)
+
+          s = s.replace("ADMIN8-FD2-MAKEADMIN-20260925", "ADMIN8-FD2-MAKEADMIN-SETCMD-FIX-20260925", 1)
+
+          p.write_bytes(s.replace("\n", "\r\n").encode("cp1251"))
+          print("MAKEADMIN MESSAGE/SETCMD FIX APPLIED")
+          '@
+          Set-Content -LiteralPath 'makeadmin_setcmd_fix.py' -Value $py -Encoding UTF8
+          python makeadmin_setcmd_fix.py
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
       - name: Static audit
         shell: pwsh
         run: |
@@ -1234,16 +1299,17 @@ jobs:
             '#define ROLE_TIKTOK                     (23)',
             'PC_RegAlias("jetpack", "jp")',
             'CMD:makeadmin(playerid,params[])',
-            'Команда /makeadmin доступна с Full Access 2.',
             'PlayerInfo[playerid][pFull] < 2',
-            '!IsPlayerConnected(playerid) || (!IsMainOwner(playerid) && PlayerInfo[playerid][pFull] < 2)',
+            'PlayerInfo[playerid][aiCMDaccess][CMD_setadmin] == ''2''',
+            'Доступ к /makeadmin у вас забран.',
+            'Администратор %s изменил %s уровень администратора на %d.',
             'CMD:uval(playerid, params[])',
             'for(new level = 1; level <= MAX_ADMIN_LEVEL; level++)',
             '8 LVL = все бывшие права 8-12 LVL',
             'case ROLE_YOUTUBE: format(output, size, "YouTube")',
             'case ROLE_TIKTOK: format(output, size, "TikTok")',
             'CMD:build(playerid, params[])',
-            'ADMIN8-FD2-MAKEADMIN-20260925',
+            'ADMIN8-FD2-MAKEADMIN-SETCMD-FIX-20260925',
             'stock ApplyCRPRemovedBuildings(playerid)',
             'GetPlayerIp(playerid, PlayerInfo[playerid][pIP], 16)',
             'CRPMapRemovalsApplied',
@@ -1291,7 +1357,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SERVER_LINUX_ADMIN8_FD2_MAKEADMIN_COMPILED
+          name: SERVER_LINUX_ADMIN8_MAKEADMIN_SETCMD_FIXED
           path: |
             bundle/west.amx
             bundle/gamemodes/west.pwn
