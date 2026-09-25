@@ -2523,11 +2523,16 @@ jobs:
           new_menu = old_menu + "\\n{FFD700}Прокачка семьи{FFFFFF}\\nСемейный банк\\nСемейная квартира\\nСемейный автопарк\\nТоп семей"
           s = s.replace(old_menu, new_menu)
 
-          menu_case_anchor = '''                case 5:
-                  {
-                      ShowPlayerDialog(playerid,26376,DIALOG_STYLE_LIST,"{FFEFD5}Национальность семьи","{FFFFFF}Американцы\\nЯпонцы\\nИтальянцы\\nМексиканцы\\nЛатиноамериканцы\\nИспанцы\\nРусские\\nПортугальцы\\nФранцузы","Выбрать","Отмена");
-                  }'''
-          menu_case_new = menu_case_anchor + r'''
+          menu_marker = 'ShowPlayerDialog(playerid,26376,DIALOG_STYLE_LIST,"{FFEFD5}Национальность семьи","{FFFFFF}Американцы\\nЯпонцы\\nИтальянцы\\nМексиканцы\\nЛатиноамериканцы\\nИспанцы\\nРусские\\nПортугальцы\\nФранцузы","Выбрать","Отмена");'
+          if "case 10: CRPFamilyShowTop(playerid);" not in s:
+              family_menu_pos = s.find("case 26372:")
+              menu_pos = s.find(menu_marker, family_menu_pos)
+              if family_menu_pos < 0 or menu_pos < 0:
+                  raise SystemExit("family menu nationality marker not found")
+              case5_close = s.find("}", menu_pos + len(menu_marker))
+              if case5_close < 0:
+                  raise SystemExit("family menu case 5 close not found")
+              menu_extra = r'''
                   case 6: CRPFamilyShowUpgrade(playerid);
                   case 7:
                   {
@@ -2537,11 +2542,8 @@ jobs:
                   case 8: CRPFamilyEnterApartment(playerid);
                   case 9: CRPFamilyShowGarage(playerid);
                   case 10: CRPFamilyShowTop(playerid);
-          '''
-          if "case 10: CRPFamilyShowTop(playerid);" not in s:
-              if menu_case_anchor not in s:
-                  raise SystemExit("family menu case 5 anchor not found")
-              s = s.replace(menu_case_anchor, menu_case_new, 1)
+              '''
+              s = s[:case5_close + 1] + menu_extra + s[case5_close + 1:]
 
           dialog_anchor = '        case 26377:'
           dialog_cases = r'''
