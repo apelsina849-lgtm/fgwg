@@ -1,4 +1,4 @@
-name: Compile SERVER_LINUX CHAT GIVEAWAYS
+name: Compile SERVER_LINUX FAMILY PRO
 
 on:
   push:
@@ -1535,6 +1535,1108 @@ jobs:
           python chat_giveaways_patch.py
           if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
 
+
+      - name: Add Family Pro and scheduled family battles
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $py = @'
+          from pathlib import Path
+
+          p = Path(r"bundle/gamemodes/west.pwn")
+          s = p.read_bytes().decode("cp1251").replace("\r\n", "\n")
+
+          family_code = r'''
+          // =============================================================================
+          // CENTER ROLE PLAY — FAMILY PRO / FAMILY BATTLE
+          // =============================================================================
+          #define CRP_MAX_FAMILIES (800)
+          #define DIALOG_CRP_FAMILY_TOP (26410)
+          #define DIALOG_CRP_FAMILY_UPGRADE (26411)
+          #define DIALOG_CRP_FAMILY_GARAGE (26412)
+          
+          new CRPFamilyBattlePoints[CRP_MAX_FAMILIES];
+          new CRPFamilyCaptures[CRP_MAX_FAMILIES];
+          new CRPFamilyLevel[CRP_MAX_FAMILIES];
+          new CRPFamilyBank[CRP_MAX_FAMILIES];
+          
+          new bool:CRPFamilyBattleActive = false;
+          new CRPFamilyBattleLocation = -1;
+          new CRPFamilyBattleZone = -1;
+          new CRPFamilyBattleLastStartKey = -1;
+          new CRPFamilyBattleEndTimer = -1;
+          new CRPFamilyBattlePlayerPoints[MAX_PLAYERS];
+          new CRPFamilyBattleRoundPoints[CRP_MAX_FAMILIES];
+          
+          new Text3D:CRPFamilyTag[MAX_PLAYERS];
+          new bool:CRPFamilyTagCreated[MAX_PLAYERS];
+          new PlayerText:CRPFamilyBattleHud[MAX_PLAYERS][2];
+          new bool:CRPFamilyBattleHudCreated[MAX_PLAYERS];
+          
+          new CRPFamilyVehicleFamily[MAX_VEHICLES];
+          new CRPFamilyHomePickup = -1;
+          new Text3D:CRPFamilyHomeLabel;
+          
+          enum E_CRP_FAMILY_BATTLE_LOCATION
+          {
+              crp_fb_name[32],
+              Float:crp_fb_minx,
+              Float:crp_fb_miny,
+              Float:crp_fb_maxx,
+              Float:crp_fb_maxy
+          };
+          
+          new const CRPFamilyBattleLocations[][E_CRP_FAMILY_BATTLE_LOCATION] =
+          {
+              {"Glen Park", 1850.0, -1280.0, 2050.0, -1080.0},
+              {"East Beach", 2630.0, -1850.0, 2820.0, -1650.0},
+              {"Ocean Docks", 2290.0, -2590.0, 2490.0, -2390.0},
+              {"Verona Beach", 1000.0, -1900.0, 1200.0, -1700.0},
+              {"Las Colinas", 1900.0, -1150.0, 2100.0, -950.0},
+              {"Idlewood", 1810.0, -1810.0, 2010.0, -1610.0},
+              {"Willowfield", 2320.0, -2140.0, 2520.0, -1940.0},
+              {"Temple", 1050.0, -1100.0, 1250.0, -900.0}
+          };
+          
+          forward CRPLoadFamilyPro();
+          forward CRPFamilyBattlePulse();
+          forward CRPFamilyBattleFinish();
+          
+          stock CRPFamilyColor(familyid)
+          {
+              if(familyid <= 0 || familyid >= CRP_MAX_FAMILIES) return 0xFFFFFFFF;
+              switch(family_info[familyid][f_chat_color])
+              {
+                  case 1: return 0xFFD39BFF;
+                  case 2: return 0xFFFF00FF;
+                  case 3: return 0x54FF9FFF;
+                  case 4: return 0x98F5FFFF;
+              }
+              return 0xFFFFFFFF;
+          }
+          
+          stock CRPFamilyVehicleColor(familyid)
+          {
+              if(familyid <= 0 || familyid >= CRP_MAX_FAMILIES) return 1;
+              switch(family_info[familyid][f_chat_color])
+              {
+                  case 1: return 6;
+                  case 2: return 6;
+                  case 3: return 16;
+                  case 4: return 79;
+              }
+              return 1;
+          }
+          
+          stock CRPFamilyDestroyTag(playerid)
+          {
+              if(CRPFamilyTagCreated[playerid])
+              {
+                  Delete3DTextLabel(CRPFamilyTag[playerid]);
+                  CRPFamilyTagCreated[playerid] = false;
+              }
+              return 1;
+          }
+          
+          stock CRPFamilyRefreshTag(playerid)
+          {
+              CRPFamilyDestroyTag(playerid);
+              if(!IsPlayerConnected(playerid)) return 1;
+          
+              new fam = PlayerInfo[playerid][pFamily];
+              if(fam <= 0 || fam >= CRP_MAX_FAMILIES) return 1;
+              if(!strlen(family_info[fam][f_name])) return 1;
+          
+              new text[48];
+              format(text, sizeof(text), "%s", family_info[fam][f_name]);
+              CRPFamilyTag[playerid] = Create3DTextLabel(text, CRPFamilyColor(fam), 0.0, 0.0, 0.0, 25.0, -1, 1);
+              Attach3DTextLabelToPlayer(CRPFamilyTag[playerid], playerid, 0.0, 0.0, 0.55);
+              CRPFamilyTagCreated[playerid] = true;
+              return 1;
+          }
+          
+          stock CRPFamilyRefreshTagsForFamily(familyid)
+          {
+              foreach(Player, i)
+              {
+                  if(PlayerInfo[i][pFamily] == familyid) CRPFamilyRefreshTag(i);
+              }
+              return 1;
+          }
+          
+          stock CRPFamilyResetPlayerRuntime(playerid)
+          {
+              CRPFamilyDestroyTag(playerid);
+              CRPFamilyBattlePlayerPoints[playerid] = 0;
+              if(CRPFamilyBattleHudCreated[playerid])
+              {
+                  PlayerTextDrawDestroy(playerid, CRPFamilyBattleHud[playerid][0]);
+                  PlayerTextDrawDestroy(playerid, CRPFamilyBattleHud[playerid][1]);
+                  CRPFamilyBattleHudCreated[playerid] = false;
+              }
+              return 1;
+          }
+          
+          stock CRPFamilyBroadcastAll(color, const message[])
+          {
+              foreach(Player, i)
+              {
+                  if(PlayerInfo[i][pFamily] > 0) SendClientMessage(i, color, message);
+              }
+              return 1;
+          }
+          
+          stock CRPFamilyBroadcast(familyid, color, const message[])
+          {
+              foreach(Player, i)
+              {
+                  if(PlayerInfo[i][pFamily] == familyid) SendClientMessage(i, color, message);
+              }
+              return 1;
+          }
+          
+          stock CRPFamilyProInit()
+          {
+              mysql_query(connects,
+                  "CREATE TABLE IF NOT EXISTS `family_pro` ("
+                  "`fam_id` INT NOT NULL,"
+                  "`battle_points` INT NOT NULL DEFAULT 0,"
+                  "`captures` INT NOT NULL DEFAULT 0,"
+                  "`level` INT NOT NULL DEFAULT 1,"
+                  "`bank` INT NOT NULL DEFAULT 0,"
+                  "PRIMARY KEY (`fam_id`)"
+                  ") ENGINE=InnoDB DEFAULT CHARSET=cp1251 COLLATE=cp1251_general_ci", false);
+          
+              mysql_query(connects,
+                  "INSERT IGNORE INTO `family_pro` (`fam_id`) SELECT `fam_id` FROM `family_system`", false);
+          
+              mysql_function_query(connects, "SELECT * FROM `family_pro`", true, "CRPLoadFamilyPro", "");
+              return 1;
+          }
+          
+          public CRPLoadFamilyPro()
+          {
+              new rows, fields;
+              cache_get_data(rows, fields);
+          
+              for(new i = 0; i < rows; i++)
+              {
+                  new fam = cache_get_field_content_int(i, "fam_id");
+                  if(fam <= 0 || fam >= CRP_MAX_FAMILIES) continue;
+          
+                  CRPFamilyBattlePoints[fam] = cache_get_field_content_int(i, "battle_points");
+                  CRPFamilyCaptures[fam] = cache_get_field_content_int(i, "captures");
+                  CRPFamilyLevel[fam] = cache_get_field_content_int(i, "level");
+                  CRPFamilyBank[fam] = cache_get_field_content_int(i, "bank");
+                  if(CRPFamilyLevel[fam] < 1) CRPFamilyLevel[fam] = 1;
+                  if(CRPFamilyLevel[fam] > 5) CRPFamilyLevel[fam] = 5;
+              }
+              printf("[FAMILY-PRO] Loaded %d family progression rows.", rows);
+              return 1;
+          }
+          
+          stock CRPFamilyEnsureRow(familyid)
+          {
+              if(familyid <= 0 || familyid >= CRP_MAX_FAMILIES) return 0;
+              new query[128];
+              format(query, sizeof(query), "INSERT IGNORE INTO `family_pro` (`fam_id`) VALUES ('%d')", familyid);
+              mysql_function_query(connects, query, false, "", "");
+              if(CRPFamilyLevel[familyid] < 1) CRPFamilyLevel[familyid] = 1;
+              return 1;
+          }
+          
+          stock CRPFamilySave(familyid)
+          {
+              if(familyid <= 0 || familyid >= CRP_MAX_FAMILIES) return 0;
+              CRPFamilyEnsureRow(familyid);
+          
+              new query[256];
+              format(query, sizeof(query),
+                  "UPDATE `family_pro` SET `battle_points`='%d', `captures`='%d', `level`='%d', `bank`='%d' WHERE `fam_id`='%d'",
+                  CRPFamilyBattlePoints[familyid], CRPFamilyCaptures[familyid],
+                  CRPFamilyLevel[familyid], CRPFamilyBank[familyid], familyid);
+              mysql_function_query(connects, query, false, "", "");
+              return 1;
+          }
+          
+          stock CRPFamilyVehicleSlots(familyid)
+          {
+              new level = CRPFamilyLevel[familyid];
+              if(level < 1) level = 1;
+              if(level > 5) level = 5;
+              return level * 2;
+          }
+          
+          stock CRPFamilyUpgradeCost(familyid)
+          {
+              switch(CRPFamilyLevel[familyid])
+              {
+                  case 1: return 500000;
+                  case 2: return 1500000;
+                  case 3: return 3000000;
+                  case 4: return 5000000;
+              }
+              return 0;
+          }
+          
+          stock CRPFamilyUpgradeCapturesRequired(familyid)
+          {
+              switch(CRPFamilyLevel[familyid])
+              {
+                  case 1: return 0;
+                  case 2: return 2;
+                  case 3: return 5;
+                  case 4: return 10;
+              }
+              return 0;
+          }
+          
+          stock CRPIsFamilyOwner(playerid)
+          {
+              new fam = PlayerInfo[playerid][pFamily];
+              if(fam <= 0 || fam >= CRP_MAX_FAMILIES) return 0;
+              return !strcmp(PlayerInfo[playerid][pNames], family_info[fam][f_creator], true);
+          }
+          
+          stock CRPFamilyShowUpgrade(playerid)
+          {
+              new fam = PlayerInfo[playerid][pFamily];
+              if(fam <= 0) return SendClientMessage(playerid, -1, "Вы не состоите в семье.");
+          
+              if(CRPFamilyLevel[fam] < 1) CRPFamilyLevel[fam] = 1;
+          
+              new text[512], cost = CRPFamilyUpgradeCost(fam), req = CRPFamilyUpgradeCapturesRequired(fam);
+              if(CRPFamilyLevel[fam] >= 5)
+              {
+                  format(text, sizeof(text),
+                      "{FFFFFF}Семья: {FFD700}%s\n{FFFFFF}Уровень: {7CFC00}5/5\n"
+                      "{FFFFFF}Очки битв: {7CFC00}%d\n{FFFFFF}Победы: {7CFC00}%d\n"
+                      "{FFFFFF}Семейный банк: {7CFC00}%d вирт\n{FFFFFF}Автопарк: {7CFC00}%d машин\n\n"
+                      "{FFD700}Максимальный уровень семьи уже достигнут.",
+                      family_info[fam][f_name], CRPFamilyBattlePoints[fam], CRPFamilyCaptures[fam],
+                      CRPFamilyBank[fam], CRPFamilyVehicleSlots(fam));
+                  return ShowPlayerDialog(playerid, DIALOG_CRP_FAMILY_UPGRADE, DIALOG_STYLE_MSGBOX,
+                      "{FFD700}Прокачка семьи", text, "Закрыть", "");
+              }
+          
+              format(text, sizeof(text),
+                  "{FFFFFF}Семья: {FFD700}%s\n{FFFFFF}Уровень: {7CFC00}%d/5\n"
+                  "{FFFFFF}Очки битв: {7CFC00}%d\n{FFFFFF}Победы: {7CFC00}%d\n"
+                  "{FFFFFF}Семейный банк: {7CFC00}%d вирт\n{FFFFFF}Автопарк: {7CFC00}%d машин\n\n"
+                  "{FFFFFF}Следующий уровень: {FFD700}%d\n"
+                  "{FFFFFF}Стоимость: {7CFC00}%d вирт\n{FFFFFF}Нужно побед в битвах семей: {7CFC00}%d",
+                  family_info[fam][f_name], CRPFamilyLevel[fam], CRPFamilyBattlePoints[fam],
+                  CRPFamilyCaptures[fam], CRPFamilyBank[fam], CRPFamilyVehicleSlots(fam),
+                  CRPFamilyLevel[fam] + 1, cost, req);
+          
+              return ShowPlayerDialog(playerid, DIALOG_CRP_FAMILY_UPGRADE, DIALOG_STYLE_MSGBOX,
+                  "{FFD700}Прокачка семьи", text, "Улучшить", "Назад");
+          }
+          
+          stock CRPFamilyUpgrade(playerid)
+          {
+              new fam = PlayerInfo[playerid][pFamily];
+              if(fam <= 0) return SendClientMessage(playerid, -1, "Вы не состоите в семье.");
+              if(!CRPIsFamilyOwner(playerid)) return SendClientMessage(playerid, -1, "Прокачивать семью может только её создатель.");
+              if(CRPFamilyLevel[fam] >= 5) return SendClientMessage(playerid, -1, "У семьи уже максимальный уровень.");
+          
+              new cost = CRPFamilyUpgradeCost(fam);
+              new req = CRPFamilyUpgradeCapturesRequired(fam);
+              if(CRPFamilyCaptures[fam] < req)
+                  return SendMes(playerid, -1, "Для следующего уровня нужно минимум %d побед в битвах семей.", req);
+              if(CRPFamilyBank[fam] < cost)
+                  return SendMes(playerid, -1, "В семейном банке недостаточно денег. Нужно: %d вирт.", cost);
+          
+              CRPFamilyBank[fam] -= cost;
+              CRPFamilyLevel[fam]++;
+              CRPFamilySave(fam);
+          
+              new msg[180];
+              format(msg, sizeof(msg), "{FFD700}[СЕМЬЯ] {FFFFFF}Семья %s улучшена до {7CFC00}%d уровня{FFFFFF}. Автопарк: %d машин.",
+                  family_info[fam][f_name], CRPFamilyLevel[fam], CRPFamilyVehicleSlots(fam));
+              CRPFamilyBroadcast(fam, -1, msg);
+              return 1;
+          }
+          
+          stock CRPFamilyDeposit(playerid, amount)
+          {
+              new fam = PlayerInfo[playerid][pFamily];
+              if(fam <= 0) return SendClientMessage(playerid, -1, "Вы не состоите в семье.");
+              if(amount < 1000 || amount > 50000000) return SendClientMessage(playerid, -1, "Сумма пополнения: от 1.000 до 50.000.000 вирт.");
+              if(PlayerInfo[playerid][pCash] < amount) return SendClientMessage(playerid, -1, "У вас недостаточно денег.");
+          
+              if(CRPFamilyBank[fam] > 2000000000 - amount)
+                  return SendClientMessage(playerid, -1, "Семейный банк переполнен.");
+          
+              PlayerInfo[playerid][pCash] -= amount;
+              GivePlayerMoney(playerid, -amount);
+              CRPFamilyBank[fam] += amount;
+              CRPFamilySave(fam);
+          
+              new query[160];
+              format(query, sizeof(query), "UPDATE `accounts` SET `pCash`='%d' WHERE `pID`='%d' LIMIT 1",
+                  PlayerInfo[playerid][pCash], PlayerInfo[playerid][pID]);
+              mysql_function_query(connects, query, false, "", "");
+          
+              new msg[180];
+              format(msg, sizeof(msg), "{FFD700}[СЕМЬЯ] {FFFFFF}%s пополнил семейный банк на {7CFC00}%d вирт{FFFFFF}. Баланс: %d вирт.",
+                  PlayerInfo[playerid][pNames], amount, CRPFamilyBank[fam]);
+              CRPFamilyBroadcast(fam, -1, msg);
+              return 1;
+          }
+          
+          stock CRPFamilyShowTop(playerid)
+          {
+              new text[1400];
+              strcat(text, "№\tСемья\tОчки\tПобеды\tLVL\n");
+          
+              new used[CRP_MAX_FAMILIES];
+              new place = 1;
+          
+              while(place <= 15)
+              {
+                  new best = 0;
+                  for(new f = 1; f <= family_count && f < CRP_MAX_FAMILIES; f++)
+                  {
+                      if(used[f] || !strlen(family_info[f][f_name])) continue;
+                      if(best == 0
+                          || CRPFamilyBattlePoints[f] > CRPFamilyBattlePoints[best]
+                          || (CRPFamilyBattlePoints[f] == CRPFamilyBattlePoints[best] && CRPFamilyCaptures[f] > CRPFamilyCaptures[best]))
+                      {
+                          best = f;
+                      }
+                  }
+          
+                  if(best == 0) break;
+                  used[best] = 1;
+          
+                  new line[100];
+                  format(line, sizeof(line), "%d\t%s\t%d\t%d\t%d\n",
+                      place, family_info[best][f_name], CRPFamilyBattlePoints[best],
+                      CRPFamilyCaptures[best], CRPFamilyLevel[best] < 1 ? 1 : CRPFamilyLevel[best]);
+                  strcat(text, line);
+                  place++;
+              }
+          
+              if(place == 1) strcat(text, "-\tНет семей\t0\t0\t1\n");
+              return ShowPlayerDialog(playerid, DIALOG_CRP_FAMILY_TOP, DIALOG_STYLE_TABLIST_HEADERS,
+                  "{FFD700}Топ семей", text, "Закрыть", "");
+          }
+          
+          stock CRPFamilyApartmentInterior(familyid)
+          {
+              if(CRPFamilyLevel[familyid] >= 5) return 5;
+              if(CRPFamilyLevel[familyid] >= 3) return 15;
+              return 5;
+          }
+          
+          stock CRPFamilyApartmentPos(familyid, &Float:x, &Float:y, &Float:z)
+          {
+              if(CRPFamilyLevel[familyid] >= 5)
+              {
+                  x = 1267.8407; y = -776.9587; z = 1091.9063;
+              }
+              else if(CRPFamilyLevel[familyid] >= 3)
+              {
+                  x = 295.1391; y = 1473.3719; z = 1080.2578;
+              }
+              else
+              {
+                  x = 2233.6919; y = -1112.8107; z = 1050.8828;
+              }
+              return 1;
+          }
+          
+          stock CRPFamilyEnterApartment(playerid)
+          {
+              new fam = PlayerInfo[playerid][pFamily];
+              if(fam <= 0) return SendClientMessage(playerid, -1, "Вы не состоите в семье.");
+          
+              if(!IsPlayerInRangeOfPoint(playerid, 7.0, 1299.1859, -801.4249, 84.1406))
+              {
+                  SetPlayerCheckpoint(playerid, 1299.1859, -801.4249, 84.1406, 4.0);
+                  return SendClientMessage(playerid, -1, "{FFD700}[СЕМЬЯ] {FFFFFF}На карте отмечен вход в семейную резиденцию. Приедьте туда и повторите /famhome.");
+              }
+          
+              DisablePlayerCheckpoint(playerid);
+              new Float:x, Float:y, Float:z;
+              CRPFamilyApartmentPos(fam, x, y, z);
+          
+              SetPlayerInterior(playerid, CRPFamilyApartmentInterior(fam));
+              SetPlayerVirtualWorld(playerid, 6000 + fam);
+              SetPlayerPos(playerid, x, y, z);
+              SetPVarInt(playerid, "CRPFamilyApartment", fam);
+              SendMes(playerid, -1, "{FFD700}[СЕМЬЯ] {FFFFFF}Вы вошли в семейную квартиру. Уровень семьи: %d.", CRPFamilyLevel[fam]);
+              return 1;
+          }
+          
+          stock CRPFamilyExitApartment(playerid)
+          {
+              if(!GetPVarInt(playerid, "CRPFamilyApartment"))
+                  return SendClientMessage(playerid, -1, "Вы не находитесь в семейной квартире.");
+          
+              DeletePVar(playerid, "CRPFamilyApartment");
+              SetPlayerInterior(playerid, 0);
+              SetPlayerVirtualWorld(playerid, 0);
+              SetPlayerPos(playerid, 1299.1859, -804.0, 84.1406);
+              return 1;
+          }
+          
+          stock CRPFamilyActiveVehicleCount(familyid)
+          {
+              new count;
+              for(new v = 1; v < MAX_VEHICLES; v++)
+              {
+                  if(CRPFamilyVehicleFamily[v] == familyid) count++;
+              }
+              return count;
+          }
+          
+          stock CRPFamilyGarageModelByList(level, listitem)
+          {
+              new idx = 0;
+              if(listitem == idx++) return 492;
+              if(listitem == idx++) return 468;
+              if(level >= 2 && listitem == idx++) return 560;
+              if(level >= 3 && listitem == idx++) return 579;
+              if(level >= 4 && listitem == idx++) return 541;
+              if(level >= 5 && listitem == idx++) return 411;
+              return 0;
+          }
+          
+          stock CRPFamilyShowGarage(playerid)
+          {
+              new fam = PlayerInfo[playerid][pFamily];
+              if(fam <= 0) return SendClientMessage(playerid, -1, "Вы не состоите в семье.");
+          
+              if(!IsPlayerInRangeOfPoint(playerid, 40.0, 1299.1859, -801.4249, 84.1406))
+              {
+                  SetPlayerCheckpoint(playerid, 1299.1859, -801.4249, 84.1406, 4.0);
+                  return SendClientMessage(playerid, -1, "{FFD700}[СЕМЬЯ] {FFFFFF}На карте отмечен семейный автопарк. Приедьте туда и повторите /famcar.");
+              }
+          
+              new list[512];
+              strcat(list, "Greenwood\tLVL 1\n");
+              strcat(list, "Sanchez\tLVL 1\n");
+              if(CRPFamilyLevel[fam] >= 2) strcat(list, "Sultan\tLVL 2\n");
+              if(CRPFamilyLevel[fam] >= 3) strcat(list, "Huntley\tLVL 3\n");
+              if(CRPFamilyLevel[fam] >= 4) strcat(list, "Bullet\tLVL 4\n");
+              if(CRPFamilyLevel[fam] >= 5) strcat(list, "Infernus\tLVL 5\n");
+          
+              new title[96];
+              format(title, sizeof(title), "{FFD700}Автопарк семьи | %d/%d машин",
+                  CRPFamilyActiveVehicleCount(fam), CRPFamilyVehicleSlots(fam));
+              return ShowPlayerDialog(playerid, DIALOG_CRP_FAMILY_GARAGE, DIALOG_STYLE_TABLIST,
+                  title, list, "Создать", "Назад");
+          }
+          
+          stock CRPFamilySpawnGarageVehicle(playerid, listitem)
+          {
+              new fam = PlayerInfo[playerid][pFamily];
+              if(fam <= 0) return 0;
+          
+              if(!IsPlayerInRangeOfPoint(playerid, 40.0, 1299.1859, -801.4249, 84.1406))
+                  return SendClientMessage(playerid, -1, "Вы должны находиться у семейного автопарка.");
+          
+              new slots = CRPFamilyVehicleSlots(fam);
+              new active = CRPFamilyActiveVehicleCount(fam);
+              if(active >= slots) return SendMes(playerid, -1, "Автопарк заполнен: %d/%d машин.", active, slots);
+          
+              new model = CRPFamilyGarageModelByList(CRPFamilyLevel[fam], listitem);
+              if(!model) return SendClientMessage(playerid, -1, "Эта машина пока не доступна вашей семье.");
+          
+              static const Float:spawnPos[][4] =
+              {
+                  {1281.0, -816.0, 83.0, 0.0},
+                  {1286.0, -816.0, 83.0, 0.0},
+                  {1291.0, -816.0, 83.0, 0.0},
+                  {1296.0, -816.0, 83.0, 0.0},
+                  {1301.0, -816.0, 83.0, 0.0},
+                  {1306.0, -816.0, 83.0, 0.0}
+              };
+          
+              new slot = active % sizeof(spawnPos);
+              new color = CRPFamilyVehicleColor(fam);
+              new vehicleid = CreateVehicleEx(model,
+                  spawnPos[slot][0], spawnPos[slot][1], spawnPos[slot][2], spawnPos[slot][3],
+                  color, color, 600, 0);
+          
+              if(vehicleid <= 0 || vehicleid >= MAX_VEHICLES)
+                  return SendClientMessage(playerid, -1, "Не удалось создать семейный транспорт.");
+          
+              CRPFamilyVehicleFamily[vehicleid] = fam;
+              Fuell[vehicleid] = 100.0;
+          
+              new msg[160];
+              format(msg, sizeof(msg), "{FFD700}[СЕМЬЯ] {FFFFFF}%s создал транспорт семьи (model %d). Автопарк: %d/%d.",
+                  PlayerInfo[playerid][pNames], model, active + 1, slots);
+              CRPFamilyBroadcast(fam, -1, msg);
+              return 1;
+          }
+          
+          stock CRPFamilyBattleIsInZone(playerid)
+          {
+              if(!CRPFamilyBattleActive || CRPFamilyBattleLocation < 0) return 0;
+              if(GetPlayerVirtualWorld(playerid) != 0 || GetPlayerInterior(playerid) != 0) return 0;
+          
+              new Float:x, Float:y, Float:z;
+              GetPlayerPos(playerid, x, y, z);
+              return (
+                  x >= CRPFamilyBattleLocations[CRPFamilyBattleLocation][crp_fb_minx]
+                  && x <= CRPFamilyBattleLocations[CRPFamilyBattleLocation][crp_fb_maxx]
+                  && y >= CRPFamilyBattleLocations[CRPFamilyBattleLocation][crp_fb_miny]
+                  && y <= CRPFamilyBattleLocations[CRPFamilyBattleLocation][crp_fb_maxy]
+              );
+          }
+          
+          stock CRPFamilyBattleDestroyHud(playerid)
+          {
+              if(!CRPFamilyBattleHudCreated[playerid]) return 1;
+              PlayerTextDrawDestroy(playerid, CRPFamilyBattleHud[playerid][0]);
+              PlayerTextDrawDestroy(playerid, CRPFamilyBattleHud[playerid][1]);
+              CRPFamilyBattleHudCreated[playerid] = false;
+              return 1;
+          }
+          
+          stock CRPFamilyBattleCreateHud(playerid)
+          {
+              if(CRPFamilyBattleHudCreated[playerid]) return 1;
+              if(PlayerInfo[playerid][pFamily] <= 0) return 1;
+          
+              CRPFamilyBattleHud[playerid][0] = CreatePlayerTextDraw(playerid, 490.0, 315.0, "Ваши очки: 0");
+              PlayerTextDrawFont(playerid, CRPFamilyBattleHud[playerid][0], 1);
+              PlayerTextDrawLetterSize(playerid, CRPFamilyBattleHud[playerid][0], 0.24, 1.05);
+              PlayerTextDrawColor(playerid, CRPFamilyBattleHud[playerid][0], 0xFFFFFFFF);
+              PlayerTextDrawSetOutline(playerid, CRPFamilyBattleHud[playerid][0], 1);
+              PlayerTextDrawBackgroundColor(playerid, CRPFamilyBattleHud[playerid][0], 0x00000099);
+              PlayerTextDrawShow(playerid, CRPFamilyBattleHud[playerid][0]);
+          
+              CRPFamilyBattleHud[playerid][1] = CreatePlayerTextDraw(playerid, 490.0, 329.0, "Очки семьи: 0");
+              PlayerTextDrawFont(playerid, CRPFamilyBattleHud[playerid][1], 1);
+              PlayerTextDrawLetterSize(playerid, CRPFamilyBattleHud[playerid][1], 0.24, 1.05);
+              PlayerTextDrawColor(playerid, CRPFamilyBattleHud[playerid][1], 0xFFD700FF);
+              PlayerTextDrawSetOutline(playerid, CRPFamilyBattleHud[playerid][1], 1);
+              PlayerTextDrawBackgroundColor(playerid, CRPFamilyBattleHud[playerid][1], 0x00000099);
+              PlayerTextDrawShow(playerid, CRPFamilyBattleHud[playerid][1]);
+          
+              CRPFamilyBattleHudCreated[playerid] = true;
+              return 1;
+          }
+          
+          stock CRPFamilyBattleUpdateHud(playerid)
+          {
+              if(!CRPFamilyBattleActive || PlayerInfo[playerid][pFamily] <= 0)
+                  return CRPFamilyBattleDestroyHud(playerid);
+          
+              CRPFamilyBattleCreateHud(playerid);
+          
+              new fam = PlayerInfo[playerid][pFamily];
+              new text[64];
+              format(text, sizeof(text), "Ваши очки: %d", CRPFamilyBattlePlayerPoints[playerid]);
+              PlayerTextDrawSetString(playerid, CRPFamilyBattleHud[playerid][0], text);
+              format(text, sizeof(text), "Очки семьи: %d", CRPFamilyBattleRoundPoints[fam]);
+              PlayerTextDrawSetString(playerid, CRPFamilyBattleHud[playerid][1], text);
+              return 1;
+          }
+          
+          stock CRPFamilyBattleAttachPlayer(playerid)
+          {
+              if(!CRPFamilyBattleActive || PlayerInfo[playerid][pFamily] <= 0) return 1;
+              if(CRPFamilyBattleZone >= 0)
+              {
+                  GangZoneShowForPlayer(playerid, CRPFamilyBattleZone, 0xFF000055);
+                  GangZoneFlashForPlayer(playerid, CRPFamilyBattleZone, 0xFF0000CC);
+              }
+              CRPFamilyBattleCreateHud(playerid);
+              CRPFamilyBattleUpdateHud(playerid);
+              return 1;
+          }
+          
+          stock CRPFamilyBattleDropPlayerPoints(playerid)
+          {
+              new fam = PlayerInfo[playerid][pFamily];
+              new points = CRPFamilyBattlePlayerPoints[playerid];
+              if(points <= 0) return 1;
+          
+              if(fam > 0 && fam < CRP_MAX_FAMILIES)
+              {
+                  CRPFamilyBattleRoundPoints[fam] -= points;
+                  if(CRPFamilyBattleRoundPoints[fam] < 0) CRPFamilyBattleRoundPoints[fam] = 0;
+              }
+              CRPFamilyBattlePlayerPoints[playerid] = 0;
+              return 1;
+          }
+          
+          stock CRPFamilyBattleOnDeath(playerid, killerid)
+          {
+              if(!CRPFamilyBattleActive) return 1;
+          
+              new victimFamily = PlayerInfo[playerid][pFamily];
+              if(victimFamily <= 0 || victimFamily >= CRP_MAX_FAMILIES) return 1;
+          
+              new lost = CRPFamilyBattlePlayerPoints[playerid];
+              if(lost <= 0) return 1;
+          
+              new bool:deathInZone = CRPFamilyBattleIsInZone(playerid);
+              CRPFamilyBattleRoundPoints[victimFamily] -= lost;
+              if(CRPFamilyBattleRoundPoints[victimFamily] < 0) CRPFamilyBattleRoundPoints[victimFamily] = 0;
+              CRPFamilyBattlePlayerPoints[playerid] = 0;
+          
+              new bool:transferred = false;
+              if(deathInZone && killerid != INVALID_PLAYER_ID && killerid != playerid && IsPlayerConnected(killerid))
+              {
+                  new killerFamily = PlayerInfo[killerid][pFamily];
+                  if(killerFamily > 0 && killerFamily < CRP_MAX_FAMILIES
+                      && killerFamily != victimFamily
+                      && CRPFamilyBattleIsInZone(killerid))
+                  {
+                      CRPFamilyBattlePlayerPoints[killerid] += lost;
+                      CRPFamilyBattleRoundPoints[killerFamily] += lost;
+                      transferred = true;
+                      CRPFamilyBattleUpdateHud(killerid);
+                      SendMes(killerid, 0xFFD700FF, "[БИТВА СЕМЕЙ] Вы забрали у %s %d очков.", PlayerInfo[playerid][pNames], lost);
+                  }
+              }
+          
+              new msg[200];
+              format(msg, sizeof(msg), "{FF4444}[БИТВА СЕМЕЙ] {FFFFFF}Игрок %s был убит и потерял {FF4444}%d{FFFFFF} очков%s",
+                  PlayerInfo[playerid][pNames], lost, transferred ? (".") : (" — очки сгорели."));
+              CRPFamilyBroadcastAll(-1, msg);
+              CRPFamilyBattleUpdateHud(playerid);
+              return 1;
+          }
+          
+          stock CRPFamilyBattleStart()
+          {
+              if(CRPFamilyBattleActive) return 0;
+          
+              CRPFamilyBattleActive = true;
+              CRPFamilyBattleLocation = random(sizeof(CRPFamilyBattleLocations));
+          
+              for(new f = 0; f < CRP_MAX_FAMILIES; f++) CRPFamilyBattleRoundPoints[f] = 0;
+          
+              foreach(Player, i)
+              {
+                  CRPFamilyBattlePlayerPoints[i] = 0;
+                  CRPFamilyBattleDestroyHud(i);
+              }
+          
+              CRPFamilyBattleZone = GangZoneCreate(
+                  CRPFamilyBattleLocations[CRPFamilyBattleLocation][crp_fb_minx],
+                  CRPFamilyBattleLocations[CRPFamilyBattleLocation][crp_fb_miny],
+                  CRPFamilyBattleLocations[CRPFamilyBattleLocation][crp_fb_maxx],
+                  CRPFamilyBattleLocations[CRPFamilyBattleLocation][crp_fb_maxy]
+              );
+          
+              new msg[220];
+              format(msg, sizeof(msg), "{FF0000}[БИТВА СЕМЕЙ] {FFFFFF}Битва семей началась! Локация: {FFD700}%s{FFFFFF}. Красный мигающий квадрат отмечен на карте.",
+                  CRPFamilyBattleLocations[CRPFamilyBattleLocation][crp_fb_name]);
+              CRPFamilyBroadcastAll(-1, msg);
+              CRPFamilyBroadcastAll(-1, "{FF0000}[БИТВА СЕМЕЙ] {FFFFFF}Находитесь внутри зоны и получайте +1 очко каждую секунду. Битва закончится через 10 минут.");
+          
+              foreach(Player, i)
+              {
+                  if(PlayerInfo[i][pFamily] > 0) CRPFamilyBattleAttachPlayer(i);
+              }
+          
+              if(CRPFamilyBattleEndTimer != -1) KillTimer(CRPFamilyBattleEndTimer);
+              CRPFamilyBattleEndTimer = SetTimer("CRPFamilyBattleFinish", 600000, false);
+              return 1;
+          }
+          
+          public CRPFamilyBattleFinish()
+          {
+              if(!CRPFamilyBattleActive) return 1;
+              CRPFamilyBattleEndTimer = -1;
+          
+              new winner = 0, bestPoints = 0, bool:tie = false;
+              for(new f = 1; f <= family_count && f < CRP_MAX_FAMILIES; f++)
+              {
+                  if(CRPFamilyBattleRoundPoints[f] > 0)
+                  {
+                      CRPFamilyBattlePoints[f] += CRPFamilyBattleRoundPoints[f];
+                      CRPFamilyEnsureRow(f);
+                  }
+          
+                  if(CRPFamilyBattleRoundPoints[f] > bestPoints)
+                  {
+                      winner = f;
+                      bestPoints = CRPFamilyBattleRoundPoints[f];
+                      tie = false;
+                  }
+                  else if(CRPFamilyBattleRoundPoints[f] == bestPoints && bestPoints > 0)
+                  {
+                      tie = true;
+                  }
+              }
+          
+              if(winner > 0 && bestPoints > 0 && !tie)
+              {
+                  CRPFamilyCaptures[winner]++;
+                  new msg[220];
+                  format(msg, sizeof(msg), "{FF0000}[БИТВА СЕМЕЙ] {FFFFFF}Семья {FFD700}%s{FFFFFF} одержала победу и получила {7CFC00}%d{FFFFFF} очков.",
+                      family_info[winner][f_name], bestPoints);
+                  CRPFamilyBroadcastAll(-1, msg);
+              }
+              else if(tie)
+              {
+                  CRPFamilyBroadcastAll(-1, "{FF0000}[БИТВА СЕМЕЙ] {FFFFFF}Битва завершилась ничьей. Очки участников сохранены, захват не засчитан.");
+              }
+              else
+              {
+                  CRPFamilyBroadcastAll(-1, "{FF0000}[БИТВА СЕМЕЙ] {FFFFFF}Битва завершилась. Ни одна семья не набрала очков.");
+              }
+          
+              for(new f = 1; f <= family_count && f < CRP_MAX_FAMILIES; f++)
+              {
+                  if(CRPFamilyBattleRoundPoints[f] > 0 || f == winner) CRPFamilySave(f);
+                  CRPFamilyBattleRoundPoints[f] = 0;
+              }
+          
+              foreach(Player, i)
+              {
+                  if(CRPFamilyBattleZone >= 0)
+                  {
+                      GangZoneStopFlashForPlayer(i, CRPFamilyBattleZone);
+                      GangZoneHideForPlayer(i, CRPFamilyBattleZone);
+                  }
+                  CRPFamilyBattlePlayerPoints[i] = 0;
+                  CRPFamilyBattleDestroyHud(i);
+              }
+          
+              if(CRPFamilyBattleZone >= 0)
+              {
+                  GangZoneDestroy(CRPFamilyBattleZone);
+                  CRPFamilyBattleZone = -1;
+              }
+          
+              CRPFamilyBattleLocation = -1;
+              CRPFamilyBattleActive = false;
+              return 1;
+          }
+          
+          public CRPFamilyBattlePulse()
+          {
+              new hour, minute, second;
+              gettime(hour, minute, second);
+          
+              if(!CRPFamilyBattleActive && minute == 30 && hour >= 10 && hour <= 23)
+              {
+                  new key = hour * 60 + minute;
+                  if(key != CRPFamilyBattleLastStartKey)
+                  {
+                      CRPFamilyBattleLastStartKey = key;
+                      CRPFamilyBattleStart();
+                  }
+              }
+          
+              if(!CRPFamilyBattleActive) return 1;
+          
+              foreach(Player, i)
+              {
+                  new fam = PlayerInfo[i][pFamily];
+                  if(fam <= 0 || fam >= CRP_MAX_FAMILIES) continue;
+          
+                  if(!CRPFamilyBattleHudCreated[i]) CRPFamilyBattleAttachPlayer(i);
+          
+                  if(CRPFamilyBattleIsInZone(i))
+                  {
+                      CRPFamilyBattlePlayerPoints[i]++;
+                      CRPFamilyBattleRoundPoints[fam]++;
+                  }
+                  CRPFamilyBattleUpdateHud(i);
+              }
+              return 1;
+          }
+          
+          stock CRPFamilyBattleStatus(playerid)
+          {
+              if(PlayerInfo[playerid][pFamily] <= 0)
+                  return SendClientMessage(playerid, -1, "Вы не состоите в семье.");
+          
+              if(!CRPFamilyBattleActive)
+                  return SendClientMessage(playerid, -1, "{FF0000}[БИТВА СЕМЕЙ] {FFFFFF}Сейчас битва семей не проводится. Старт каждый час в XX:30 с 10:30 до 23:30.");
+          
+              new fam = PlayerInfo[playerid][pFamily];
+              new msg[220];
+              format(msg, sizeof(msg), "{FF0000}[БИТВА СЕМЕЙ] {FFFFFF}Локация: {FFD700}%s{FFFFFF} | Ваши очки: %d | Очки семьи: %d",
+                  CRPFamilyBattleLocations[CRPFamilyBattleLocation][crp_fb_name],
+                  CRPFamilyBattlePlayerPoints[playerid], CRPFamilyBattleRoundPoints[fam]);
+              SendClientMessage(playerid, -1, msg);
+              CRPFamilyBattleAttachPlayer(playerid);
+              return 1;
+          }
+          
+          CMD:familytop(playerid, params[])
+          {
+              #pragma unused params
+              return CRPFamilyShowTop(playerid);
+          }
+          CMD:ftop(playerid, params[])
+          {
+              #pragma unused params
+              return CRPFamilyShowTop(playerid);
+          }
+          CMD:famdeposit(playerid, params[])
+          {
+              new amount;
+              if(sscanf(params, "d", amount)) return SendClientMessage(playerid, -1, "Используйте: /famdeposit [сумма]");
+              return CRPFamilyDeposit(playerid, amount);
+          }
+          CMD:famupgrade(playerid, params[])
+          {
+              #pragma unused params
+              return CRPFamilyUpgrade(playerid);
+          }
+          CMD:famhome(playerid, params[])
+          {
+              #pragma unused params
+              return CRPFamilyEnterApartment(playerid);
+          }
+          CMD:famexit(playerid, params[])
+          {
+              #pragma unused params
+              return CRPFamilyExitApartment(playerid);
+          }
+          CMD:famcar(playerid, params[])
+          {
+              #pragma unused params
+              return CRPFamilyShowGarage(playerid);
+          }
+          CMD:famcars(playerid, params[])
+          {
+              #pragma unused params
+              new fam = PlayerInfo[playerid][pFamily];
+              if(fam <= 0) return SendClientMessage(playerid, -1, "Вы не состоите в семье.");
+              return SendMes(playerid, -1, "Семейный автопарк: %d/%d активных машин. Уровень семьи: %d.",
+                  CRPFamilyActiveVehicleCount(fam), CRPFamilyVehicleSlots(fam), CRPFamilyLevel[fam]);
+          }
+          CMD:fambattle(playerid, params[])
+          {
+              #pragma unused params
+              return CRPFamilyBattleStatus(playerid);
+          }
+          CMD:fambattletest(playerid, params[])
+          {
+              #pragma unused params
+              if(PlayerInfo[playerid][pAdmin] < 8 && !IsMainOwner(playerid)) return 1;
+              if(CRPFamilyBattleActive) return SendClientMessage(playerid, -1, "Битва семей уже идёт.");
+              CRPFamilyBattleStart();
+              return SendClientMessage(playerid, -1, "[FAMILY-PRO] Тестовая битва семей запущена.");
+          }
+          CMD:fambattlestop(playerid, params[])
+          {
+              #pragma unused params
+              if(PlayerInfo[playerid][pAdmin] < 8 && !IsMainOwner(playerid)) return 1;
+              if(!CRPFamilyBattleActive) return SendClientMessage(playerid, -1, "Битва семей сейчас не идёт.");
+              CRPFamilyBattleFinish();
+              return SendClientMessage(playerid, -1, "[FAMILY-PRO] Битва семей завершена.");
+          }
+          
+          public OnPlayerDeath(playerid, killerid, reason)
+          {
+              #pragma unused reason
+              CRPFamilyBattleOnDeath(playerid, killerid);
+              return 1;
+          }
+          '''
+
+          insert_anchor = "stock AddStaticVehicleExEx(modelid, Float: X, Float: Y, Float: Z, Float: A, Color1, Color2, SpawnDelay, Addsiren)"
+          if "CENTER ROLE PLAY — FAMILY PRO / FAMILY BATTLE" not in s:
+              pos = s.find(insert_anchor)
+              if pos < 0:
+                  raise SystemExit("Family Pro insertion anchor not found")
+              s = s[:pos] + family_code + "\n\n" + s[pos:]
+
+          init_anchor = 'mysql_set_charset("cp1251", connects);'
+          init_add = r'''
+              CRPFamilyProInit();
+              SetTimer("CRPFamilyBattlePulse", 1000, true);
+              CRPFamilyHomePickup = CreatePickup(1273, 1, 1299.1859, -801.4249, 84.1406, -1);
+              CRPFamilyHomeLabel = Create3DTextLabel("{FFD700}Семейная резиденция\n{FFFFFF}/famhome — квартира\n/famcar — автопарк", -1, 1299.1859, -801.4249, 84.1406, 20.0, 0, 1);
+          '''
+          if "CRPFamilyProInit();" not in s[s.find("public OnGameModeInit()"):s.find("public OnGameModeInit()")+4000]:
+              if init_anchor not in s:
+                  raise SystemExit("OnGameModeInit DB anchor not found")
+              s = s.replace(init_anchor, init_anchor + init_add, 1)
+
+          connect_anchor = '    gPlayerLogged[playerid] = 0;'
+          if 'CRPFamilyResetPlayerRuntime(playerid);' not in s[s.find("public OnPlayerConnect(playerid)"):s.find("public OnPlayerConnect(playerid)")+2500]:
+              if connect_anchor not in s:
+                  raise SystemExit("OnPlayerConnect runtime anchor not found")
+              s = s.replace(connect_anchor, connect_anchor + '\n    CRPFamilyResetPlayerRuntime(playerid);', 1)
+
+          goserver_anchor = '    if(PlayerInfo[playerid][pFamily]) family_info [ PlayerInfo[playerid][pFamily] ] [ f_online ]++;'
+          goserver_add = r'''
+              if(PlayerInfo[playerid][pFamily])
+              {
+                  CRPFamilyEnsureRow(PlayerInfo[playerid][pFamily]);
+                  CRPFamilyRefreshTag(playerid);
+                  if(CRPFamilyBattleActive) CRPFamilyBattleAttachPlayer(playerid);
+              }
+          '''
+          if "CRPFamilyRefreshTag(playerid);" not in s[s.find("stock GoServer(playerid)"):s.find("stock GoServer(playerid)")+1800]:
+              if goserver_anchor not in s:
+                  raise SystemExit("GoServer family anchor not found")
+              s = s.replace(goserver_anchor, goserver_anchor + goserver_add, 1)
+
+          spawn_anchor = '    SetPVarInt(playerid, "AntiBreik", 2);'
+          if "CRPFamilyRefreshTag(playerid);" not in s[s.find("public OnPlayerSpawn(playerid)"):s.find("public OnPlayerSpawn(playerid)")+1000]:
+              if spawn_anchor not in s:
+                  raise SystemExit("OnPlayerSpawn anchor not found")
+              s = s.replace(spawn_anchor, '    CRPFamilyRefreshTag(playerid);\n' + spawn_anchor, 1)
+
+          disconnect_anchor = '    CrpCarsReset(playerid);'
+          disconnect_add = r'''
+              if(CRPFamilyBattleActive) CRPFamilyBattleDropPlayerPoints(playerid);
+              CRPFamilyBattleDestroyHud(playerid);
+              CRPFamilyDestroyTag(playerid);
+          '''
+          if "CRPFamilyBattleDropPlayerPoints(playerid);" not in s[s.find("public OnPlayerDisconnect(playerid, reason)"):s.find("public OnPlayerDisconnect(playerid, reason)")+1200]:
+              if disconnect_anchor not in s:
+                  raise SystemExit("OnPlayerDisconnect anchor not found")
+              s = s.replace(disconnect_anchor, disconnect_add + disconnect_anchor, 1)
+
+          state_anchor = '    if(newstate == PLAYER_STATE_DRIVER) {'
+          state_add = r'''
+              new crpFamilyVeh = GetPlayerVehicleID(playerid);
+              if(crpFamilyVeh > 0 && crpFamilyVeh < MAX_VEHICLES && CRPFamilyVehicleFamily[crpFamilyVeh] > 0
+                  && CRPFamilyVehicleFamily[crpFamilyVeh] != PlayerInfo[playerid][pFamily])
+              {
+                  RemovePlayerFromVehicle(playerid);
+                  SendClientMessage(playerid, -1, "{FFD700}[СЕМЬЯ] {FFFFFF}Этим транспортом могут управлять только участники семьи-владельца.");
+                  return 1;
+              }
+          '''
+          if "CRPFamilyVehicleFamily[crpFamilyVeh]" not in s[s.find("public OnPlayerStateChange"):s.find("public OnPlayerStateChange")+1200]:
+              if state_anchor not in s:
+                  raise SystemExit("OnPlayerStateChange anchor not found")
+              s = s.replace(state_anchor, state_anchor + state_add, 1)
+
+          destroy_anchor = 'stock DestroyVehicleEx(vehicleid)\n{'
+          if "CRPFamilyVehicleFamily[vehicleid] = 0;" not in s[s.find("stock DestroyVehicleEx(vehicleid)"):s.find("stock DestroyVehicleEx(vehicleid)")+350]:
+              if destroy_anchor not in s:
+                  raise SystemExit("DestroyVehicleEx anchor not found")
+              s = s.replace(destroy_anchor, destroy_anchor + '\n    if(vehicleid > 0 && vehicleid < MAX_VEHICLES) CRPFamilyVehicleFamily[vehicleid] = 0;', 1)
+
+          old_menu = "{FFFFFF}Информация о семье\\nЧлены семьи\\nЧлены семьи[{00FF7F}Онлайн{FFFFFF}]\\n{8B0000}Покинуть семью{FFFFFF}\\nИзменить цвет рации семьи\\nИзменить национальность семьи"
+          new_menu = old_menu + "\\n{FFD700}Прокачка семьи{FFFFFF}\\nСемейный банк\\nСемейная квартира\\nСемейный автопарк\\nТоп семей"
+          s = s.replace(old_menu, new_menu)
+
+          menu_case_anchor = '''                case 5:
+                  {
+                      ShowPlayerDialog(playerid,26376,DIALOG_STYLE_LIST,"{FFEFD5}Национальность семьи","{FFFFFF}Американцы\\nЯпонцы\\nИтальянцы\\nМексиканцы\\nЛатиноамериканцы\\nИспанцы\\nРусские\\nПортугальцы\\nФранцузы","Выбрать","Отмена");
+                  }'''
+          menu_case_new = menu_case_anchor + r'''
+                  case 6: CRPFamilyShowUpgrade(playerid);
+                  case 7:
+                  {
+                      new fam = PlayerInfo[playerid][pFamily];
+                      SendMes(playerid, -1, "{FFD700}[СЕМЬЯ] {FFFFFF}Семейный банк: %d вирт. Пополнение: /famdeposit [сумма].", CRPFamilyBank[fam]);
+                  }
+                  case 8: CRPFamilyEnterApartment(playerid);
+                  case 9: CRPFamilyShowGarage(playerid);
+                  case 10: CRPFamilyShowTop(playerid);
+          '''
+          if "case 10: CRPFamilyShowTop(playerid);" not in s:
+              if menu_case_anchor not in s:
+                  raise SystemExit("family menu case 5 anchor not found")
+              s = s.replace(menu_case_anchor, menu_case_new, 1)
+
+          dialog_anchor = '        case 26377:'
+          dialog_cases = r'''
+              case DIALOG_CRP_FAMILY_UPGRADE:
+              {
+                  if(response) CRPFamilyUpgrade(playerid);
+                  return 1;
+              }
+              case DIALOG_CRP_FAMILY_GARAGE:
+              {
+                  if(response) CRPFamilySpawnGarageVehicle(playerid, listitem);
+                  else ShowPlayerDialog(playerid,26372,DIALOG_STYLE_LIST,"{FFEFD5}Меню семьи","{FFFFFF}Информация о семье\nЧлены семьи\nЧлены семьи[{00FF7F}Онлайн{FFFFFF}]\n{8B0000}Покинуть семью{FFFFFF}\nИзменить цвет рации семьи\nИзменить национальность семьи\n{FFD700}Прокачка семьи{FFFFFF}\nСемейный банк\nСемейная квартира\nСемейный автопарк\nТоп семей","Выбрать","Отмена");
+                  return 1;
+              }
+          '''
+          if "case DIALOG_CRP_FAMILY_UPGRADE:" not in s:
+              if dialog_anchor not in s:
+                  raise SystemExit("family dialog handler anchor not found")
+              s = s.replace(dialog_anchor, dialog_cases + dialog_anchor, 1)
+
+          create_anchor = '                PlayerInfo[playerid][pFamily] = family_count;'
+          create_add = r'''
+                  family_info[family_count][f_id] = family_count;
+                  CRPFamilyLevel[family_count] = 1;
+                  CRPFamilyEnsureRow(family_count);
+                  CRPFamilyRefreshTag(playerid);
+          '''
+          if "CRPFamilyEnsureRow(family_count);" not in s:
+              if create_anchor not in s:
+                  raise SystemExit("family create anchor not found")
+              s = s.replace(create_anchor, create_anchor + create_add, 1)
+
+          leave_anchor = '                    PlayerInfo[playerid][pFamily] = 0;'
+          leave_new = r'''
+                      if(CRPFamilyBattleActive) CRPFamilyBattleDropPlayerPoints(playerid);
+                      PlayerInfo[playerid][pFamily] = 0;
+                      CRPFamilyDestroyTag(playerid);
+                      CRPFamilyBattleDestroyHud(playerid);
+                      new crpLeaveQuery[128];
+                      format(crpLeaveQuery, sizeof(crpLeaveQuery), "UPDATE `accounts` SET `family`='0' WHERE `pID`='%d' LIMIT 1", PlayerInfo[playerid][pID]);
+                      mysql_function_query(connects, crpLeaveQuery, false, "", "");
+          '''
+          if "crpLeaveQuery" not in s:
+              if leave_anchor not in s:
+                  raise SystemExit("family leave anchor not found")
+              s = s.replace(leave_anchor, leave_new, 1)
+
+          color_anchor = '            family_info [ PlayerInfo[playerid][pFamily] ] [ f_chat_color ] = listitem;'
+          if "CRPFamilyRefreshTagsForFamily(PlayerInfo[playerid][pFamily]);" not in s:
+              if color_anchor not in s:
+                  raise SystemExit("family color anchor not found")
+              s = s.replace(color_anchor, color_anchor + '\n            CRPFamilyRefreshTagsForFamily(PlayerInfo[playerid][pFamily]);', 1)
+
+          join_anchor = '            PlayerInfo[playerid][pFamily] = GetPVarInt(playerid,"family_id");'
+          join_add = r'''
+              CRPFamilyEnsureRow(PlayerInfo[playerid][pFamily]);
+              CRPFamilyRefreshTag(playerid);
+              if(CRPFamilyBattleActive) CRPFamilyBattleAttachPlayer(playerid);
+              new crpJoinQuery[128];
+              format(crpJoinQuery, sizeof(crpJoinQuery), "UPDATE `accounts` SET `family`='%d' WHERE `pID`='%d' LIMIT 1", PlayerInfo[playerid][pFamily], PlayerInfo[playerid][pID]);
+              mysql_function_query(connects, crpJoinQuery, false, "", "");
+          '''
+          if "crpJoinQuery" not in s:
+              if join_anchor not in s:
+                  raise SystemExit("family join anchor not found")
+              s = s.replace(join_anchor, join_anchor + join_add, 1)
+
+          kick_anchor = '    PlayerInfo[params[0]][pFamily] = 0;'
+          kick_new = r'''
+              if(CRPFamilyBattleActive) CRPFamilyBattleDropPlayerPoints(params[0]);
+              PlayerInfo[params[0]][pFamily] = 0;
+              CRPFamilyDestroyTag(params[0]);
+              CRPFamilyBattleDestroyHud(params[0]);
+              new crpKickFamilyQuery[128];
+              format(crpKickFamilyQuery, sizeof(crpKickFamilyQuery), "UPDATE `accounts` SET `family`='0' WHERE `pID`='%d' LIMIT 1", PlayerInfo[params[0]][pID]);
+              mysql_function_query(connects, crpKickFamilyQuery, false, "", "");
+          '''
+          if "crpKickFamilyQuery" not in s:
+              if kick_anchor not in s:
+                  raise SystemExit("kickfamily anchor not found")
+              s = s.replace(kick_anchor, kick_new, 1)
+
+          old_build = "ADMIN8-CHAT-GIVEAWAYS-20260925"
+          new_build = "ADMIN8-FAMILY-PRO-BATTLE-20260925"
+          if old_build not in s:
+              raise SystemExit("previous build marker not found")
+          s = s.replace(old_build, new_build, 1)
+
+          p.write_bytes(s.replace("\n", "\r\n").encode("cp1251"))
+          print("FAMILY PRO PATCH APPLIED")
+          '@
+          Set-Content -LiteralPath 'family_pro_patch.py' -Value $py -Encoding UTF8
+          python family_pro_patch.py
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
       - name: Static audit
         shell: pwsh
         run: |
@@ -1558,13 +2660,30 @@ jobs:
             'PlayerInfo[playerid][pRub] += CRPGiveawayRewardAmount;',
             'SetTimer("CRPEndGiveaway", 300000, false)',
             'Никто не победил в розыгрыше :(',
+            'CENTER ROLE PLAY — FAMILY PRO / FAMILY BATTLE',
+            'CRPFamilyBattlePulse',
+            'CRPFamilyBattleStart()',
+            'CRPFamilyBattleFinish()',
+            'CRPFamilyRefreshTag(playerid)',
+            'CRPFamilyBattleOnDeath(playerid, killerid)',
+            'family_pro',
+            'CRPFamilyBattlePoints',
+            'CRPFamilyCaptures',
+            'CMD:familytop',
+            'CMD:famdeposit',
+            'CMD:famupgrade',
+            'CMD:famhome',
+            'CMD:famcar',
+            'GangZoneFlashForPlayer',
+            'Игрок %s был убит и потерял',
+            'Семья %s одержала победу и получила',
             'CMD:uval(playerid, params[])',
             'for(new level = 1; level <= MAX_ADMIN_LEVEL; level++)',
             '8 LVL = все бывшие права 8-12 LVL',
             'case ROLE_YOUTUBE: format(output, size, "YouTube")',
             'case ROLE_TIKTOK: format(output, size, "TikTok")',
             'CMD:build(playerid, params[])',
-            'ADMIN8-CHAT-GIVEAWAYS-20260925',
+            'ADMIN8-FAMILY-PRO-BATTLE-20260925',
             'stock ApplyCRPRemovedBuildings(playerid)',
             'GetPlayerIp(playerid, PlayerInfo[playerid][pIP], 16)',
             'CRPMapRemovalsApplied',
@@ -1614,7 +2733,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SERVER_LINUX_CHAT_GIVEAWAYS_COMPILED
+          name: SERVER_LINUX_FAMILY_PRO_COMPILED
           path: |
             bundle/west.amx
             bundle/gamemodes/west.pwn
