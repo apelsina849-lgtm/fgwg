@@ -1,4 +1,4 @@
-name: Compile SERVER_LINUX ADMIN8 DUAL AUTH
+name: Compile SERVER_LINUX ADMIN8 DUAL AUTH CONTACTS
 
 on:
   push:
@@ -1102,6 +1102,48 @@ jobs:
           python normalize_dual_auth.py
           if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
 
+
+      - name: Apply CenterRolePlay contacts and server branding
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $py = @'
+          from pathlib import Path
+          import re
+
+          p = Path(r"bundle/gamemodes/west.pwn")
+          s = p.read_bytes().decode("cp1251").replace("\r\n", "\n")
+
+          replacements = {
+              '#define PAGE_SITE \t\t"vk.com/center_gtasa"': '#define PAGE_SITE \t\t"oldsamprp.samp.date"',
+              '#define PAGE_VK\t\t\t"vk.com/center_gtasa"': '#define PAGE_VK\t\t\t"@mysterminion"',
+              '#define PAGE_VK_FREE\t"vk.com/center_gtasa"': '#define PAGE_VK_FREE\t"@mysterminion"',
+              '#define PAGE_FORUM\t\t"vk.com/center_gtasa"': '#define PAGE_FORUM\t\t"oldsamprp.samp.date"',
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f"Brand macro not found: {old}")
+              s = s.replace(old, new, 1)
+
+          # Replace all old runtime VK links/handles, but keep source-code credit comments intact.
+          out = []
+          for line in s.splitlines(True):
+              stripped = line.lstrip()
+              if not stripped.startswith("//"):
+                  line = re.sub(r'(?i)(?:https?://)?(?:www\.)?vk\.(?:com|ru)/[A-Za-z0-9_.-]+', '@mysterminion', line)
+              out.append(line)
+          s = "".join(out)
+
+          # Version marker for easy host verification.
+          s = s.replace("ADMIN8-DUAL-AUTH-PC-MOBILE-20260925", "ADMIN8-DUAL-AUTH-CONTACTS-20260925")
+
+          p.write_bytes(s.replace("\n", "\r\n").encode("cp1251"))
+          print("CONTACTS/SERVER BRANDING PATCH APPLIED")
+          '@
+          Set-Content -LiteralPath 'contacts_branding_patch.py' -Value $py -Encoding UTF8
+          python contacts_branding_patch.py
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
       - name: Static audit
         shell: pwsh
         run: |
@@ -1120,7 +1162,7 @@ jobs:
             'case ROLE_YOUTUBE: format(output, size, "YouTube")',
             'case ROLE_TIKTOK: format(output, size, "TikTok")',
             'CMD:build(playerid, params[])',
-            'ADMIN8-DUAL-AUTH-PC-MOBILE-20260925',
+            'ADMIN8-DUAL-AUTH-CONTACTS-20260925',
             'stock ApplyCRPRemovedBuildings(playerid)',
             'GetPlayerIp(playerid, PlayerInfo[playerid][pIP], 16)',
             'CRPMapRemovalsApplied',
@@ -1164,7 +1206,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SERVER_LINUX_ADMIN8_DUAL_AUTH_COMPILED
+          name: SERVER_LINUX_ADMIN8_DUAL_AUTH_CONTACTS_COMPILED
           path: |
             bundle/west.amx
             bundle/gamemodes/west.pwn
