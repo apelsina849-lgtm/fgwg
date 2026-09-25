@@ -141,7 +141,7 @@ jobs:
           if idx < 0:
               raise SystemExit("GetPlayerName join line not found")
           idx += len(name_line)
-          opc = opc[:idx] + "\n\tGetPlayerIp(playerid, PlayerInfo[playerid][pIP], sizeof(PlayerInfo[playerid][pIP]));" + opc[idx:]
+          opc = opc[:idx] + "\n\tGetPlayerIp(playerid, PlayerInfo[playerid][pIP], 16);" + opc[idx:]
 
           s = s[:m.start()] + opc + s[end:]
 
@@ -209,7 +209,7 @@ jobs:
             'CMD:build(playerid, params[])',
             'ADMIN8-DOSTUP-ID-MEDIA-HOTFIX-20260925',
             'stock ApplyCRPRemovedBuildings(playerid)',
-            'GetPlayerIp(playerid, PlayerInfo[playerid][pIP], sizeof(PlayerInfo[playerid][pIP]))',
+            'GetPlayerIp(playerid, PlayerInfo[playerid][pIP], 16)',
             'CRPMapRemovalsApplied',
             '{FFFFFF}%s[%d]\t{%s}%s\n'
           )
