@@ -1697,15 +1697,7 @@ jobs:
           
           stock CRPFamilyProInit()
           {
-              mysql_query(connects,
-                  "CREATE TABLE IF NOT EXISTS `family_pro` ("
-                  "`fam_id` INT NOT NULL,"
-                  "`battle_points` INT NOT NULL DEFAULT 0,"
-                  "`captures` INT NOT NULL DEFAULT 0,"
-                  "`level` INT NOT NULL DEFAULT 1,"
-                  "`bank` INT NOT NULL DEFAULT 0,"
-                  "PRIMARY KEY (`fam_id`)"
-                  ") ENGINE=InnoDB DEFAULT CHARSET=cp1251 COLLATE=cp1251_general_ci", false);
+              mysql_query(connects, "CREATE TABLE IF NOT EXISTS `family_pro` (`fam_id` INT NOT NULL, `battle_points` INT NOT NULL DEFAULT 0, `captures` INT NOT NULL DEFAULT 0, `level` INT NOT NULL DEFAULT 1, `bank` INT NOT NULL DEFAULT 0, PRIMARY KEY (`fam_id`)) ENGINE=InnoDB DEFAULT CHARSET=cp1251 COLLATE=cp1251_general_ci", false);
           
               mysql_query(connects,
                   "INSERT IGNORE INTO `family_pro` (`fam_id`) SELECT `fam_id` FROM `family_system`", false);
