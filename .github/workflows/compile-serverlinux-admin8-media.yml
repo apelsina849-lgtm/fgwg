@@ -2057,10 +2057,10 @@ jobs:
               return 1;
           }
           
-          stock CRPFamilyBattleIsInZone(playerid)
+          stock bool:CRPFamilyBattleIsInZone(playerid)
           {
-              if(!CRPFamilyBattleActive || CRPFamilyBattleLocation < 0) return 0;
-              if(GetPlayerVirtualWorld(playerid) != 0 || GetPlayerInterior(playerid) != 0) return 0;
+              if(!CRPFamilyBattleActive || CRPFamilyBattleLocation < 0) return false;
+              if(GetPlayerVirtualWorld(playerid) != 0 || GetPlayerInterior(playerid) != 0) return false;
           
               new Float:x, Float:y, Float:z;
               GetPlayerPos(playerid, x, y, z);
@@ -2560,12 +2560,17 @@ jobs:
                   family_info[family_count][f_id] = family_count;
                   CRPFamilyLevel[family_count] = 1;
                   CRPFamilyEnsureRow(family_count);
-                  CRPFamilyRefreshTag(playerid);
           '''
           if "CRPFamilyEnsureRow(family_count);" not in s:
               if create_anchor not in s:
                   raise SystemExit("family create anchor not found")
               s = s.replace(create_anchor, create_anchor + create_add, 1)
+
+          create_name_anchor = 'format(family_info [ family_count ] [ f_name ], 32 , temp);'
+          if "CRPFamilyRefreshTag(playerid); // CRPFamilyCreateTag" not in s:
+              if create_name_anchor not in s:
+                  raise SystemExit("family create name anchor not found")
+              s = s.replace(create_name_anchor, create_name_anchor + '\n                    CRPFamilyRefreshTag(playerid); // CRPFamilyCreateTag', 1)
 
           leave_anchor = 'PlayerInfo[playerid][pFamily] = 0;'
           leave_new = r'''
