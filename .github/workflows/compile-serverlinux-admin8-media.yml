@@ -1,4 +1,4 @@
-name: Compile SERVER_LINUX ADMIN8 DUAL AUTH CONTACTS
+name: Compile SERVER_LINUX ADMIN8 MOBILE DETECT FIX
 
 on:
   push:
@@ -1144,6 +1144,50 @@ jobs:
           python contacts_branding_patch.py
           if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
 
+
+      - name: Fix mobile client detection signatures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $py = @'
+          from pathlib import Path
+          import re
+
+          p = Path(r"bundle/gamemodes/west.pwn")
+          s = p.read_bytes().decode("cp1251").replace("\r\n", "\n")
+
+          # Support multiple Android SA-MP launchers. The second signature is the
+          # exact GPCI observed from Lucifer_Belov's phone in the production log.
+          if '#define CRP_MOBILE_CI_SERIAL "ED40ED0E8089CC44C08EE9580F4C8C44EE8EE990"' not in s:
+              raise SystemExit("Primary mobile signature define not found")
+
+          s = s.replace(
+              '#define CRP_MOBILE_CI_SERIAL "ED40ED0E8089CC44C08EE9580F4C8C44EE8EE990"',
+              '#define CRP_MOBILE_CI_SERIAL_1 "ED40ED0E8089CC44C08EE9580F4C8C44EE8EE990"\n'
+              '#define CRP_MOBILE_CI_SERIAL_2 "3952314F524834355456464955525858554F3353"\n'
+              '#define CRP_MOBILE_CI_SERIAL_3 "4458465947454248504B51425156534F4738384F"',
+              1
+          )
+
+          old = 'new bool:crpIsMobile = !strcmp(crpCiSerial, CRP_MOBILE_CI_SERIAL, true);'
+          new = (
+              'new bool:crpIsMobile = (!strcmp(crpCiSerial, CRP_MOBILE_CI_SERIAL_1, true) || '
+              '!strcmp(crpCiSerial, CRP_MOBILE_CI_SERIAL_2, true) || '
+              '!strcmp(crpCiSerial, CRP_MOBILE_CI_SERIAL_3, true));'
+          )
+          if old not in s:
+              raise SystemExit("Old single-signature detector not found")
+          s = s.replace(old, new, 1)
+
+          s = s.replace("ADMIN8-DUAL-AUTH-CONTACTS-20260925", "ADMIN8-DUAL-AUTH-MOBILE-DETECT-20260925")
+
+          p.write_bytes(s.replace("\n", "\r\n").encode("cp1251"))
+          print("MOBILE SIGNATURE DETECTION FIX APPLIED")
+          '@
+          Set-Content -LiteralPath 'mobile_signature_fix.py' -Value $py -Encoding UTF8
+          python mobile_signature_fix.py
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
       - name: Static audit
         shell: pwsh
         run: |
@@ -1162,7 +1206,7 @@ jobs:
             'case ROLE_YOUTUBE: format(output, size, "YouTube")',
             'case ROLE_TIKTOK: format(output, size, "TikTok")',
             'CMD:build(playerid, params[])',
-            'ADMIN8-DUAL-AUTH-CONTACTS-20260925',
+            'ADMIN8-DUAL-AUTH-MOBILE-DETECT-20260925',
             'stock ApplyCRPRemovedBuildings(playerid)',
             'GetPlayerIp(playerid, PlayerInfo[playerid][pIP], 16)',
             'CRPMapRemovalsApplied',
@@ -1172,7 +1216,10 @@ jobs:
             'registration-dialog-sent',
             'dialog-response id=2 response=%d mode=%d inputlen=%d',
             'registration-complete',
-            'CRP_MOBILE_CI_SERIAL',
+            'CRP_MOBILE_CI_SERIAL_1',
+            'CRP_MOBILE_CI_SERIAL_2',
+            'CRP_MOBILE_CI_SERIAL_3',
+            '3952314F524834355456464955525858554F3353',
             'SetPVarInt(playerid, "CRPMobileClient", crpIsMobile ? 1 : 0);',
             'mobile-registration-dialog-sent',
             'pc-registration-dialog-sent',
@@ -1206,7 +1253,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SERVER_LINUX_ADMIN8_DUAL_AUTH_CONTACTS_COMPILED
+          name: SERVER_LINUX_ADMIN8_MOBILE_DETECT_COMPILED
           path: |
             bundle/west.amx
             bundle/gamemodes/west.pwn
