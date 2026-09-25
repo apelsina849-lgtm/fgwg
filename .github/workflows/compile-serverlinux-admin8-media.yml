@@ -1,4 +1,4 @@
-name: Compile SERVER_LINUX ADMIN8 MEDIA FIX
+name: Compile SERVER_LINUX ADMIN8 DOSTUP ID MEDIA HOTFIX
 
 on:
   push:
@@ -42,6 +42,55 @@ jobs:
           python patch_admin8.py bundle/gamemodes/west.pwn
           if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
 
+
+      - name: Apply DOSTUP player ID and build-marker hotfix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $py = @'
+          from pathlib import Path
+
+          p = Path(r"bundle/gamemodes/west.pwn")
+          s = p.read_bytes().decode("cp1251").replace("\r\n", "\n")
+
+          old = """\t\tGetStaffRoleColor(role, roleColor, sizeof(roleColor));
+          \t\tGetStaffRoleName(role, displayRole, sizeof(displayRole));
+          \t\tformat(line, sizeof(line), "{FFFFFF}%s\\t{%s}%s\\n", targetName, roleColor, displayRole);
+          \t\tif(strlen(dialog) + strlen(line) >= sizeof(dialog) - 1) break;"""
+
+          new = """\t\tGetStaffRoleColor(role, roleColor, sizeof(roleColor));
+          \t\tGetStaffRoleName(role, displayRole, sizeof(displayRole));
+          \t\tnew onlineId = GetOnlinePlayerByAccountID(accountId);
+          \t\tif(onlineId != INVALID_PLAYER_ID)
+          \t\t\tformat(line, sizeof(line), "{FFFFFF}%s[%d]\\t{%s}%s\\n", targetName, onlineId, roleColor, displayRole);
+          \t\telse
+          \t\t\tformat(line, sizeof(line), "{AFAFAF}%s[OFF]\\t{%s}%s\\n", targetName, roleColor, displayRole);
+          \t\tif(strlen(dialog) + strlen(line) >= sizeof(dialog) - 1) break;"""
+
+          if old not in s:
+              raise SystemExit("DOSTUP list target not found")
+          s = s.replace(old, new, 1)
+
+          anchor = "CMD:dostup(playerid, params[])\n"
+          build_cmd = """CMD:build(playerid, params[])
+          {
+          \t#pragma unused params
+          \tSendClientMessage(playerid, 0x33CC66FF, "[CRP BUILD] ADMIN8-DOSTUP-ID-MEDIA-HOTFIX-20260925");
+          \treturn 1;
+          }
+
+          """
+          if anchor not in s:
+              raise SystemExit("CMD:dostup anchor not found")
+          s = s.replace(anchor, build_cmd + anchor, 1)
+
+          p.write_bytes(s.replace("\n", "\r\n").encode("cp1251"))
+          print("DOSTUP ID/MEDIA hotfix applied")
+          '@
+          Set-Content -LiteralPath 'dostup_id_hotfix.py' -Value $py -Encoding UTF8
+          python dostup_id_hotfix.py
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
       - name: Static audit
         shell: pwsh
         run: |
@@ -58,7 +107,10 @@ jobs:
             'for(new level = 1; level <= MAX_ADMIN_LEVEL; level++)',
             '8 LVL = все бывшие права 8-12 LVL',
             'case ROLE_YOUTUBE: format(output, size, "YouTube")',
-            'case ROLE_TIKTOK: format(output, size, "TikTok")'
+            'case ROLE_TIKTOK: format(output, size, "TikTok")',
+            'CMD:build(playerid, params[])',
+            'ADMIN8-DOSTUP-ID-MEDIA-HOTFIX-20260925',
+            '{FFFFFF}%s[%d]\\t{%s}%s\\n'
           )
           foreach($x in $need){ if(-not $s.Contains($x)){ throw "Missing patch marker: $x" } }
           if($s -match '\[pAdmin\].*(?:<|>|==|!=)\s*(?:9|10|11|12)\b'){ throw 'Legacy 9-12 pAdmin check remains' }
@@ -85,7 +137,7 @@ jobs:
       - name: Upload compiled admin8 build
         uses: actions/upload-artifact@v4
         with:
-          name: SERVER_LINUX_ADMIN8_MEDIA_COMPILED
+          name: SERVER_LINUX_ADMIN8_DOSTUP_ID_MEDIA_COMPILED
           path: |
             bundle/west.amx
             bundle/gamemodes/west.pwn
