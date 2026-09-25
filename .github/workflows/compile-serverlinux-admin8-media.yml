@@ -859,6 +859,249 @@ jobs:
           python dual_auth_hotfix.py
           if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
 
+
+      - name: Normalize dual auth source for Pawn compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $py = @'
+          from pathlib import Path
+          import re
+
+          p = Path(r"bundle/gamemodes/west.pwn")
+          s = p.read_bytes().decode("cp1251").replace("\r\n", "\n")
+
+          def get_block(text, signature):
+              start = text.find(signature)
+              if start < 0:
+                  raise SystemExit(f"Missing block: {signature}")
+              brace = text.find("{", start)
+              depth = 0
+              for i in range(brace, len(text)):
+                  if text[i] == "{":
+                      depth += 1
+                  elif text[i] == "}":
+                      depth -= 1
+                      if depth == 0:
+                          return start, i + 1
+              raise SystemExit(f"Unclosed block: {signature}")
+
+          a, b = get_block(s, "publics: OnPlayerRegCheck(playerid)")
+          reg = r'''publics: OnPlayerRegCheck(playerid)
+          {
+              new rows, fields;
+              cache_get_data(rows, fields);
+
+              new crpAuthVersion[32];
+              GetPlayerVersion(playerid, crpAuthVersion, sizeof(crpAuthVersion));
+              new bool:crpMobile = (GetPVarInt(playerid, "CRPMobileClient") != 0);
+              printf("[JOIN-DIAG] %s[%d] auth-dialog rows=%d client=%s device=%s",
+                  PlayerInfo[playerid][pNames], playerid, rows, crpAuthVersion, crpMobile ? ("MOBILE") : ("PC"));
+
+              if(rows)
+              {
+                  cache_get_field_content(0, "password", PlayerInfo[playerid][pPassword], connects, 65);
+                  cache_get_field_content(0, "salt", PlayerInfo[playerid][pSalt], connects, 11);
+
+                  if(crpMobile)
+                  {
+                      new string[192];
+                      format(string, sizeof(string), "Аккаунт: %s\nВведите пароль:", PlayerInfo[playerid][pNames]);
+                      ShowPlayerDialog(playerid, 1, DIALOG_STYLE_PASSWORD, "Center RolePlay | Вход", string, "Войти", "Выход");
+                      printf("[JOIN-DIAG] %s[%d] mobile-login-dialog-sent", PlayerInfo[playerid][pNames], playerid);
+                  }
+                  else
+                  {
+                      new string[256];
+                      format(string, sizeof(string), "{FFFFFF}Добро пожаловать на проект {1E90FF}Center Role Play.\n\n{FFFFFF}Ваш Логин:{11FF00} %s\n{FFFFFF}Введите Пароль: {11FF00}******", PlayerInfo[playerid][pNames]);
+                      ShowPlayerDialog(playerid, 1, DIALOG_STYLE_PASSWORD, "{1E90FF}Авторизация:{FFFFFF} введите пароль", string, "Войти", "Отмена");
+                      printf("[JOIN-DIAG] %s[%d] pc-login-dialog-sent", PlayerInfo[playerid][pNames], playerid);
+                  }
+              }
+              else
+              {
+                  PlayerRegMode[playerid] = 2;
+
+                  if(crpMobile)
+                  {
+                      ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "Center RolePlay | Регистрация", "Придумайте пароль (6-64 символа):", "Далее", "Выход");
+                      printf("[JOIN-DIAG] %s[%d] mobile-registration-dialog-sent", PlayerInfo[playerid][pNames], playerid);
+                  }
+                  else
+                  {
+                      ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "{1E90FF}Регистрация:{FFFFFF} пароль", "{1E90FF}Center Role Play.\n\n{FFFFFF}Введите Пароль:{11FF00} ******\n{FFFFFF}Он будет запрашиваться каждый раз при входе на сервер\n\n{FFFFFF}Примечание:\n{1E90FF}Пароль должен состоять из цифр\n{1E90FF}Также используйте дополнительные символы\n{1E90FF}Используйте от 5 до 16 цифр, букв, символов.", "Далее", "");
+                      printf("[JOIN-DIAG] %s[%d] pc-registration-dialog-sent", PlayerInfo[playerid][pNames], playerid);
+                  }
+              }
+              return true;
+          }'''
+          s = s[:a] + reg + s[b:]
+
+          od = s.find("public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])")
+          if od < 0:
+              raise SystemExit("OnDialogResponse missing")
+          m = re.search(r'(?m)^\s*case\s+2:\s*\n\s*\{', s[od:])
+          if not m:
+              raise SystemExit("case 2 missing")
+          cs = od + m.start()
+          brace = s.find("{", cs)
+          depth = 0
+          ce = None
+          for i in range(brace, len(s)):
+              if s[i] == "{":
+                  depth += 1
+              elif s[i] == "}":
+                  depth -= 1
+                  if depth == 0:
+                      ce = i + 1
+                      break
+          if ce is None:
+              raise SystemExit("case 2 unclosed")
+
+          case2 = r'''        case 2:
+              {
+                  new bool:crpMobile = (GetPVarInt(playerid, "CRPMobileClient") != 0);
+                  printf("[JOIN-DIAG] %s[%d] dialog-response id=2 response=%d mode=%d inputlen=%d device=%s",
+                      PlayerInfo[playerid][pNames], playerid, response, PlayerRegMode[playerid], strlen(inputtext), crpMobile ? ("MOBILE") : ("PC"));
+
+                  if(!response) return KickEx(playerid);
+
+                  if(crpMobile)
+                  {
+                      if(PlayerRegMode[playerid] == 2)
+                      {
+                          if(strlen(inputtext) < 6 || strlen(inputtext) > 64)
+                          {
+                              ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "Center RolePlay | Регистрация", "Пароль должен содержать 6-64 символа.", "Далее", "Выход");
+                              return 1;
+                          }
+                          strmid(CheckPass[playerid], inputtext, 0, strlen(inputtext), 65);
+                          PlayerRegMode[playerid] = 3;
+                          ShowPlayerDialog(playerid, 2, DIALOG_STYLE_LIST, "Регистрация | Пол", "Мужской\nЖенский", "Далее", "Назад");
+                          return 1;
+                      }
+                      if(PlayerRegMode[playerid] == 3)
+                      {
+                          PlayerInfo[playerid][pSex] = listitem + 1;
+                          PlayerRegMode[playerid] = 4;
+                          ShowPlayerDialog(playerid, 2, DIALOG_STYLE_LIST, "Регистрация | Национальность", "Американец\nИтальянец\nНемец\nИспанец\nФранцуз\nРусский\nКитаец\nЯпонец", "Далее", "Назад");
+                          return 1;
+                      }
+                      if(PlayerRegMode[playerid] == 4)
+                      {
+                          PlayerInfo[playerid][pNational] = listitem + 1;
+                          PlayerRegMode[playerid] = 5;
+                          ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "Регистрация | Возраст", "Введите возраст персонажа: 15-90", "Готово", "Назад");
+                          return 1;
+                      }
+                      if(PlayerRegMode[playerid] == 5)
+                      {
+                          if(strval(inputtext) < 15 || strval(inputtext) > 90)
+                          {
+                              ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "Регистрация | Возраст", "Введите число от 15 до 90.", "Готово", "Назад");
+                              return 1;
+                          }
+                          PlayerInfo[playerid][pAge] = strval(inputtext);
+                          PlayerInfo[playerid][pEmail][0] = EOS;
+                          PlayerRegMode[playerid] = 0;
+                          SetPVarInt(playerid, "Registration", 1);
+                          SpawnPlayer(playerid);
+                          SetPlayerVirtualWorldEx(playerid, playerid + 10);
+                          SetPlayerInteriorEx(playerid, 0);
+                          if(PlayerInfo[playerid][pSex] == 1)
+                          {
+                              new ran = random(7);
+                              SetPlayerSkin(playerid, SkinMen[ran][0]);
+                          }
+                          else
+                          {
+                              new ran = random(5);
+                              SetPlayerSkin(playerid, SkinMale[ran][0]);
+                          }
+                          TogglePlayerControllable(playerid, true);
+                          PlayerInfo[playerid][pChar] = GetPlayerSkin(playerid);
+                          PlayerRegisterMySQL(playerid);
+                          printf("[JOIN-DIAG] %s[%d] mobile-registration-complete", PlayerInfo[playerid][pNames], playerid);
+                          return 1;
+                      }
+                      PlayerRegMode[playerid] = 2;
+                      ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "Center RolePlay | Регистрация", "Придумайте пароль (6-64 символа):", "Далее", "Выход");
+                      return 1;
+                  }
+
+                  if(PlayerRegMode[playerid] == 1)
+                  {
+                      if(strlen(inputtext) < 5 || strlen(inputtext) > 40 || !IsValidEmail(inputtext))
+                      {
+                          ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "{FFFFFF}E-Mail", "{FFFFFF}Введите ваш действующий электронный адрес.\n{1E90FF}Подсказка: {FFFFFF}используйте @Yandex.ru, @Mail.ru или @Gmail.com", "Далее", "");
+                          return SendClientMessage(playerid, 0xE93636AA, "Неправильно написана почта.");
+                      }
+                      strmid(PlayerInfo[playerid][pEmail], inputtext, 0, strlen(inputtext), 65);
+                      PlayerRegMode[playerid] = 3;
+                      ShowPlayerDialog(playerid, 2, DIALOG_STYLE_LIST, "{FFFFFF}Выбор пола | Регистрация", "Мужской\nЖенский", "Далее", "");
+                  }
+                  else if(PlayerRegMode[playerid] == 2)
+                  {
+                      if(strlen(inputtext) < 6 || strlen(inputtext) > 64)
+                      {
+                          ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "{1E90FF}Регистрация:{FFFFFF} пароль", "{1E90FF}Center Role Play.\n\n{FFFFFF}Введите Пароль:{11FF00} ******\n{FFFFFF}Он будет запрашиваться каждый раз при входе на сервер\n\n{FFFFFF}Примечание:\n{1E90FF}Пароль должен состоять из цифр\n{1E90FF}Также используйте дополнительные символы\n{1E90FF}Используйте от 5 до 16 цифр, букв, символов.", "Далее", "");
+                          return SendClientMessage(playerid, 0xE93636AA, "Доступный диапазон пароля: 6 - 64.");
+                      }
+                      strmid(CheckPass[playerid], inputtext, 0, strlen(inputtext), 65);
+                      PlayerRegMode[playerid] = 1;
+                      ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "{FFFFFF}E-Mail", "{FFFFFF}Введите ваш действующий электронный адрес.\nПодтвердив адрес, в дальнейшем вам откроются дополнительные возможности.", "Далее", "");
+                  }
+                  else if(PlayerRegMode[playerid] == 3)
+                  {
+                      PlayerInfo[playerid][pSex] = listitem + 1;
+                      PlayerRegMode[playerid] = 4;
+                      ShowPlayerDialog(playerid, 2, DIALOG_STYLE_LIST, "{FFFFFF}Выбор национальности | Регистрация", "{FFFFFF}Американец\nИтальянец\nГермания\nИспанец\nФранция\nРоссиянин\nКитаец\nЯпонец", "Далее", "");
+                  }
+                  else if(PlayerRegMode[playerid] == 4)
+                  {
+                      PlayerInfo[playerid][pNational] = listitem + 1;
+                      PlayerRegMode[playerid] = 5;
+                      ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "{FFFFFF}Возраст персонажа | Регистрация", "{FFFFFF}Введите возраст вашего виртуального персонажа от 15 до 90 лет", "Далее", "");
+                  }
+                  else if(PlayerRegMode[playerid] == 5)
+                  {
+                      if(strval(inputtext) < 15 || strval(inputtext) > 90)
+                      {
+                          ShowPlayerDialog(playerid, 2, DIALOG_STYLE_INPUT, "{FFFFFF}Возраст персонажа", "{FFFFFF}Введите возраст вашего виртуального персонажа от 15 до 90 лет", "Далее", "");
+                          return 1;
+                      }
+                      PlayerInfo[playerid][pAge] = strval(inputtext);
+                      PlayerRegMode[playerid] = 0;
+                      SetPVarInt(playerid, "Registration", 1);
+                      SpawnPlayer(playerid);
+                      SetPlayerVirtualWorldEx(playerid, playerid + 10);
+                      SetPlayerInteriorEx(playerid, 0);
+                      if(PlayerInfo[playerid][pSex] == 1)
+                      {
+                          new ran = random(7);
+                          SetPlayerSkin(playerid, SkinMen[ran][0]);
+                      }
+                      else
+                      {
+                          new ran = random(5);
+                          SetPlayerSkin(playerid, SkinMale[ran][0]);
+                      }
+                      TogglePlayerControllable(playerid, true);
+                      PlayerInfo[playerid][pChar] = GetPlayerSkin(playerid);
+                      PlayerRegisterMySQL(playerid);
+                      printf("[JOIN-DIAG] %s[%d] pc-registration-complete", PlayerInfo[playerid][pNames], playerid);
+                  }
+                  return 1;
+              }'''
+          s = s[:cs] + case2 + s[ce:]
+
+          p.write_bytes(s.replace("\n", "\r\n").encode("cp1251"))
+          print("DUAL AUTH SOURCE NORMALIZED")
+          '@
+          Set-Content -LiteralPath 'normalize_dual_auth.py' -Value $py -Encoding UTF8
+          python normalize_dual_auth.py
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
       - name: Static audit
         shell: pwsh
         run: |
