@@ -1,0 +1,79 @@
+name: Compile SERVER_LINUX ADMIN12 FIX
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/compile-serverlinux-admin12.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct patched server compile bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $b64 = (Get-Content -Raw 'serverlinux_admin12/payload.b64') -replace '\\s',''
+          [IO.File]::WriteAllBytes('bundle.tar.xz',[Convert]::FromBase64String($b64))
+          New-Item -ItemType Directory -Force bundle | Out-Null
+          tar -C bundle -xf bundle.tar.xz
+          if(!(Test-Path 'bundle/gamemodes/west.pwn')){ throw 'west.pwn missing' }
+          if(!(Test-Path 'bundle/_compiler/pawncc.exe')){ throw 'pawncc.exe missing' }
+
+      - name: Static audit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $cp=[Text.Encoding]::GetEncoding(1251)
+          $s=[IO.File]::ReadAllText((Resolve-Path 'bundle/gamemodes/west.pwn'),$cp)
+          $need=@(
+            'PC_RegAlias("jetpack", "jp")',
+            'stock IsTopAdmin(playerid)',
+            'CRP OWNER AUTO-SYNC',
+            'CMD:jetpack(playerid, params[])',
+            'CMD:unmute(playerid, params[])',
+            'CMD:weapall(playerid, params[])',
+            'CMD:sethpall(playerid, params[])',
+            'CMD:restart(playerid, params[])',
+            'for(new level = 1; level <= 12; level++)'
+          )
+          foreach($x in $need){ if(-not $s.Contains($x)){ throw "Missing patch marker: $x" } }
+          Write-Host 'STATIC AUDIT OK'
+
+      - name: Compile west.pwn with bundled Pawn compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Set-Location bundle
+          New-Item -ItemType Directory -Path build -Force | Out-Null
+          $compiler = Join-Path $PWD '_compiler\pawncc.exe'
+          $output = 'build\west-admin12.amx'
+          $proc = Start-Process -FilePath $compiler -ArgumentList @('gamemodes\west.pwn','-i_compiler\include',('-o'+$output)) -WorkingDirectory $PWD -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput 'build\compiler-out.log' -RedirectStandardError 'build\compiler-errors.log'
+          $log = (Get-Content 'build\compiler-out.log' -Raw) + (Get-Content 'build\compiler-errors.log' -Raw)
+          Set-Content 'build\compile.log' $log
+          Write-Host $log
+          if($proc.ExitCode -notin 0,2 -or $log -match '(?im)\berror\s+[0-9]+:' -or -not (Test-Path -LiteralPath $output)){ throw 'Pawn compilation failed' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $output))
+          if($bytes.Length -lt 56 -or [BitConverter]::ToUInt16($bytes,4) -ne 0xF1E0 -or [BitConverter]::ToUInt32($bytes,0) -ne $bytes.Length){ throw 'Invalid AMX' }
+          Copy-Item $output 'west.amx' -Force
+          Get-FileHash 'west.amx' -Algorithm SHA256 | Format-List
+
+      - name: Upload compiled admin12 build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SERVER_LINUX_ADMIN12_COMPILED
+          path: |
+            bundle/west.amx
+            bundle/gamemodes/west.pwn
+            bundle/build/compile.log
+            bundle/build/compiler-out.log
+            bundle/build/compiler-errors.log
+          if-no-files-found: error
