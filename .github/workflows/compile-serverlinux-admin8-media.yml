@@ -1257,8 +1257,6 @@ jobs:
             'CRP_MOBILE_CI_SERIAL_2',
             'CRP_MOBILE_CI_SERIAL_3',
             '3952314F524834355456464955525858554F3353',
-            'Команда /makeadmin доступна только администраторам с FD2+.',
-            'PlayerInfo[playerid][pFull] < 2 && !IsMainOwner(playerid)',
             'SetPVarInt(playerid, "CRPMobileClient", crpIsMobile ? 1 : 0);',
             'mobile-registration-dialog-sent',
             'pc-registration-dialog-sent',
