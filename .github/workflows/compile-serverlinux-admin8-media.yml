@@ -1,0 +1,95 @@
+name: Compile SERVER_LINUX ADMIN8 MEDIA FIX
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/compile-serverlinux-admin8-media.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ef6a622a26b52acc153c8c7366ac516ee32e2d44
+
+      - name: Reconstruct previous proven ADMIN12 bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $b64 = (Get-Content -Raw 'serverlinux_admin12/payload.b64') -replace '\s',''
+          [IO.File]::WriteAllBytes('bundle.tar.xz',[Convert]::FromBase64String($b64))
+          New-Item -ItemType Directory -Force bundle | Out-Null
+          tar -C bundle -xf bundle.tar.xz
+          if(!(Test-Path 'bundle/gamemodes/west.pwn')){ throw 'west.pwn missing' }
+          if(!(Test-Path 'bundle/_compiler/pawncc.exe')){ throw 'pawncc.exe missing' }
+
+      - name: Apply ADMIN8, makeadmin/uval and media-role patch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $patchB64 = @'
+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
+'@
+          Set-Content -LiteralPath 'patch_admin8.b64' -Value $patchB64 -NoNewline
+          python -c "import base64,lzma,pathlib; pathlib.Path('patch_admin8.py').write_bytes(lzma.decompress(base64.b64decode(pathlib.Path('patch_admin8.b64').read_text())))"
+          python patch_admin8.py bundle/gamemodes/west.pwn
+          if($LASTEXITCODE-ne 0){ exit $LASTEXITCODE }
+
+      - name: Static audit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $cp=[Text.Encoding]::GetEncoding(1251)
+          $s=[IO.File]::ReadAllText((Resolve-Path 'bundle/gamemodes/west.pwn'),$cp)
+          $need=@(
+            '#define MAX_ADMIN_LEVEL                 (8)',
+            '#define ROLE_YOUTUBE                    (22)',
+            '#define ROLE_TIKTOK                     (23)',
+            'PC_RegAlias("jetpack", "jp")',
+            'CMD:makeadmin(playerid,params[])',
+            'CMD:uval(playerid, params[])',
+            'for(new level = 1; level <= MAX_ADMIN_LEVEL; level++)',
+            '8 LVL = все бывшие права 8-12 LVL',
+            'case ROLE_YOUTUBE: format(output, size, "YouTube")',
+            'case ROLE_TIKTOK: format(output, size, "TikTok")'
+          )
+          foreach($x in $need){ if(-not $s.Contains($x)){ throw "Missing patch marker: $x" } }
+          if($s -match '\[pAdmin\].*(?:<|>|==|!=)\s*(?:9|10|11|12)\b'){ throw 'Legacy 9-12 pAdmin check remains' }
+          Write-Host 'STATIC AUDIT OK'
+
+      - name: Compile west.pwn with bundled Pawn compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Set-Location bundle
+          New-Item -ItemType Directory -Path build -Force | Out-Null
+          $compiler = Join-Path $PWD '_compiler\pawncc.exe'
+          $output = 'build\west-admin8.amx'
+          $proc = Start-Process -FilePath $compiler -ArgumentList @('gamemodes\west.pwn','-i_compiler\include',('-o'+$output)) -WorkingDirectory $PWD -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput 'build\compiler-out.log' -RedirectStandardError 'build\compiler-errors.log'
+          $log = (Get-Content 'build\compiler-out.log' -Raw) + (Get-Content 'build\compiler-errors.log' -Raw)
+          Set-Content 'build\compile.log' $log
+          Write-Host $log
+          if($proc.ExitCode -notin 0,2 -or $log -match '(?im)\berror\s+[0-9]+:' -or -not (Test-Path -LiteralPath $output)){ throw 'Pawn compilation failed' }
+          $bytes=[IO.File]::ReadAllBytes((Resolve-Path $output))
+          if($bytes.Length -lt 56 -or [BitConverter]::ToUInt16($bytes,4) -ne 0xF1E0 -or [BitConverter]::ToUInt32($bytes,0) -ne $bytes.Length){ throw 'Invalid AMX' }
+          Copy-Item $output 'west.amx' -Force
+          Get-FileHash 'west.amx' -Algorithm SHA256 | Format-List
+
+      - name: Upload compiled admin8 build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SERVER_LINUX_ADMIN8_MEDIA_COMPILED
+          path: |
+            bundle/west.amx
+            bundle/gamemodes/west.pwn
+            bundle/build/compile.log
+            bundle/build/compiler-out.log
+            bundle/build/compiler-errors.log
+          if-no-files-found: error
