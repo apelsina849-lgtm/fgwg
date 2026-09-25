@@ -2687,7 +2687,7 @@ jobs:
             'CMD:famcar',
             'GangZoneFlashForPlayer',
             'Игрок %s был убит и потерял',
-            'Семья %s одержала победу и получила',
+            'одержала победу и получила',
             'CMD:uval(playerid, params[])',
             'for(new level = 1; level <= MAX_ADMIN_LEVEL; level++)',
             '8 LVL = все бывшие права 8-12 LVL',
