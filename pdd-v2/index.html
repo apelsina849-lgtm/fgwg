@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#04111d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ПДД AI">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+<title>ПДД AI — Беларусь</title>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+
+<div id="onboard" class="overlay onboard">
+  <div class="onboard-box">
+    <div class="app-logo">AI</div>
+    <span class="eyebrow">ПДД AI • БЕЛАРУСЬ</span>
+    <h1>ПДД, которые ты действительно понимаешь</h1>
+    <p>Приложение анализирует ошибки, находит слабые правила и строит персональный маршрут подготовки.</p>
+    <div class="surface form-card">
+      <label>Категория</label>
+      <select id="onCat"><option>B</option><option>A</option><option>AM</option><option>A1</option><option>C</option><option>D</option><option>BE</option><option>CE</option><option>DE</option></select>
+      <label>Когда экзамен?</label>
+      <select id="onGoal"><option value="14">Через 2 недели</option><option value="30">Через месяц</option><option value="60">Через 2 месяца</option><option value="0">Пока без даты</option></select>
+    </div>
+    <button class="primary wide" onclick="finishOnboard()">Начать обучение</button>
+    <small class="legal">Учебная база этой тестовой сборки авторская. Перед публичным релизом нормативные ссылки и формулировки проходят отдельную юридическую сверку.</small>
+  </div>
+</div>
+
+<main class="app">
+<section id="home" class="page active">
+  <header class="app-header">
+    <span class="pro">♛ PRO</span>
+    <div class="brand">ПДД <b>AI</b></div>
+    <button class="round" onclick="showPage('profile')">⚙</button>
+  </header>
+
+  <button class="surface continue-card" onclick="startSmart()">
+    <div id="homeRing" class="ring"><span id="homePct">0%</span></div>
+    <div class="grow"><b>Продолжить обучение</b><span id="continueTopic">Собираем карту знаний</span><small id="continueMeta">0 из 10</small></div>
+    <i>›</i>
+  </button>
+
+  <div class="mode-grid">
+    <button class="surface mode" onclick="showPage('topics')"><span class="mode-icon blue">▤</span><b>Обучение</b><small>Темы ПДД с примерами</small></button>
+    <button class="surface mode" onclick="startPractice()"><span class="mode-icon red">◎</span><b>Тренировка</b><small>Адаптивные вопросы</small></button>
+    <button class="surface mode exam-mode" onclick="startExam()"><span class="mode-icon red">▣</span><b>Экзамен</b><small>10 вопросов • 15 минут</small></button>
+    <button class="surface mode ai-mode" onclick="showPage('agent')"><span class="mode-icon blue">✦</span><b>AI‑агент</b><small>Спроси о ПДД</small></button>
+    <button class="surface mode weak-mode" onclick="startWeak()"><span class="mode-icon green">▥</span><b>Слабые темы</b><small>Работа над ошибками</small></button>
+    <button class="surface mode saved-mode" onclick="startSaved()"><span class="mode-icon gold">◆</span><b>Избранное</b><small>Сохранённые вопросы</small></button>
+  </div>
+
+  <div class="section-head"><h2>Сегодня</h2><button onclick="showPage('analytics')">Смотреть всё ›</button></div>
+  <div class="stats">
+    <div class="surface stat"><b id="statAnswered" class="c-blue">0</b><small>вопросов</small></div>
+    <div class="surface stat"><b id="statAccuracy" class="c-green">0%</b><small>точность</small></div>
+    <div class="surface stat"><b id="statStreak" class="c-gold">0</b><small>дней подряд</small></div>
+    <div class="surface stat"><b id="statErrors" class="c-red">0</b><small>ошибок</small></div>
+  </div>
+
+  <div class="surface due-card">
+    <div><span class="eyebrow">УМНОЕ ПОВТОРЕНИЕ</span><h3 id="dueTitle">Сегодня всё повторено</h3><p id="dueText">Ошибки будут возвращаться в нужный момент.</p></div>
+    <button id="dueBtn" class="secondary" onclick="startDue()">Повторить</button>
+  </div>
+
+  <div class="section-head"><h2>Категории</h2></div>
+  <div id="categoryStrip" class="category-strip"></div>
+</section>
+
+<section id="topics" class="page">
+  <div class="title-row"><h1>Темы</h1><span id="topicsCat" class="chip">B</span></div>
+  <div class="segmented">
+    <button class="active" onclick="setTopicFilter('all',this)">Все</button>
+    <button onclick="setTopicFilter('weak',this)">Слабые</button>
+    <button onclick="setTopicFilter('new',this)">Не начаты</button>
+  </div>
+  <div id="topicList"></div>
+</section>
+
+<section id="agent" class="page agent-page">
+  <div class="title-row"><div><span class="eyebrow">ПЕРСОНАЛЬНЫЙ ПОМОЩНИК</span><h1>AI‑агент</h1></div><span class="online-dot">● локально</span></div>
+  <div class="surface agent-context">
+    <b id="agentFocus">Я учитываю твой прогресс</b>
+    <p id="agentFocusText">Задай вопрос по ПДД или попроси разобрать слабую тему.</p>
+  </div>
+  <div class="quick-prompts">
+    <button onclick="askPreset('Почему я ошибаюсь на перекрёстках?')">Мои слабые места</button>
+    <button onclick="askPreset('Объясни правило помехи справа простыми словами')">Помеха справа</button>
+    <button onclick="askPreset('Разбери мою последнюю ошибку')">Последняя ошибка</button>
+    <button onclick="askPreset('Как мне подготовиться к экзамену?')">План подготовки</button>
+  </div>
+  <div id="chat" class="chat"></div>
+  <div class="composer">
+    <textarea id="agentInput" rows="1" placeholder="Спроси что-нибудь по ПДД..." onkeydown="agentKey(event)"></textarea>
+    <button onclick="sendAgent()">↑</button>
+  </div>
+  <p class="agent-note">Тестовый агент отвечает из встроенной базы правил и твоей статистики. Для финальной версии предусмотрено серверное подключение LLM без хранения API‑ключа в телефоне.</p>
+</section>
+
+<section id="analytics" class="page">
+  <div class="title-row"><h1>Статистика</h1><span class="chip">За всё время</span></div>
+  <div class="surface progress-card">
+    <h3>Общий прогресс</h3>
+    <div class="progress-flex">
+      <div id="analyticsRing" class="big-ring"><b id="analyticsPct">0%</b></div>
+      <div class="metric-list">
+        <div><b id="metricAnswered">0</b><span>Пройдено вопросов</span></div>
+        <div><b id="metricCorrect">0</b><span>Правильных ответов</span></div>
+        <div><b id="metricExams">0</b><span>Экзаменов</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="section-head"><h2>Сложные темы</h2><small>требуют повторения</small></div>
+  <div id="weakList" class="surface weak-list"></div>
+  <button class="primary wide" onclick="startWeak()">▥ Тренировка по слабым темам</button>
+  <div class="section-head"><h2>Экзамены</h2></div>
+  <div id="examHistory"></div>
+</section>
+
+<section id="profile" class="page">
+  <div class="title-row"><h1>Профиль</h1><span class="pro">♛ PRO</span></div>
+  <div class="surface form-card">
+    <label>Категория</label>
+    <select id="profileCat" onchange="setCategory(this.value)"><option>B</option><option>A</option><option>AM</option><option>A1</option><option>C</option><option>D</option><option>BE</option><option>CE</option><option>DE</option></select>
+    <label>Объяснение ошибок</label>
+    <select id="explainMode" onchange="setExplainMode(this.value)"><option value="simple">Простым языком</option><option value="deep">Подробно</option><option value="brief">Кратко</option></select>
+    <label>Цель в день</label>
+    <select id="dailyGoal" onchange="setDailyGoal(this.value)"><option value="10">10 вопросов</option><option value="20">20 вопросов</option><option value="30">30 вопросов</option></select>
+  </div>
+  <div class="surface install-card">
+    <b>Установить на iPhone</b>
+    <p>Safari → Поделиться → «На экран Домой». После первого открытия приложение кеширует интерфейс для офлайн‑запуска.</p>
+  </div>
+  <button class="danger wide" onclick="resetProgress()">Сбросить прогресс</button>
+</section>
+
+<nav class="bottom-nav">
+  <button data-page="home" class="active" onclick="showPage('home')"><span>⌂</span>Главная</button>
+  <button data-page="topics" onclick="showPage('topics')"><span>▤</span>Темы</button>
+  <button data-page="agent" onclick="showPage('agent')"><span>✦</span>AI</button>
+  <button data-page="analytics" onclick="showPage('analytics')"><span>▥</span>Аналитика</button>
+  <button data-page="profile" onclick="showPage('profile')"><span>●</span>Профиль</button>
+</nav>
+</main>
+
+<div id="questionScreen" class="overlay question-overlay">
+  <div class="question-wrap">
+    <div class="question-top">
+      <button class="back" onclick="attemptCloseQuestion()">‹</button>
+      <b id="questionCounter">Вопрос 1 из 10</b>
+      <span id="questionTimer" class="timer">15:00</span>
+    </div>
+    <div class="question-meta"><span id="questionTopic" class="topic-chip"></span><button id="bookmark" onclick="toggleBookmark()">♡</button></div>
+    <div id="scene" class="scene"></div>
+    <h2 id="questionText"></h2>
+    <div id="answers" class="answers"></div>
+    <div class="question-actions">
+      <button class="secondary" id="prevQuestion" onclick="previousQuestion()">‹ Назад</button>
+      <button class="primary" id="nextQuestion" onclick="nextQuestion()">Далее ›</button>
+    </div>
+  </div>
+</div>
+
+<div id="explainScreen" class="overlay explain-overlay">
+  <div class="question-wrap">
+    <div class="question-top"><button class="back" onclick="closeExplanation()">‹</button><b>Объяснение</b><span></span></div>
+    <div id="answerVerdict" class="verdict"></div>
+    <div class="explain-tabs"><button class="active">Объяснение</button><button>Правило</button><button>AI‑разбор</button></div>
+    <div id="explanationText" class="explanation"></div>
+    <div id="ruleBox" class="rule-box"></div>
+    <div class="surface mini-agent">
+      <b>AI‑наставник</b>
+      <div class="mini-agent-buttons">
+        <button onclick="miniAI('simple')">Объясни проще</button>
+        <button onclick="miniAI('why')">Почему мой вариант неверный?</button>
+        <button onclick="miniAI('remember')">Как запомнить?</button>
+        <button onclick="miniAI('similar')">Дай похожую ситуацию</button>
+      </div>
+      <p id="miniAIReply"></p>
+    </div>
+    <button class="primary wide" onclick="continueAfterExplanation()">Далее ›</button>
+  </div>
+</div>
+
+<div id="resultScreen" class="overlay result-overlay">
+  <div class="result-wrap">
+    <div id="resultIcon" class="result-icon">✓</div>
+    <h1 id="resultTitle"></h1>
+    <p id="resultSubtitle"></p>
+    <div id="resultMetrics" class="result-metrics"></div>
+    <div id="resultReview"></div>
+    <button id="resultReviewBtn" class="primary wide" onclick="reviewLastResult()">Разобрать ошибки</button>
+    <button class="secondary wide" onclick="closeResult()">На главную</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+if('serviceWorker' in navigator){addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}))}
+</script>
+</body>
+</html>
