@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#06111d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ПДД AI">
+<title>ПДД AI — Беларусь</title>
+<style>
+:root{
+  --bg:#03101b;--panel:#071827;--panel2:#0b2135;--panel3:#0e2b46;
+  --text:#f8fbff;--muted:#8196ab;--line:rgba(255,255,255,.08);
+  --blue:#237cff;--blue2:#40a7ff;--green:#38e19f;--red:#ff5d63;
+  --orange:#ff9f43;--gold:#ffbe2e;--cyan:#25d9d2;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:#02070d;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Inter,Arial,sans-serif}
+body{min-height:100vh}
+button,select{font:inherit}
+button{cursor:pointer}
+.app{max-width:430px;margin:0 auto;min-height:100vh;background:
+radial-gradient(circle at 55% -10%,rgba(35,124,255,.14),transparent 32%),
+linear-gradient(180deg,#04111d 0%,#061420 48%,#04101a 100%);
+padding-top:env(safe-area-inset-top);padding-bottom:calc(78px + env(safe-area-inset-bottom));position:relative}
+.page{display:none;padding:18px 16px 28px}.page.active{display:block}
+.header{display:flex;align-items:center;justify-content:space-between;margin:6px 0 18px}
+.brand{display:flex;align-items:center;gap:10px;font-size:21px;font-weight:900;letter-spacing:.2px}.brand .ai{color:#2f8cff}
+.iconBtn{width:40px;height:40px;border-radius:13px;border:1px solid var(--line);background:#0a1b2c;color:#c9d9e8;display:grid;place-items:center;font-size:18px}
+.proBadge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:11px;background:linear-gradient(180deg,#1c1707,#131007);border:1px solid rgba(255,190,46,.25);color:#ffbf2f;font-size:12px;font-weight:900}
+.proBadge:before{content:"♛";font-size:16px}
+.card{background:linear-gradient(180deg,rgba(10,31,50,.96),rgba(7,24,39,.96));border:1px solid var(--line);border-radius:18px;box-shadow:0 14px 40px rgba(0,0,0,.24)}
+.continue{padding:15px;display:grid;grid-template-columns:62px 1fr 24px;gap:13px;align-items:center}
+.ring{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--green) 0deg, #17344b 0deg);position:relative}
+.ring:after{content:"";position:absolute;width:43px;height:43px;border-radius:50%;background:#092033}
+.ring span{position:relative;z-index:2;font-weight:900;font-size:16px}
+.continue b{font-size:15px}.continue .sub{font-size:12px;color:var(--muted);margin-top:4px}
+.chev{font-size:25px;color:#4f9fff}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.tile{padding:16px 14px;min-height:121px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+.tile:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 95% 0,var(--glow,rgba(35,124,255,.15)),transparent 42%);pointer-events:none}
+.tileIcon{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;font-size:24px;background:#0c2943;border:1px solid rgba(255,255,255,.06)}
+.tile b{font-size:15px}.tile small{color:var(--muted);font-size:11px;line-height:1.3}.tile.exam{--glow:rgba(255,93,99,.22);border-color:rgba(255,93,99,.24)}.tile.aiTile{--glow:rgba(35,124,255,.25);border-color:rgba(35,124,255,.22)}.tile.weak{--glow:rgba(56,225,159,.20);border-color:rgba(56,225,159,.20)}.tile.saved{--glow:rgba(255,190,46,.18)}
+.sectionTitle{display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px}.sectionTitle h2{margin:0;font-size:18px}.linkBtn{border:0;background:none;color:#3b91ff;font-size:12px;font-weight:800}
+.stats4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.miniStat{padding:11px 7px;text-align:left}.miniStat b{display:block;font-size:19px;margin-bottom:4px}.miniStat span{display:block;font-size:10px;line-height:1.25;color:var(--muted)}
+.blue{color:#39a0ff}.green{color:var(--green)}.gold{color:var(--gold)}.red{color:#ff6d72}
+.catRow{display:flex;gap:8px;overflow:auto;padding-bottom:2px;scrollbar-width:none}.catRow::-webkit-scrollbar{display:none}.cat{min-width:76px;padding:12px 9px;border-radius:13px;background:#081c2d;border:1px solid var(--line);text-align:center}.cat.active{background:linear-gradient(180deg,#0c2c4a,#0b2237);border-color:#2385ff;box-shadow:inset 0 0 0 1px rgba(35,133,255,.3)}.cat b{display:block;font-size:19px;color:#e7f3ff}.cat.active b{color:#3a9cff}.cat span{font-size:10px;color:var(--muted)}
+.nav{position:fixed;z-index:50;left:50%;bottom:0;transform:translateX(-50%);width:min(430px,100%);height:calc(67px + env(safe-area-inset-bottom));padding:7px 12px calc(7px + env(safe-area-inset-bottom));background:rgba(3,13,22,.95);backdrop-filter:blur(18px);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(4,1fr)}
+.nav button{border:0;background:transparent;color:#61768a;font-size:10px;font-weight:800;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center}.nav .nicon{font-size:21px;line-height:1}.nav button.active{color:#328dff}
+.titleRow{display:flex;align-items:center;justify-content:space-between;margin:6px 0 16px}.titleRow h1{font-size:25px;margin:0}.smallPill{font-size:11px;padding:6px 9px;border-radius:10px;border:1px solid var(--line);color:#aebfd0;background:#081928}
+.tabs{display:flex;gap:7px;margin-bottom:13px;overflow:auto}.tab{border:1px solid var(--line);background:#071827;color:#9bafc2;padding:8px 12px;border-radius:10px;font-size:11px;font-weight:800;white-space:nowrap}.tab.active{color:#fff;background:#1e72f5;border-color:#1e72f5}
+.topicItem{padding:14px;margin-bottom:9px}.topicHead{display:flex;align-items:center;justify-content:space-between;gap:12px}.topicHead b{font-size:14px}.topicMeta{font-size:11px;color:var(--muted);margin-top:4px}.score{font-size:15px;font-weight:900}.bar{height:7px;background:#10293d;border-radius:999px;margin-top:10px;overflow:hidden}.bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#2f85ff,#34e0a0)}
+.analyticsTop{padding:16px}.anaRing{width:105px;height:105px;border-radius:50%;background:conic-gradient(var(--green) 0deg,#163248 0deg);display:grid;place-items:center;position:relative}.anaRing:after{content:"";position:absolute;width:79px;height:79px;border-radius:50%;background:#0a2134}.anaRing b{z-index:2;font-size:28px}.anaStats{display:grid;gap:8px;flex:1}.anaLine{display:flex;justify-content:space-between;font-size:12px}.chart{height:180px;padding:14px;position:relative;overflow:hidden}.chartGrid{position:absolute;inset:18px 14px 24px;background:repeating-linear-gradient(to bottom,transparent 0,transparent 31px,rgba(255,255,255,.055) 32px)}svg{position:relative;z-index:2;width:100%;height:120px;margin-top:16px}.weakItem{padding:11px 0;border-bottom:1px solid var(--line)}.weakItem:last-child{border:0}.weakRow{display:grid;grid-template-columns:1fr 80px 34px;gap:10px;align-items:center;font-size:12px}.weakBar{height:7px;background:#183149;border-radius:999px;overflow:hidden}.weakBar i{display:block;height:100%;background:var(--red);border-radius:999px}
+.profileCard{padding:15px}.field{width:100%;background:#081a2a;color:#eef6ff;border:1px solid var(--line);border-radius:12px;padding:12px}label{font-size:11px;color:var(--muted);font-weight:800;display:block;margin:12px 0 6px}
+.full{position:fixed;z-index:100;inset:0;background:#04101a;color:#fff;display:none;overflow:auto}.full.active{display:block}.fullInner{max-width:430px;margin:auto;min-height:100vh;padding:calc(14px + env(safe-area-inset-top)) 15px calc(22px + env(safe-area-inset-bottom));background:linear-gradient(180deg,#04111d,#061722)}
+.qTop{display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:8px}.back{width:36px;height:36px;border:0;background:transparent;color:#caddf0;font-size:27px}.qCounter{text-align:center;font-size:13px;font-weight:900}.timer{padding:7px 9px;border-radius:10px;border:1px solid #36516b;color:#d6e5f3;font-size:12px}
+.qMetaRow{display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px}.topicPill{font-size:11px;color:#4ba7ff;background:#0a2b4d;border-radius:10px;padding:7px 10px;border:1px solid rgba(35,124,255,.2)}.bookmark{font-size:21px;color:#a9bbcc}
+.imageSlot{height:205px;border-radius:15px;background:
+linear-gradient(180deg,rgba(2,12,21,.05),rgba(2,12,21,.35)),
+linear-gradient(135deg,#1a4c72,#2b745e 55%,#23425d);
+border:1px solid var(--line);display:flex;align-items:flex-end;padding:13px;position:relative;overflow:hidden}
+.imageSlot:before{content:"";position:absolute;left:0;right:0;bottom:0;height:43%;background:linear-gradient(90deg,#3e4751 0 35%,#58616c 35% 65%,#3e4751 65%);clip-path:polygon(0 54%,35% 30%,65% 30%,100% 54%,100% 100%,0 100%)}
+.imageSlot:after{content:"Иллюстрация вопроса будет добавлена на следующем этапе";position:relative;z-index:2;font-size:11px;color:#dbe8f3;background:rgba(1,8,14,.72);padding:7px 9px;border-radius:9px}
+.question{font-size:16px;font-weight:850;line-height:1.4;margin:16px 2px 12px}
+.answers{display:grid;gap:9px}.answer{width:100%;border:1px solid #17334a;background:#081a2a;color:#e9f1f8;border-radius:13px;padding:13px 12px;text-align:left;display:grid;grid-template-columns:31px 1fr 20px;gap:8px;align-items:center;line-height:1.35}.letter{width:27px;height:27px;border-radius:50%;border:1px solid #45637d;display:grid;place-items:center;color:#c7d6e3}.answer.selected{border-color:#2f8cff;background:#0b2340}.answer.correct{border-color:#2ad693;background:#0b3529}.answer.wrong{border-color:#ff6167;background:#35171d}.answer .mark{font-size:18px;text-align:center}
+.qFooter{display:grid;grid-template-columns:1fr 1.4fr;gap:9px;margin-top:18px}.btn{border:0;border-radius:13px;padding:14px 13px;font-weight:900}.btn.secondary{background:#071827;color:#d7e5f2;border:1px solid #314a60}.btn.primary{background:linear-gradient(180deg,#2f88ff,#2269ef);color:#fff}.btn.green{background:linear-gradient(180deg,#3ce2a4,#24b981);color:#052018}.btn:disabled{opacity:.45}
+.resultBox{margin-top:16px;padding:14px;border-radius:14px;border:1px solid rgba(55,221,155,.35);background:#0b382b}.resultBox.bad{border-color:rgba(255,93,99,.35);background:#35151b}.resultBox b{font-size:14px}.explainTabs{display:flex;gap:6px;margin:14px 0}.explainTabs button{flex:1;border:1px solid var(--line);border-radius:9px;padding:8px;background:#071827;color:#91a6b9;font-size:11px;font-weight:800}.explainTabs button.active{background:#2677f3;color:#fff;border-color:#2677f3}.explainText{font-size:13px;line-height:1.58;color:#d7e2ec}.ruleCard{border:1px solid rgba(255,190,46,.38);background:#2d2209;border-radius:13px;padding:13px;margin-top:13px}.ruleCard b{color:#ffc43d}.aiBox{margin-top:13px;padding:13px;border-radius:13px;background:#08243d;border:1px solid rgba(35,124,255,.25)}.aiActions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}.aiActions button{border:1px solid var(--line);background:#071827;color:#d8e7f4;padding:9px;border-radius:9px;font-size:11px;font-weight:800}.toast{position:fixed;z-index:200;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translate(-50%,-14px);opacity:0;transition:.2s;background:#0d2942;border:1px solid var(--line);padding:10px 13px;border-radius:11px;font-size:12px;font-weight:800;max-width:88%;text-align:center}.toast.show{opacity:1;transform:translate(-50%,0)}
+.onboard{position:fixed;z-index:150;inset:0;background:linear-gradient(180deg,#020914,#061421);display:none}.onboard.active{display:block}.onboardInner{max-width:430px;margin:auto;padding:calc(35px + env(safe-area-inset-top)) 20px}.appLogo{width:74px;height:74px;border-radius:22px;background:linear-gradient(145deg,#247dff,#25d9a0);display:grid;place-items:center;font-size:34px;box-shadow:0 18px 50px rgba(35,124,255,.28)}.onboard h1{font-size:36px;line-height:1.03;margin:23px 0 10px}.onboard p{color:#92a8bc;line-height:1.55}.onboardCard{padding:15px;margin:20px 0}.legal{font-size:10px;color:#667d92;line-height:1.45;margin-top:12px}
+@media(min-width:700px){body{padding:20px}.app{border:1px solid var(--line);border-radius:28px;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.45)}.nav{bottom:20px;border-radius:0 0 28px 28px}.fullInner{border-left:1px solid var(--line);border-right:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+
+<div id="onboard" class="onboard">
+  <div class="onboardInner">
+    <div class="appLogo">🚘</div>
+    <h1>ПДД AI</h1>
+    <p>Не просто тесты. Приложение запоминает, где ты ошибаешься, объясняет причину и строит персональный план подготовки.</p>
+    <div class="card onboardCard">
+      <div style="font-weight:900">🇧🇾 Беларусь</div>
+      <label>Категория</label>
+      <select id="onCat" class="field">
+        <option>B</option><option>A</option><option>AM</option><option>A1</option><option>C</option><option>D</option><option>BE</option><option>CE</option><option>DE</option>
+      </select>
+      <label>Цель</label>
+      <select id="onGoal" class="field">
+        <option value="14">Экзамен через 2 недели</option><option value="30">Через месяц</option><option value="60">Через 2 месяца</option><option value="0">Пока без даты</option>
+      </select>
+    </div>
+    <button class="btn primary" style="width:100%" onclick="finishOnboard()">Начать обучение</button>
+    <div class="legal">Вопросы в этой сборке авторские и созданы по логике экзаменационных задач. Они не являются копией базы pdd.by.</div>
+  </div>
+</div>
+
+<div class="app" id="app">
+  <section id="home" class="page active">
+    <div class="header">
+      <span class="proBadge">PRO</span>
+      <div class="brand">ПДД <span class="ai">AI</span></div>
+      <button class="iconBtn" onclick="showPage('profile')">⚙</button>
+    </div>
+
+    <div class="card continue" onclick="startSmart()">
+      <div id="homeRing" class="ring"><span id="homePercent">0%</span></div>
+      <div><b>Продолжить обучение</b><div id="continueSub" class="sub">Собираем первую карту знаний</div><div id="continueCount" class="sub">0 из 18</div></div>
+      <div class="chev">›</div>
+    </div>
+
+    <div class="tiles">
+      <div class="card tile" onclick="startTopicPicker()"><div class="tileIcon">📖</div><div><b>Обучение</b><small>Все темы ПДД с разбором</small></div></div>
+      <div class="card tile" onclick="startPractice()"><div class="tileIcon">🎯</div><div><b>Тренировка</b><small>Адаптивные случайные вопросы</small></div></div>
+      <div class="card tile exam" onclick="startExam()"><div class="tileIcon">▤</div><div><b>Экзамен</b><small>10 вопросов, 2-я ошибка — стоп</small></div></div>
+      <div class="card tile aiTile" onclick="startSmart()"><div class="tileIcon">🧠</div><div><b>Научи меня</b><small>AI разбирает слабые места</small></div></div>
+      <div class="card tile weak" onclick="startWeak()"><div class="tileIcon">▥</div><div><b>Слабые темы</b><small>Тренировка по ошибкам</small></div></div>
+      <div class="card tile saved" onclick="startSaved()"><div class="tileIcon">🔖</div><div><b>Избранное</b><small>Сохранённые вопросы</small></div></div>
+    </div>
+
+    <div class="sectionTitle"><h2>Статистика</h2><button class="linkBtn" onclick="showPage('analytics')">Смотреть все ›</button></div>
+    <div class="stats4">
+      <div class="card miniStat"><b id="stAnswered" class="blue">0</b><span>Вопросов<br>пройдено</span></div>
+      <div class="card miniStat"><b id="stAccuracy" class="green">0%</b><span>Средний<br>результат</span></div>
+      <div class="card miniStat"><b id="stStreak" class="gold">0</b><span>Дней<br>подряд</span></div>
+      <div class="card miniStat"><b id="stMist" class="red">0</b><span>Ошибок<br>в работе</span></div>
+    </div>
+
+    <div class="sectionTitle"><h2>Категории</h2></div>
+    <div id="categoryRow" class="catRow"></div>
+  </section>
+
+  <section id="topics" class="page">
+    <div class="titleRow"><h1>Темы</h1><span id="topicsCat" class="smallPill">B</span></div>
+    <div class="tabs"><button class="tab active">Все темы</button><button class="tab">Слабые</button><button class="tab">Не начаты</button></div>
+    <div id="topicsList"></div>
+  </section>
+
+  <section id="analytics" class="page">
+    <div class="titleRow"><h1>Статистика</h1><span class="smallPill">За всё время⌄</span></div>
+    <div class="tabs"><button class="tab active">Общий результат</button><button class="tab">Темы</button><button class="tab">Типы вопросов</button></div>
+    <div class="card analyticsTop">
+      <h3 style="margin:0 0 14px;font-size:15px">Общий прогресс</h3>
+      <div class="row" style="display:flex;gap:18px;align-items:center">
+        <div id="anaRing" class="anaRing"><b id="anaPercent">0%</b></div>
+        <div class="anaStats">
+          <div class="anaLine"><span class="green">●</span><b id="anaAnswered">0</b><span style="color:var(--muted)">Пройдено</span></div>
+          <div class="anaLine"><span class="green">●</span><b id="anaCorrect">0</b><span style="color:var(--muted)">Правильно</span></div>
+          <div class="anaLine"><span class="green">◉</span><b id="anaAccuracy">0%</b><span style="color:var(--muted)">Средний</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sectionTitle"><h2>Динамика результатов</h2></div>
+    <div class="card chart">
+      <div class="chartGrid"></div>
+      <svg viewBox="0 0 360 120" preserveAspectRatio="none">
+        <polyline id="chartLine" points="0,100 45,90 90,82 135,75 180,67 225,58 270,48 315,38 360,28" fill="none" stroke="#36df9d" stroke-width="3"/>
+        <polyline id="chartFill" points="0,100 45,90 90,82 135,75 180,67 225,58 270,48 315,38 360,28 360,120 0,120" fill="rgba(54,223,157,.12)" stroke="none"/>
+      </svg>
+    </div>
+
+    <div class="sectionTitle"><h2>Сложные темы</h2><span style="font-size:11px;color:var(--muted)">Требуют повторения</span></div>
+    <div id="weakList" class="card" style="padding:7px 13px"></div>
+    <button class="btn primary" style="width:100%;margin-top:12px" onclick="startWeak()">▥ Тренировка по слабым темам</button>
+  </section>
+
+  <section id="profile" class="page">
+    <div class="titleRow"><h1>Профиль</h1><span class="proBadge">PRO</span></div>
+    <div class="card profileCard">
+      <label>Категория водительского удостоверения</label>
+      <select id="profileCat" class="field" onchange="setCategory(this.value)">
+        <option>B</option><option>A</option><option>AM</option><option>A1</option><option>C</option><option>D</option><option>BE</option><option>CE</option><option>DE</option>
+      </select>
+      <label>Стиль объяснения ошибок</label>
+      <select id="explainMode" class="field" onchange="setExplain(this.value)">
+        <option value="simple">Простым языком</option><option value="deep">Максимально подробно</option><option value="brief">Кратко</option>
+      </select>
+    </div>
+    <div class="card profileCard" style="margin-top:12px">
+      <b>PRO для тестирования</b>
+      <p style="font-size:12px;color:var(--muted);line-height:1.5">В текущей веб-сборке PRO открыт, чтобы можно было проверить весь интерфейс и AI-разбор. В магазинной версии доступ будет подтверждаться сервером.</p>
+    </div>
+    <div class="card profileCard" style="margin-top:12px">
+      <b>Экзаменационный режим</b>
+      <p style="font-size:12px;color:var(--muted);line-height:1.5">10 вопросов. На второй ошибке попытка сразу заканчивается. Этот режим сейчас настроен по твоему требованию.</p>
+    </div>
+    <button class="btn secondary" style="width:100%;margin-top:12px" onclick="resetProgress()">Сбросить прогресс</button>
+  </section>
+
+  <nav class="nav">
+    <button class="active" data-page="home" onclick="showPage('home')"><span class="nicon">⌂</span><span>Главная</span></button>
+    <button data-page="topics" onclick="showPage('topics')"><span class="nicon">▤</span><span>Темы</span></button>
+    <button data-page="analytics" onclick="showPage('analytics')"><span class="nicon">▥</span><span>Аналитика</span></button>
+    <button data-page="profile" onclick="showPage('profile')"><span class="nicon">●</span><span>Профиль</span></button>
+  </nav>
+</div>
+
+<div id="questionScreen" class="full">
+  <div class="fullInner">
+    <div class="qTop">
+      <button class="back" onclick="closeQuestion()">‹</button>
+      <div id="qCounter" class="qCounter">Вопрос 1 из 10</div>
+      <div id="qTimer" class="timer">◷ 15:00</div>
+    </div>
+    <div class="qMetaRow"><span id="qTopic" class="topicPill">Перекрёстки</span><span id="bookmarkBtn" class="bookmark" onclick="toggleBookmark()">♡</span></div>
+    <div id="imageSlot" class="imageSlot"></div>
+    <div id="questionText" class="question"></div>
+    <div id="answers" class="answers"></div>
+    <div class="qFooter">
+      <button id="prevBtn" class="btn secondary" onclick="prevQuestion()">‹ Предыдущий</button>
+      <button id="nextBtn" class="btn primary" onclick="nextQuestion()">Следующий ›</button>
+    </div>
+  </div>
+</div>
+
+<div id="explanationScreen" class="full">
+  <div class="fullInner">
+    <div class="qTop">
+      <button class="back" onclick="closeExplanation()">‹</button>
+      <div class="qCounter">Объяснение</div>
+      <div id="explainBookmark" class="bookmark">♡</div>
+    </div>
+    <div id="resultBox" class="resultBox"></div>
+    <div class="explainTabs"><button class="active">Объяснение</button><button>Правило</button><button>AI-разбор</button></div>
+    <div id="explainText" class="explainText"></div>
+    <div class="imageSlot" style="height:175px;margin-top:13px"></div>
+    <div id="ruleCard" class="ruleCard"></div>
+    <div class="aiBox">
+      <b style="font-size:13px">AI-наставник</b>
+      <div class="aiActions">
+        <button onclick="aiExplain('simple')">Объясни проще</button>
+        <button onclick="aiExplain('why')">Почему мой ответ неверный?</button>
+        <button onclick="aiExplain('remember')">Как запомнить?</button>
+        <button onclick="aiExplain('similar')">Похожая ситуация</button>
+      </div>
+      <div id="aiReply" style="font-size:12px;line-height:1.5;color:#c8d8e6;margin-top:10px"></div>
+    </div>
+    <button class="btn primary" style="width:100%;margin-top:15px" onclick="continueAfterExplain()">Далее ›</button>
+  </div>
+</div>
+
+<script>
+const TOPICS={
+ priority:{name:'Проезд перекрёстков',icon:'▣'},
+ signals:{name:'Сигналы светофора и регулировщика',icon:'◉'},
+ signs:{name:'Дорожные знаки',icon:'△'},
+ pedestrians:{name:'Пешеходы и уязвимые участники',icon:'♙'},
+ manoeuvres:{name:'Маневрирование и перестроение',icon:'↔'},
+ stopping:{name:'Остановка и стоянка',icon:'P'},
+ speed:{name:'Скорость, дистанция и видимость',icon:'◷'},
+ special:{name:'Специальные сигналы',icon:'✦'},
+ wording:{name:'Экзаменационные формулировки',icon:'≡'}
+};
+
+const Q=[
+{t:'priority',q:'Вы приближаетесь к нерегулируемому перекрёстку. Перед вами установлен знак «Уступить дорогу», а автомобиль справа движется по пересекаемой дороге. Какое обстоятельство необходимо учитывать первым при определении очередности проезда?',a:['Расположение автомобиля справа','Требование знака приоритета','Скорость автомобиля справа','Ширину пересекаемой дороги'],c:1,r:'Приоритет сначала определяется средствами организации движения. Только если они не устанавливают очередность, применяются дополнительные правила.',e:'Главная ловушка здесь — сразу вспомнить «помеху справа». Но знак уже задаёт более конкретное правило приоритета.',m:'Слишком рано применяете правило помехи справа'},
+{t:'priority',q:'На перекрёстке вы поворачиваете налево на разрешающий сигнал светофора. Встречный автомобиль движется прямо и также имеет разрешающий сигнал. Как должен действовать водитель поворачивающего автомобиля?',a:['Проехать первым, так как манёвр уже начат','Уступить встречному автомобилю','Проехать одновременно, не меняя траектории','Остановиться и ждать запрещающего сигнала'],c:1,r:'При конфликте траекторий при левом повороте водитель учитывает встречное движение, которому разрешено движение прямо.',e:'Зелёный сигнал разрешает движение, но не отменяет обязанность учитывать конфликтующую встречную траекторию.',m:'Считаете разрешающий сигнал безусловным преимуществом'},
+{t:'priority',q:'Два автомобиля одновременно подъезжают к нерегулируемому перекрёстку равнозначных дорог. У вашего автомобиля другой участник находится справа. Какое правило становится решающим после того, как вы убедились, что знаки и регулирование отсутствуют?',a:['Преимущество более крупного автомобиля','Преимущество того, кто раньше снизил скорость','Обязанность уступить транспортному средству справа','Преимущество автомобиля, движущегося прямо'],c:2,r:'На равнозначном нерегулируемом перекрёстке после проверки отсутствия иных средств приоритета учитывается помеха справа.',e:'Здесь правило справа применяется уместно именно потому, что более приоритетных средств регулирования нет.',m:'Неправильно определяете момент применения помехи справа'},
+{t:'priority',q:'Вы въезжаете на перекрёсток с круговым движением. Какой подход к определению приоритета наиболее правильный?',a:['Считать, что въезжающий всегда имеет преимущество','Считать, что находящийся на круге всегда имеет преимущество независимо от знаков','Оценить установленные знаки приоритета и действующую организацию движения','Уступать только автобусам и троллейбусам'],c:2,r:'Приоритет на конкретном круговом перекрёстке определяется установленной организацией движения и знаками.',e:'Опасно запоминать одно универсальное правило для всех кругов. Сначала читается конкретная схема приоритета.',m:'Используете универсальное правило вместо чтения знаков'},
+{t:'signals',q:'Светофор работает в режиме жёлтого мигающего сигнала. Что должен сделать водитель при выборе очередности проезда перекрёстка?',a:['Руководствоваться правилами для регулируемого перекрёстка','Считать, что преимущество получает тот, кто едет прямо','Рассматривать перекрёсток как нерегулируемый и учитывать знаки приоритета','Остановиться независимо от дорожной обстановки'],c:2,r:'Жёлтый мигающий сигнал предупреждает об опасности и не задаёт обычную очередность движения как рабочие разрешающие/запрещающие сигналы.',e:'Ловушка — продолжать воспринимать такой светофор как обычный регулирующий. Нужно перейти к анализу знаков и приоритета.',m:'Неправильно интерпретируете режим работы светофора'},
+{t:'signals',q:'Регулировщик подаёт сигнал, который противоречит работающему светофору. Каким указанием следует руководствоваться?',a:['Светофором, потому что он установлен постоянно','Сигналом регулировщика','Знаком приоритета независимо от регулировщика','Тем указанием, которое разрешает движение'],c:1,r:'Сигналы регулировщика имеют приоритет в ситуации непосредственного регулирования движения.',e:'Нельзя выбирать более удобный сигнал. При регулировщике именно его указания становятся основными.',m:'Не знаете иерархию средств регулирования'},
+{t:'signals',q:'Вы получили разрешающий сигнал светофора, но за перекрёстком образовался затор, из-за которого вы остановитесь внутри перекрёстка и создадите помеху поперечному потоку. Как действовать?',a:['Въехать, потому что сигнал разрешающий','Въехать и включить аварийную сигнализацию','Не въезжать до появления возможности освободить перекрёсток','Въехать, если сзади сигналят'],c:2,r:'Разрешающий сигнал не означает, что можно создавать блокировку перекрёстка при заторе за ним.',e:'Правильный анализ учитывает не только цвет сигнала, но и возможность закончить проезд без блокирования движения.',m:'Игнорируете развитие ситуации за перекрёстком'},
+{t:'signs',q:'Вы видите временный дорожный знак, требования которого отличаются от привычной постоянной схемы движения на этом участке. Как следует действовать?',a:['Продолжить движение по памяти','Ориентироваться на актуальную временную организацию движения','Игнорировать временный знак, если дорога знакомая','Следовать только подсказке навигатора'],c:1,r:'Временная организация движения вводится именно для изменения обычного порядка на участке.',e:'Знакомый маршрут — частая причина ошибок. Нужно читать текущую дорогу, а не вспоминать вчерашнюю.',m:'Игнорируете временную организацию движения'},
+{t:'signs',q:'Перед перекрёстком одновременно видны знак приоритета и дорожная разметка. Почему нельзя делать вывод только по одному из этих элементов?',a:['Потому что дорожные знаки не имеют обязательной силы','Потому что решение должно учитывать всю действующую организацию движения','Потому что разметка всегда отменяет знак','Потому что знаки действуют только ночью'],c:1,r:'Дорожная ситуация анализируется комплексно: знак, разметка, светофор, регулировщик и конкретные траектории могут дополнять друг друга.',e:'Экзаменационный вопрос часто проверяет не узнавание одного знака, а умение применить все условия вместе.',m:'Делаете вывод по одному визуальному признаку'},
+{t:'signs',q:'Навигатор предлагает повернуть направо, но установленный дорожный знак запрещает такой манёвр. Какое решение правильное?',a:['Выполнить манёвр, если навигатор построил маршрут','Руководствоваться действующим знаком и перестроить маршрут','Остановиться в полосе и перенастроить навигатор','Выполнить манёвр, если рядом нет инспектора'],c:1,r:'Навигационное приложение не заменяет требования действующих средств организации дорожного движения.',e:'Навигатор помогает выбрать маршрут, но не обладает приоритетом перед дорожным знаком.',m:'Слишком доверяете навигатору'},
+{t:'pedestrians',q:'При повороте направо вы видите пешехода, который уже начал пересекать проезжую часть в направлении вашей новой траектории. Что необходимо учитывать?',a:['Только сигнал вашего светофора','Только скорость пешехода','Конфликт траекторий и обязанность не создавать опасность пешеходу','Только наличие других автомобилей'],c:2,r:'Поворот требует оценки траектории пешеходов, которые пересекают направление движения автомобиля.',e:'Даже когда движение автомобиля разрешено, нужно проверять, не пересекается ли его траектория с пешеходом.',m:'Недостаточно учитываете пешеходов при повороте'},
+{t:'pedestrians',q:'Пешеход стоит у края проезжей части возле перехода и явно собирается начать движение. Какой подход к оценке ситуации наиболее безопасный?',a:['Оценивать только его текущее положение','Прогнозировать возможное начало движения и заранее иметь запас для реакции','Продолжать с прежней скоростью до момента выхода на проезжую часть','Подать звуковой сигнал и не менять режим движения'],c:1,r:'Безопасное управление требует прогнозировать развитие дорожной ситуации, а не реагировать только постфактум.',e:'Экзамен часто проверяет способность предвидеть опасность. Важен не только факт, где пешеход сейчас, но и что он может сделать дальше.',m:'Реагируете поздно вместо прогнозирования'},
+{t:'pedestrians',q:'При ограниченной видимости рядом с пешеходным переходом другой автомобиль замедляется перед вами. Какое объяснение его поведения следует рассматривать как потенциально опасное?',a:['Водитель может искать парковку','Перед ним может находиться пешеход, которого вы пока не видите','Водитель обязательно собирается развернуться','Водитель хочет пропустить вас вперёд'],c:1,r:'Действия других участников могут указывать на скрытую опасность. Ограниченная обзорность требует повышенного запаса реакции.',e:'Сложные задачи проверяют косвенные признаки. Замедление другого автомобиля может скрывать пешехода из вашей зоны видимости.',m:'Не замечаете косвенные признаки опасности'},
+{t:'manoeuvres',q:'Вы собираетесь перестроиться в соседнюю полосу. В ней уже движется автомобиль без изменения направления. Кто должен учитывать приоритет при перестроении?',a:['Автомобиль, который уже движется в полосе, должен уступить','Перестраивающийся водитель должен обеспечить безопасное перестроение','Преимущество у того, кто первым включил указатель поворота','Преимущество у автомобиля с большей скоростью'],c:1,r:'Перестроение не создаёт преимущество. Водитель должен убедиться, что манёвр может быть выполнен безопасно.',e:'Поворотник сообщает о намерении, но не заставляет соседний автомобиль уступать место.',m:'Считаете указатель поворота источником преимущества'},
+{t:'manoeuvres',q:'Вы включили указатель поворота заранее. Даёт ли это право немедленно начать перестроение?',a:['Да, если сигнал включён не менее трёх секунд','Да, если соседний автомобиль находится сзади','Нет, сначала нужно убедиться в безопасности манёвра','Да, если вы движетесь быстрее'],c:2,r:'Сигнал поворота предупреждает других участников, но не заменяет обязанность оценить безопасность и приоритет.',e:'Одна из типичных ошибок — путать предупреждение о манёвре с правом на манёвр.',m:'Переоцениваете значение указателя поворота'},
+{t:'manoeuvres',q:'Вы пропустили нужный поворот и находитесь в полосе, из которой повернуть уже нельзя. Какое действие наиболее правильное?',a:['Резко перестроиться через несколько полос','Остановиться в своей полосе и дождаться возможности повернуть','Продолжить движение и выбрать следующий безопасный маршрут','Сдать назад до места поворота'],c:2,r:'Ошибка маршрута не является основанием для опасного манёвра. Безопасность имеет приоритет над удобством.',e:'Хороший водитель принимает потерю времени вместо резкого исправления маршрута.',m:'Исправляете маршрут рискованным манёвром'},
+{t:'manoeuvres',q:'Перед боковым перемещением вы проверили зеркало заднего вида. Почему этого может быть недостаточно?',a:['Зеркала всегда показывают только встречный поток','В слепой зоне может находиться участник, которого не видно в зеркале','Зеркало показывает неправильную скорость по закону','Проверка зеркал требуется только ночью'],c:1,r:'Перед боковым манёвром водитель должен учитывать зоны, которые не контролируются зеркалами полностью.',e:'Вопрос проверяет не формальность «посмотрел в зеркало», а полноту контроля пространства.',m:'Пропускаете контроль слепой зоны'},
+{t:'manoeuvres',q:'Перед разворотом вы видите, что манёвр формально не запрещён знаком, но обзор ограничен припаркованным грузовиком. Какое решение правильнее?',a:['Выполнить разворот, раз он не запрещён','Оценить, можно ли выполнить манёвр безопасно при фактической обзорности','Подать длительный звуковой сигнал и начать разворот','Начать манёвр медленно, не оценивая встречную полосу'],c:1,r:'Отсутствие прямого запрета не отменяет требования безопасности манёвра.',e:'Экзаменационная ловушка — принять «не запрещено» за «безусловно безопасно». Это разные проверки.',m:'Путаете разрешённость и безопасность манёвра'},
+{t:'stopping',q:'Вы нашли свободное место для остановки рядом с перекрёстком. Что необходимо проверить до начала манёвра?',a:['Только достаточно ли места автомобилю','Действующие ограничения, обзорность и влияние на других участников','Стоят ли рядом другие автомобили','Удобно ли будет потом выехать'],c:1,r:'Свободное место само по себе не означает, что остановка в нём разрешена и безопасна.',e:'Частая ошибка — оценить физическое место, но не ограничения и обзорность.',m:'Считаете свободное место автоматически разрешённым'},
+{t:'stopping',q:'Несколько автомобилей уже припаркованы в месте, где вы сомневаетесь в разрешённости остановки. Можно ли считать их наличие подтверждением того, что остановка разрешена?',a:['Да, если автомобилей больше двух','Да, если они стоят давно','Нет, действия других водителей не заменяют проверку правил и знаков','Да, если включена аварийная сигнализация'],c:2,r:'Поведение других водителей не является нормативным основанием для вашего решения.',e:'На дороге легко «повторить за всеми». Но экзамен проверяет, знаете ли вы собственные основания для действия.',m:'Копируете действия других водителей вместо анализа правил'},
+{t:'stopping',q:'При выборе места остановки что должно иметь приоритет над удобством посадки пассажира?',a:['Минимальное расстояние до входа в здание','Разрешённость и безопасность остановки','Возможность быстро уехать','Наличие свободного бордюра'],c:1,r:'Сначала проверяются ограничения и безопасность, затем удобство.',e:'Практичность не отменяет правил. Это важная логика большинства задач про остановку.',m:'Ставите удобство выше ограничений'},
+{t:'speed',q:'Разрешённая скорость на участке выше той, при которой вы можете уверенно остановиться в пределах видимого пространства. Как выбрать скорость?',a:['Всегда двигаться с максимально разрешённой скоростью','Выбрать меньшую скорость с учётом видимости и условий','Ориентироваться только на скорость потока','Увеличить скорость, чтобы быстрее пройти опасный участок'],c:1,r:'Максимально разрешённая скорость — предел, а не обязательное значение. Фактические условия могут требовать меньшей скорости.',e:'Главная идея — различать «разрешено до» и «безопасно сейчас».',m:'Путаете максимально разрешённую и безопасную скорость'},
+{t:'speed',q:'Почему безопасная дистанция зависит не только от скорости вашего автомобиля?',a:['Потому что цвет автомобиля впереди меняет тормозной путь','Потому что важны покрытие, видимость, реакция и возможное торможение впереди','Потому что дистанция определяется маркой автомобиля','Потому что дистанция важна только за городом'],c:1,r:'Запас расстояния нужен для реакции и торможения в конкретных условиях.',e:'Хороший ответ учитывает систему факторов, а не одно число.',m:'Недооцениваете факторы, влияющие на дистанцию'},
+{t:'speed',q:'После начала дождя покрытие стало скользким, а видимость ухудшилась. Какое изменение поведения наиболее обоснованно?',a:['Сохранить прежнюю скорость, если она не превышает лимит','Снизить скорость и увеличить запас дистанции','Сократить дистанцию, чтобы лучше видеть автомобиль впереди','Двигаться быстрее, чтобы меньше времени находиться под дождём'],c:1,r:'Ухудшение сцепления и видимости увеличивает требования к запасу времени и расстояния.',e:'Лимит скорости не гарантирует безопасного режима в изменившихся условиях.',m:'Не адаптируете скорость и дистанцию к условиям'},
+{t:'speed',q:'Вы видите препятствие поздно из-за ограниченной обзорности. Почему даже хорошая тормозная система не устраняет риск?',a:['Потому что автомобиль проходит расстояние ещё во время реакции водителя','Потому что тормоза работают только после полной остановки','Потому что тормозной путь не зависит от скорости','Потому что обзорность влияет только ночью'],c:0,r:'До начала торможения проходит время восприятия и реакции, за которое автомобиль продолжает движение.',e:'Это вопрос не про качество тормозов, а про полный остановочный процесс.',m:'Недооцениваете путь за время реакции'},
+{t:'special',q:'Позади приближается специальный автомобиль с включёнными специальными световыми и звуковыми сигналами. Какой общий принцип должен определить ваши действия?',a:['Продолжать движение без изменений, если у вас разрешающий сигнал','Создать условия для беспрепятственного проезда специального автомобиля, действуя безопасно','Резко остановиться в любой полосе','Увеличить скорость и уехать от него'],c:1,r:'Приоритет специального транспорта реализуется через безопасное предоставление возможности для его проезда.',e:'Задача не требует «резкого» действия. Требуется предсказуемо и безопасно освободить путь.',m:'Выбираете резкое действие вместо безопасного предоставления проезда'},
+{t:'special',q:'Можно ли считать включённый проблесковый маячок любого цвета достаточным основанием для того, чтобы автомобиль автоматически получил преимущество?',a:['Да, любой маячок даёт одинаковое преимущество','Нет, значение зависит от типа сигнала и предусмотренных правил его применения','Да, если автомобиль движется быстро','Да, если маячок виден издалека'],c:1,r:'Разные специальные световые сигналы имеют разное назначение; нельзя приписывать им одинаковый правовой эффект.',e:'Умный вопрос проверяет не узнавание цвета, а понимание, что назначение сигналов различается.',m:'Обобщаете значение специальных сигналов'},
+{t:'wording',q:'В вопросе спрашивается: «Обязан ли водитель…». Какой способ чтения снижает риск ошибки?',a:['Искать вариант, который просто выглядит безопаснее','Сначала определить, требуется ли именно обязательное действие, а не допустимое','Выбрать самый длинный ответ','Сразу вспоминать похожую картинку'],c:1,r:'Слова «обязан», «может», «разрешается», «запрещается» задают разные юридические условия ответа.',e:'Часто ошибка возникает не из-за незнания правила, а из-за подмены «обязан» на «может».',m:'Не различаете обязательное и допустимое действие'},
+{t:'wording',q:'Два варианта ответа кажутся почти одинаковыми, но один содержит дополнительное условие «только при…». Как лучше сравнить варианты?',a:['Выбрать более короткий','Сопоставить каждое условие варианта с точной формулировкой задачи','Выбрать тот, который чаще встречался раньше','Ориентироваться на первую часть предложения'],c:1,r:'Дополнительное условие может полностью изменить правовую корректность варианта.',e:'Это типичная экзаменационная ловушка: ответ выглядит знакомо, но одно ограничение делает его неверным.',m:'Пропускаете юридически значимые уточнения'},
+{t:'priority',q:'Вы подъезжаете к перекрёстку по дороге, обозначенной как главная. Перед перекрёстком работает регулировщик. Что определяет очередность проезда в первую очередь?',a:['Знак главной дороги','Указания регулировщика','Ширина вашей дороги','Расположение других автомобилей справа'],c:1,r:'При непосредственном регулировании движения сначала учитываются сигналы регулировщика.',e:'Знак не исчезает физически, но его значение в конкретный момент подчиняется более приоритетному регулированию.',m:'Не соблюдаете иерархию регулирования'},
+{t:'signals',q:'Разрешающий сигнал включился, но впереди пешеход ещё заканчивает переход по вашей траектории. Какой подход правильный?',a:['Начать движение немедленно, потому что сигнал уже разрешающий','Дождаться, пока движение можно начать без создания опасности','Подать звуковой сигнал и продолжить','Объехать пешехода по соседней полосе'],c:1,r:'Разрешающий сигнал не отменяет необходимость завершить конфликт с участником, уже находящимся на траектории.',e:'Правило проверяет способность отделить «разрешено начать движение» от «можно сделать это безопасно прямо сейчас».',m:'Воспринимаете зелёный сигнал как безусловную команду ехать'},
+{t:'manoeuvres',q:'Вы собираетесь перестроиться, а автомобиль в соседней полосе находится немного позади, но быстро сокращает дистанцию. Что нужно учитывать?',a:['Только его текущее положение','Его скорость сближения и возможность безопасно завершить перестроение','Только включён ли у вас поворотник','Только разрешённую скорость на дороге'],c:1,r:'Оценка манёвра должна учитывать динамику, а не только мгновенное положение автомобилей.',e:'Это более реалистичная задача: автомобиль может быть «сзади», но через секунду уже окажется рядом.',m:'Не учитываете скорость сближения при перестроении'},
+{t:'pedestrians',q:'Перед переходом обзор справа частично закрыт стоящим транспортным средством. Как это должно повлиять на ваши действия?',a:['Никак, если пешехода не видно','Следует учитывать возможность появления пешехода из закрытой зоны и увеличить запас реакции','Нужно быстрее проехать закрытую зону','Достаточно подать звуковой сигнал'],c:1,r:'Ограниченная обзорность увеличивает неопределённость и требует заранее учитывать скрытую опасность.',e:'ПДД-задачи высокого качества проверяют именно способность увидеть риск, которого пока физически не видно.',m:'Не учитываете скрытую опасность при ограниченной обзорности'},
+{t:'signs',q:'Вы видите знак, который разрешает движение в определённом направлении из вашей полосы, но дорожная ситуация впереди требует пересечения сплошной линии разметки. Как правильно анализировать ситуацию?',a:['Раз знак разрешает направление, разметку можно игнорировать','Нужно одновременно учитывать требования знака, разметки и фактическую возможность выполнить манёвр','Всегда важнее только разметка','Выполнить манёвр, если нет встречных автомобилей'],c:1,r:'Разные средства организации движения нужно рассматривать совместно; разрешённое направление не даёт права нарушить другое действующее ограничение.',e:'Сложность вопроса — в сочетании двух правил, а не в распознавании одного символа.',m:'Не объединяете несколько условий задачи'},
+{t:'stopping',q:'Вы планируете остановиться сразу после поворота. Место свободно, но автомобиль может закрыть обзор другим участникам. Какой вывод правильнее?',a:['Свободное место означает, что остановка допустима','Нужно оценить ограничения и то, не ухудшит ли остановка безопасность и обзорность','Можно остановиться, если включить аварийную сигнализацию','Можно остановиться, если это займёт меньше минуты'],c:1,r:'Продолжительность и наличие свободного места не заменяют оценку разрешённости и безопасности.',e:'Такие вопросы проверяют умение видеть последствия вашей остановки для других.',m:'Не оцениваете влияние остановки на обзорность'},
+{t:'speed',q:'Поток движется быстрее установленного ограничения. Как это влияет на допустимую скорость вашего автомобиля?',a:['Можно двигаться со скоростью потока независимо от ограничения','Ограничение продолжает действовать; скорость потока не отменяет его','Можно превысить не более чем на скорость соседнего автомобиля','Ограничение действует только на первый автомобиль в колонне'],c:1,r:'Поведение окружающих не изменяет установленные требования для вашего автомобиля.',e:'Социальное давление потока — не юридическое основание для выбора скорости.',m:'Ориентируетесь на поток вместо действующего ограничения'},
+{t:'special',q:'Специальный автомобиль приближается сзади, но безопасно освободить полосу прямо сейчас невозможно из-за автомобиля справа. Какой подход правильнее?',a:['Немедленно выполнить резкий манёвр вправо','Действовать предсказуемо и освободить путь при первой безопасной возможности','Полностью игнорировать специальный автомобиль','Ускориться выше разрешённой скорости'],c:1,r:'Предоставление преимущества не требует создавать новую аварийную ситуацию опасным манёвром.',e:'Правильное решение сочетает две обязанности: дать путь и не создать опасность.',m:'Выполняете требование без учёта безопасности манёвра'}
+];
+
+const STATEKEY='pdd_ai_next_v1';
+const DEFAULT={onboard:false,cat:'B',goal:14,explain:'simple',answered:0,correct:0,streak:0,lastDay:'',topics:{},mistakes:[],bookmarks:[],history:[],daily:[]};
+let S=Object.assign({},DEFAULT,JSON.parse(localStorage.getItem(STATEKEY)||'{}'));
+let session=null,timer=null,lastAnswer=null;
+
+function save(){localStorage.setItem(STATEKEY,JSON.stringify(S))}
+function toast(x){const t=document.getElementById('toast');t.textContent=x;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
+function topicStat(k){if(!S.topics[k])S.topics[k]={n:0,c:0,w:0};return S.topics[k]}
+function topicScore(k){const x=topicStat(k);return x.n?Math.max(5,Math.round(x.c/x.n*100)):50}
+function accuracy(){return S.answered?Math.round(S.correct/S.answered*100):0}
+function readiness(){const vals=Object.keys(TOPICS).map(topicScore);const avg=vals.reduce((a,b)=>a+b,0)/vals.length;const volume=Math.min(1,S.answered/120);return Math.min(99,Math.round(avg*.72+volume*28))}
+function weakTopic(){return Object.keys(TOPICS).sort((a,b)=>topicScore(a)-topicScore(b))[0]}
+function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
+function formatTime(s){s=Math.max(0,Math.round(s||0));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function updateStreak(){const d=new Date().toISOString().slice(0,10);if(S.lastDay===d)return;const prev=new Date(Date.now()-86400000).toISOString().slice(0,10);S.streak=S.lastDay===prev?S.streak+1:1;S.lastDay=d;save()}
+
+function init(){if(!S.onboard)document.getElementById('onboard').classList.add('active');updateStreak();render()}
+function finishOnboard(){S.cat=document.getElementById('onCat').value;S.goal=+document.getElementById('onGoal').value;S.onboard=true;save();document.getElementById('onboard').classList.remove('active');render()}
+function showPage(id){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.nav button').forEach(x=>x.classList.toggle('active',x.dataset.page===id));render();window.scrollTo(0,0)}
+
+function render(){
+ const r=readiness(),acc=accuracy(),weak=weakTopic();
+ document.getElementById('homePercent').textContent=r+'%';
+ document.getElementById('homeRing').style.background='conic-gradient(var(--green) '+(r*3.6)+'deg,#17344b 0deg)';
+ document.getElementById('continueSub').textContent='Тема: '+TOPICS[weak].name;
+ document.getElementById('continueCount').textContent=(S.answered%18)+' из 18';
+ document.getElementById('stAnswered').textContent=S.answered;
+ document.getElementById('stAccuracy').textContent=acc+'%';
+ document.getElementById('stStreak').textContent=S.streak||0;
+ document.getElementById('stMist').textContent=S.mistakes.length;
+ document.getElementById('topicsCat').textContent=S.cat;
+ document.getElementById('profileCat').value=S.cat;
+ document.getElementById('explainMode').value=S.explain;
+ document.getElementById('categoryRow').innerHTML=['B','A','C','D'].map(c=>'<div class="cat '+(S.cat===c?'active':'')+'" onclick="setCategory(\''+c+'\')"><b>'+c+'</b><span>'+({B:'Легковые авто',A:'Мотоциклы',C:'Грузовые',D:'Автобусы'}[c])+'</span></div>').join('');
+ renderTopics();renderAnalytics();
+}
+
+function renderTopics(){
+ document.getElementById('topicsList').innerHTML=Object.entries(TOPICS).map(([k,v])=>{
+   const x=topicStat(k),s=topicScore(k);
+   return '<div class="card topicItem" onclick="startTopic(\''+k+'\')"><div class="topicHead"><div><b>'+v.icon+' '+v.name+'</b><div class="topicMeta">'+x.n+' решено • '+x.w+' ошибок</div></div><span class="score">'+s+'%</span></div><div class="bar"><i style="width:'+s+'%"></i></div></div>';
+ }).join('');
+}
+
+function renderAnalytics(){
+ const r=readiness(),acc=accuracy();
+ document.getElementById('anaPercent').textContent=r+'%';
+ document.getElementById('anaRing').style.background='conic-gradient(var(--green) '+(r*3.6)+'deg,#163248 0deg)';
+ document.getElementById('anaAnswered').textContent=S.answered;
+ document.getElementById('anaCorrect').textContent=S.correct;
+ document.getElementById('anaAccuracy').textContent=acc+'%';
+ const sorted=Object.keys(TOPICS).sort((a,b)=>topicScore(a)-topicScore(b)).slice(0,5);
+ document.getElementById('weakList').innerHTML=sorted.map((k,i)=>{
+  const s=topicScore(k);const color=i<2?'#ff5d63':i<4?'#ff9f43':'#35df9e';
+  return '<div class="weakItem"><div class="weakRow"><span>'+TOPICS[k].icon+' '+TOPICS[k].name+'</span><div class="weakBar"><i style="width:'+s+'%;background:'+color+'"></i></div><b style="color:'+color+'">'+s+'%</b></div></div>';
+ }).join('');
+ const base=Math.max(25,Math.min(92,acc||42));const pts=[0,45,90,135,180,225,270,315,360].map((x,i)=>x+','+(112-Math.min(95,Math.max(15,base-25+i*4+(i%3)*5)))).join(' ');
+ document.getElementById('chartLine').setAttribute('points',pts);
+ document.getElementById('chartFill').setAttribute('points',pts+' 360,120 0,120');
+}
+
+function setCategory(c){S.cat=c;save();render();toast('Категория '+c+' выбрана')}
+function setExplain(v){S.explain=v;save();toast('Стиль объяснений сохранён')}
+
+function uniquePick(pool,n){const out=[];shuffle(pool).forEach(q=>{if(!out.includes(q))out.push(q)});return out.slice(0,Math.min(n,out.length))}
+function startPractice(){startSession('practice',uniquePick(Q,12))}
+function startSmart(){const w=weakTopic();startSession('smart',uniquePick(Q.filter(x=>x.t===w).concat(Q.filter(x=>x.t!==w)),10))}
+function startWeak(){const badIds=[...new Set(S.mistakes.slice().reverse().map(x=>x.idx))];let pool=badIds.map(i=>Q[i]).filter(Boolean);if(pool.length<8)pool=pool.concat(Q.filter(x=>x.t===weakTopic()));startSession('weak',uniquePick(pool,10))}
+function startSaved(){const pool=S.bookmarks.map(i=>Q[i]).filter(Boolean);if(!pool.length){toast('Избранное пока пустое');return}startSession('saved',uniquePick(pool,10))}
+function startTopicPicker(){showPage('topics')}
+function startTopic(k){startSession('topic',uniquePick(Q.filter(x=>x.t===k),12))}
+function startExam(){startSession('exam',uniquePick(Q,10))}
+
+function startSession(mode,questions){
+ session={mode,questions,index:0,answers:new Array(questions.length).fill(null),errors:0,correct:0,left:mode==='exam'?900:null,finished:false,start:Date.now()};
+ document.getElementById('questionScreen').classList.add('active');
+ if(mode==='exam'){clearInterval(timer);timer=setInterval(()=>{session.left--;renderQuestionMeta();if(session.left<=0)finishExam('time')},1000)}
+ renderQuestion();
+}
+function qIndexInMaster(q){return Q.indexOf(q)}
+function renderQuestionMeta(){
+ const total=session.questions.length;
+ document.getElementById('qCounter').textContent='Вопрос '+(session.index+1)+' из '+total;
+ document.getElementById('qTimer').textContent=session.mode==='exam'?'◷ '+formatTime(session.left):({practice:'Тренировка',smart:'Научи меня',weak:'Слабые темы',saved:'Избранное',topic:'Обучение'}[session.mode]||'Практика');
+}
+function renderQuestion(){
+ const q=session.questions[session.index],saved=session.answers[session.index];
+ renderQuestionMeta();
+ document.getElementById('qTopic').textContent=TOPICS[q.t].name;
+ const mi=qIndexInMaster(q);document.getElementById('bookmarkBtn').textContent=S.bookmarks.includes(mi)?'♥':'♡';
+ document.getElementById('questionText').textContent=q.q;
+ document.getElementById('answers').innerHTML=q.a.map((x,i)=>{
+   let cls='answer',mark='';
+   if(saved!==null){if(i===q.c){cls+=' correct';mark='✓'}else if(i===saved&&saved!==q.c){cls+=' wrong';mark='×'}}
+   return '<button class="'+cls+'" '+(saved!==null?'disabled':'')+' onclick="chooseAnswer('+i+')"><span class="letter">'+String.fromCharCode(65+i)+'</span><span>'+x+'</span><span class="mark">'+mark+'</span></button>';
+ }).join('');
+ document.getElementById('prevBtn').disabled=session.index===0;
+ document.getElementById('nextBtn').textContent=session.index===session.questions.length-1?'Завершить':'Следующий ›';
+ document.getElementById('nextBtn').disabled=session.mode!=='exam'&&saved===null;
+}
+function chooseAnswer(i){
+ if(session.answers[session.index]!==null)return;
+ const q=session.questions[session.index],ok=i===q.c,st=topicStat(q.t),mi=qIndexInMaster(q);
+ session.answers[session.index]=i;st.n++;S.answered++;
+ if(ok){session.correct++;S.correct++;st.c++}else{session.errors++;st.w++;S.mistakes.push({idx:mi,topic:q.t,m:q.m,date:new Date().toISOString()});if(S.mistakes.length>200)S.mistakes=S.mistakes.slice(-200)}
+ S.daily.push(ok?1:0);if(S.daily.length>120)S.daily=S.daily.slice(-120);save();lastAnswer={q,choice:i,correct:ok,master:mi};renderQuestion();
+ if(session.mode==='exam'){
+   if(!ok&&session.errors>=2){finishExam('second');return}
+   setTimeout(()=>{if(session.index===session.questions.length-1)finishExam('complete');else{session.index++;renderQuestion()}},260);
+ }else setTimeout(()=>openExplanation(),180);
+}
+function nextQuestion(){
+ if(session.mode==='exam'){if(session.answers[session.index]===null){toast('Сначала выбери ответ');return}}
+ if(session.index===session.questions.length-1){if(session.mode==='exam')finishExam('complete');else finishTraining();return}
+ session.index++;renderQuestion();
+}
+function prevQuestion(){if(session.index>0){session.index--;renderQuestion()}}
+function closeQuestion(){clearInterval(timer);document.getElementById('questionScreen').classList.remove('active');session=null;render()}
+
+function toggleBookmark(){const q=session.questions[session.index],mi=qIndexInMaster(q),p=S.bookmarks.indexOf(mi);if(p>=0)S.bookmarks.splice(p,1);else S.bookmarks.push(mi);save();renderQuestion();toast(p>=0?'Удалено из избранного':'Добавлено в избранное')}
+
+function openExplanation(){
+ const {q,choice,correct,master}=lastAnswer;
+ document.getElementById('questionScreen').classList.remove('active');
+ document.getElementById('explanationScreen').classList.add('active');
+ const box=document.getElementById('resultBox');box.className='resultBox'+(correct?'':' bad');box.innerHTML='<b class="'+(correct?'green':'red')+'">'+(correct?'✓ Правильный ответ: ':'× Ошибка. Правильный ответ: ')+String.fromCharCode(65+q.c)+'</b><div style="font-size:12px;color:#b9cad8;margin-top:5px">'+q.a[q.c]+'</div>';
+ let explanation=q.e;
+ if(!correct)explanation+='<br><br><b>Почему выбранный вариант не подходит:</b> '+wrongReason(q,choice);
+ if(S.explain==='brief')explanation=q.e;
+ if(S.explain==='deep')explanation=q.e+'<br><br><b>Логика решения:</b> сначала выдели факты из условия, затем определи, какое правило имеет приоритет, и только после этого сравни траектории участников.';
+ document.getElementById('explainText').innerHTML=explanation;
+ document.getElementById('ruleCard').innerHTML='<b>Ключевой принцип</b><div style="font-size:12px;line-height:1.5;margin-top:6px;color:#e6d6a3">'+q.r+'</div>';
+ document.getElementById('explainBookmark').textContent=S.bookmarks.includes(master)?'♥':'♡';
+ document.getElementById('aiReply').textContent='';
+}
+function wrongReason(q,choice){
+ if(choice===q.c)return 'Вы выбрали правильный вариант.';
+ return 'Вариант «'+q.a[choice]+'» не учитывает главное условие задачи. Типичная причина такой ошибки: '+q.m+'.';
+}
+function closeExplanation(){document.getElementById('explanationScreen').classList.remove('active');document.getElementById('questionScreen').classList.add('active')}
+function continueAfterExplain(){document.getElementById('explanationScreen').classList.remove('active');document.getElementById('questionScreen').classList.add('active');if(session.index===session.questions.length-1)finishTraining();else{session.index++;renderQuestion()}}
+function aiExplain(type){
+ const q=lastAnswer.q;let txt='';
+ if(type==='simple')txt='Представь, что ты решаешь задачу в три шага: 1) кто или что сейчас задаёт порядок движения; 2) пересекаются ли траектории; 3) кто должен изменить своё движение. Для этой задачи главное: '+q.r;
+ if(type==='why')txt='Твой вариант выглядит правдоподобно, но он пропускает более важное условие. '+wrongReason(q,lastAnswer.choice);
+ if(type==='remember')txt='Короткая памятка: «регулирование → приоритет → траектории → безопасность». Ошибка относится к типу: '+q.m+'.';
+ if(type==='similar')txt='Следующая похожая задача будет менять одно условие — знак, сигнал или положение участника. Это проверит, понял ли ты принцип, а не запомнил ответ.';
+ document.getElementById('aiReply').textContent=txt;
+}
+
+function finishTraining(){
+ const answered=session.answers.filter(x=>x!==null).length,good=session.correct;
+ document.getElementById('questionScreen').classList.remove('active');clearInterval(timer);
+ toast('Тренировка: '+good+'/'+answered+' правильных');session=null;render();showPage('analytics');
+}
+function finishExam(reason){
+ if(!session||session.finished)return;session.finished=true;clearInterval(timer);
+ const answered=session.answers.filter(x=>x!==null).length,pass=reason==='complete'&&answered===10&&session.errors<=1,sec=Math.max(0,900-session.left);
+ S.history.push({date:new Date().toISOString(),pass,errors:session.errors,answered,sec,reason});if(S.history.length>50)S.history=S.history.slice(-50);save();
+ document.getElementById('questionScreen').classList.remove('active');
+ toast(pass?'Экзамен сдан':'Экзамен не сдан');
+ session=null;render();showPage('analytics');
+}
+function resetProgress(){if(confirm('Сбросить весь прогресс обучения?')){localStorage.removeItem(STATEKEY);location.reload()}}
+
+init();
+</script>
+</body>
+</html>
