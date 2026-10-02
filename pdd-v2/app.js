@@ -106,32 +106,74 @@ function startExam(){startSession('exam',pick(Q,10))}
 function startSession(mode,questions){if(!questions.length)return toast('Для этого режима пока нет вопросов');session={mode,questions,index:0,answers:new Array(questions.length).fill(null),errors:0,correct:0,start:Date.now(),deadline:mode==='exam'?Date.now()+900000:null,finished:false};lockBodyScroll();$('questionScreen').classList.add('active');if(mode==='exam'){clearInterval(timer);timer=setInterval(tickExam,500)}renderQuestion()}
 function tickExam(){if(!session||session.mode!=='exam')return;const left=Math.ceil((session.deadline-Date.now())/1000);if(left<=0){finishExam('time');return}renderMeta()}
 function renderMeta(){const total=session.questions.length;$('questionCounter').textContent='Вопрос '+(session.index+1)+' из '+total;if(session.mode==='exam')$('questionTimer').textContent=formatTime(Math.ceil((session.deadline-Date.now())/1000));else $('questionTimer').textContent=({practice:'Тренировка',smart:'Научи меня',weak:'Слабые',saved:'Избранное',review:'Повторение',topic:'Обучение'}[session.mode]||'Практика')}
-function sceneLabel(s){return {yield:'Перекрёсток и приоритет',city:'Городской перекрёсток',residential:'Жилая улица',pedestrian:'Пешеходный переход',lane:'Динамика дорожного движения',rain:'Дождь и ограниченная видимость',none:'Текстовый вопрос'}[s]||'Дорожная ситуация'}
+function sceneLabel(s){return {yield:'Перекрёсток и приоритет',city:'Городской перекрёсток',residential:'Жилая улица',pedestrian:'Пешеходный переход',lane:'Динамика дорожного движения',rain:'Дождь и ограниченная видимость',signal:'Светофор и регулирование',stopping:'Остановка и стоянка',special:'Специальный транспорт',none:'Текстовый вопрос'}[s]||'Дорожная ситуация'}
+function imageKeyFor(q){
+ if(q.s==='signal')return'lane';
+ if(q.s==='stopping')return'yield';
+ if(q.s==='special')return'lane';
+ return q.s
+}
 function sceneVariant(q){
  const i=Math.max(0,masterIndex(q));
  const variants={
-  yield:[{p:'center center',z:'cover',o:'sign'},{p:'68% center',z:'125% auto',o:'junction'},{p:'30% center',z:'118% auto',o:'priority'}],
-  lane:[{p:'center center',z:'cover',o:'lanes'},{p:'18% center',z:'125% auto',o:'mirror'},{p:'72% center',z:'120% auto',o:'gap'}],
-  pedestrian:[{p:'center center',z:'cover',o:'crosswalk'},{p:'65% center',z:'125% auto',o:'hidden'},{p:'38% center',z:'118% auto',o:'ped'}],
-  rain:[{p:'center center',z:'cover',o:'rain'},{p:'48% 35%',z:'120% auto',o:'distance'},{p:'62% center',z:'115% auto',o:'visibility'}]
+  yield:[
+   {p:'50% 50%',z:'cover',o:'sign'},
+   {p:'58% 50%',z:'108% auto',o:'junction'},
+   {p:'42% 50%',z:'106% auto',o:'priority'},
+   {p:'52% 44%',z:'104% auto',o:'paths'}
+  ],
+  lane:[
+   {p:'50% 50%',z:'cover',o:'lanes'},
+   {p:'40% 50%',z:'107% auto',o:'mirror'},
+   {p:'60% 50%',z:'106% auto',o:'gap'},
+   {p:'50% 42%',z:'104% auto',o:'merge'}
+  ],
+  pedestrian:[
+   {p:'50% 50%',z:'cover',o:'crosswalk'},
+   {p:'58% 50%',z:'108% auto',o:'hidden'},
+   {p:'43% 50%',z:'106% auto',o:'ped'},
+   {p:'50% 44%',z:'104% auto',o:'conflict'}
+  ],
+  rain:[
+   {p:'50% 50%',z:'cover',o:'rain'},
+   {p:'47% 46%',z:'107% auto',o:'distance'},
+   {p:'56% 50%',z:'105% auto',o:'visibility'},
+   {p:'44% 50%',z:'104% auto',o:'braking'}
+  ]
  };
- const a=variants[q.s]||[{p:'center center',z:'cover',o:''}];
- return a[i%a.length]
+ const k=imageKeyFor(q),arr=variants[k]||[{p:'center',z:'cover',o:''}];
+ return arr[i%arr.length]
 }
-function sceneOverlay(type){
- if(!type)return'';
- if(type==='mirror')return'<span class="visual-marker vm-left">контроль слепой зоны</span>';
- if(type==='gap')return'<span class="visual-arrow va-right">→</span>';
- if(type==='crosswalk'||type==='ped')return'<span class="visual-zone vz-cross"></span>';
- if(type==='hidden')return'<span class="visual-marker vm-right">закрытая зона обзора</span>';
- if(type==='rain'||type==='visibility')return'<span class="visual-marker vm-bottom">видимость • сцепление</span>';
- if(type==='distance')return'<span class="visual-arrow va-center">↕</span>';
- if(type==='sign'||type==='priority')return'<span class="visual-zone vz-sign"></span>';
- if(type==='junction')return'<span class="visual-arrow va-center">↔</span>';
- if(type==='lanes')return'<span class="visual-arrow va-right">↗</span>';
- return''
+function sceneOverlay(type,analysis){
+ let x='';
+ if(type==='mirror')x='<span class="visual-marker vm-left">слепая зона</span>';
+ else if(type==='gap')x='<span class="visual-arrow va-right">→</span><span class="visual-marker vm-left">скорость сближения</span>';
+ else if(type==='merge')x='<span class="visual-arrow va-right">↗</span>';
+ else if(type==='crosswalk'||type==='ped')x='<span class="visual-zone vz-cross"></span>';
+ else if(type==='hidden')x='<span class="visual-marker vm-right">закрытая зона обзора</span>';
+ else if(type==='conflict')x='<span class="visual-zone vz-cross"></span><span class="visual-arrow va-center">↘</span>';
+ else if(type==='rain'||type==='visibility')x='<span class="visual-marker vm-bottom">видимость • сцепление</span>';
+ else if(type==='distance')x='<span class="visual-arrow va-center">↕</span><span class="visual-marker vm-left">запас дистанции</span>';
+ else if(type==='braking')x='<span class="visual-marker vm-bottom">путь реакции + торможение</span>';
+ else if(type==='sign'||type==='priority')x='<span class="visual-zone vz-sign"></span>';
+ else if(type==='junction'||type==='paths')x='<span class="visual-arrow va-center">↔</span>';
+ else if(type==='lanes')x='<span class="visual-arrow va-right">↗</span>';
+ if(analysis&&lastAnswer){
+   x+='<span class="scene-analysis-tag '+(lastAnswer.correct?'good':'bad')+'">'+(lastAnswer.correct?'✓ принцип применён верно':'× здесь была ошибка')+'</span>';
+   x+='<span class="scene-tip">'+escapeHtml(lastAnswer.q.r)+'</span>';
+ }
+ return x
 }
-function renderQuestion(){const q=session.questions[session.index],ans=session.answers[session.index],exam=session.mode==='exam';renderMeta();$('questionTopic').textContent=TOPICS[q.t].name;const mi=masterIndex(q);$('bookmark').textContent=S.bookmarks.includes(mi)?'♥':'♡';const img=(window.SCENE_IMAGES||{})[q.s],sv=sceneVariant(q);$('scene').classList.toggle('has-photo',!!img);$('scene').style.backgroundImage=img?'linear-gradient(180deg,rgba(0,0,0,.01),rgba(0,0,0,.28)),url('+img+')':'';$('scene').style.backgroundPosition=sv.p;$('scene').style.backgroundSize=sv.z;$('scene').innerHTML='<span class="scene-label">'+sceneLabel(q.s)+'</span>'+sceneOverlay(sv.o);$('scene').style.display=q.s==='none'?'none':'block';$('questionText').textContent=q.q;$('answers').innerHTML=q.a.map((a,i)=>{let cls='answer',mark='';if(ans!==null&&!exam){if(i===q.c){cls+=' correct';mark='✓'}else if(i===ans){cls+=' wrong';mark='×'}}return '<button class="'+cls+'" '+(ans!==null?'disabled':'')+' onclick="answerQuestion('+i+')"><span class="letter">'+String.fromCharCode(65+i)+'</span><span>'+a+'</span><span>'+mark+'</span></button>'}).join('');$('prevQuestion').disabled=session.index===0||exam;$('nextQuestion').disabled=ans===null;$('nextQuestion').textContent=session.index===session.questions.length-1?'Завершить':'Далее ›'}
+function applyScene(el,q,analysis=false){
+ const k=imageKeyFor(q),img=(window.SCENE_IMAGES||{})[k],sv=sceneVariant(q);
+ el.classList.remove('zoomed');el.classList.toggle('has-photo',!!img);
+ el.style.backgroundImage=img?'linear-gradient(180deg,rgba(0,0,0,.01),rgba(0,0,0,.22)),url('+img+')':'';
+ el.style.backgroundPosition=sv.p;el.style.backgroundSize=sv.z;
+ el.innerHTML='<span class="scene-label">'+sceneLabel(q.s)+'</span>'+sceneOverlay(sv.o,analysis);
+ el.style.display=q.s==='none'?'none':'block'
+}
+function toggleSceneZoom(el){if(!el||el.style.display==='none')return;el.classList.toggle('zoomed')}
+function renderQuestion(){const q=session.questions[session.index],ans=session.answers[session.index],exam=session.mode==='exam';renderMeta();$('questionTopic').textContent=TOPICS[q.t].name;const mi=masterIndex(q);$('bookmark').textContent=S.bookmarks.includes(mi)?'♥':'♡';applyScene($('scene'),q,false);$('questionText').textContent=q.q;$('answers').innerHTML=q.a.map((a,i)=>{let cls='answer',mark='';if(ans!==null&&!exam){if(i===q.c){cls+=' correct';mark='✓'}else if(i===ans){cls+=' wrong';mark='×'}}return '<button class="'+cls+'" '+(ans!==null?'disabled':'')+' onclick="answerQuestion('+i+')"><span class="letter">'+String.fromCharCode(65+i)+'</span><span>'+a+'</span><span>'+mark+'</span></button>'}).join('');$('prevQuestion').disabled=session.index===0||exam;$('nextQuestion').disabled=ans===null;$('nextQuestion').textContent=session.index===session.questions.length-1?'Завершить':'Далее ›'}
 function answerQuestion(i){if(session.answers[session.index]!==null)return;const q=session.questions[session.index],mi=masterIndex(q),ok=i===q.c,st=stat(q.t);session.answers[session.index]=i;markActivity();S.answered++;S.todayCount++;st.n++;if(ok){S.correct++;session.correct++;st.c++;if(session.mode==='review')scheduleReview(mi,false)}else{session.errors++;st.w++;S.mistakes.push({idx:mi,topic:q.t,m:q.m,choice:i,correct:q.c,date:new Date().toISOString()});if(S.mistakes.length>200)S.mistakes=S.mistakes.slice(-200);scheduleReview(mi,true)}save();lastAnswer={q,choice:i,correct:ok,idx:mi};if(session.mode==='exam'){if(!ok&&session.errors>=2){finishExam('second');return}if(session.index===session.questions.length-1){finishExam('complete');return}session.index++;renderQuestion();return}renderQuestion();setTimeout(openExplanation,120)}
 function previousQuestion(){if(session&&session.index>0){session.index--;renderQuestion()}}
 function nextQuestion(){if(!session)return;if(session.answers[session.index]===null)return toast('Сначала выбери ответ');if(session.index===session.questions.length-1){session.mode==='exam'?finishExam('complete'):finishTraining();return}session.index++;renderQuestion()}
@@ -139,7 +181,7 @@ function attemptCloseQuestion(){if(session&&session.mode==='exam'&&session.answe
 function closeQuestion(){clearInterval(timer);$('questionScreen').classList.remove('active');session=null;unlockBodyScroll();render()}
 function toggleBookmark(){if(!session)return;const idx=masterIndex(session.questions[session.index]),p=S.bookmarks.indexOf(idx);if(p>=0)S.bookmarks.splice(p,1);else S.bookmarks.push(idx);save();renderQuestion();toast(p>=0?'Удалено из избранного':'Добавлено в избранное')}
 
-function openExplanation(){const x=lastAnswer;if(!x)return;$('questionScreen').classList.remove('active');$('explainScreen').classList.add('active');$('answerVerdict').className='verdict'+(x.correct?'':' bad');$('answerVerdict').innerHTML='<b class="'+(x.correct?'c-green':'c-red')+'">'+(x.correct?'✓ Правильный ответ':'× Ошибка')+'</b><br>'+String.fromCharCode(65+x.q.c)+'. '+x.q.a[x.q.c];let text=x.q.e;if(!x.correct)text+='<br><br><b>Почему выбранный вариант не подходит:</b> '+wrongReason(x.q,x.choice);if(S.explain==='brief')text=x.q.e;if(S.explain==='deep')text+='<br><br><b>Алгоритм:</b> выдели факты → определи главное правило → проверь конфликт траекторий → оцени безопасность.';$('explanationText').innerHTML=text;$('ruleBox').innerHTML='<b>Ключевой принцип</b><br>'+x.q.r;$('miniAIReply').textContent=''}
+function openExplanation(){const x=lastAnswer;if(!x)return;$('questionScreen').classList.remove('active');$('explainScreen').classList.add('active');$('answerVerdict').className='verdict'+(x.correct?'':' bad');$('answerVerdict').innerHTML='<b class="'+(x.correct?'c-green':'c-red')+'">'+(x.correct?'✓ Правильный ответ':'× Ошибка')+'</b><br>'+String.fromCharCode(65+x.q.c)+'. '+x.q.a[x.q.c];let text=x.q.e;if(!x.correct)text+='<br><br><b>Почему выбранный вариант не подходит:</b> '+wrongReason(x.q,x.choice);if(S.explain==='brief')text=x.q.e;if(S.explain==='deep')text+='<br><br><b>Алгоритм:</b> выдели факты → определи главное правило → проверь конфликт траекторий → оцени безопасность.';$('explanationText').innerHTML=text;applyScene($('explainScene'),x.q,true);$('explainSceneHint').style.display=x.q.s==='none'?'none':'block';$('ruleBox').innerHTML='<b>Ключевой принцип</b><br>'+x.q.r;$('miniAIReply').textContent=''}
 function wrongReason(q,c){return c===q.c?'Выбран правильный вариант.':'Вариант «'+q.a[c]+'» не учитывает главное условие. Типичная ошибка: '+q.m+'.'}
 function closeExplanation(){$('explainScreen').classList.remove('active');$('questionScreen').classList.add('active')}
 function continueAfterExplanation(){$('explainScreen').classList.remove('active');$('questionScreen').classList.add('active');if(session.index===session.questions.length-1)finishTraining();else{session.index++;renderQuestion()}}
