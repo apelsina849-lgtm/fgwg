@@ -51,9 +51,9 @@ const KB=[
 ];
 
 const KEY='pdd_ai_v2_state';
-const DEFAULT={version:2,onboard:false,cat:'B',goal:14,explain:'simple',dailyGoal:10,answered:0,correct:0,streak:0,lastDay:'',todayCount:0,todayDate:'',topics:{},mistakes:[],bookmarks:[],history:[],reviews:[],chat:[]};
-function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY)||'{}');return {...DEFAULT,...x,topics:x.topics||{},mistakes:x.mistakes||[],bookmarks:x.bookmarks||[],history:x.history||[],reviews:x.reviews||[],chat:x.chat||[]}}catch(e){return {...DEFAULT}}}
-let S=loadState(),session=null,timer=null,lastAnswer=null,lastResult=null,topicFilter='all';
+const DEFAULT={version:22,onboard:false,cat:'B',goal:14,explain:'simple',dailyGoal:10,answered:0,correct:0,streak:0,lastDay:'',todayCount:0,todayDate:'',topics:{},mistakes:[],bookmarks:[],history:[],reviews:[],chat:[],agentMemory:{topic:null,intent:null,lastQuestion:null,awaitingCheck:false}};
+function loadState(){try{const x=JSON.parse(localStorage.getItem(KEY)||'{}');return {...DEFAULT,...x,topics:x.topics||{},mistakes:x.mistakes||[],bookmarks:x.bookmarks||[],history:x.history||[],reviews:x.reviews||[],chat:x.chat||[],agentMemory:{...DEFAULT.agentMemory,...(x.agentMemory||{})}}}catch(e){return {...DEFAULT,agentMemory:{...DEFAULT.agentMemory}}}}
+let S=loadState(),session=null,timer=null,lastAnswer=null,lastResult=null,topicFilter='all',bodyScrollY=0;
 const $=id=>document.getElementById(id);
 
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
@@ -70,6 +70,8 @@ function resetToday(){const d=new Date().toISOString().slice(0,10);if(S.todayDat
 function dueReviews(){const now=Date.now();return S.reviews.filter(x=>x.due<=now).sort((a,b)=>a.due-b.due)}
 function scheduleReview(idx,wrong=true){let r=S.reviews.find(x=>x.idx===idx);if(!r){r={idx,level:0,due:Date.now()};S.reviews.push(r)}if(wrong){r.level=0;r.due=Date.now()+10*60*1000}else{r.level=Math.min(4,(r.level||0)+1);const gaps=[10*60*1000,864e5,3*864e5,7*864e5,14*864e5];r.due=Date.now()+gaps[r.level]}save()}
 
+function lockBodyScroll(){if(document.body.classList.contains('scroll-locked'))return;bodyScrollY=window.scrollY||window.pageYOffset||0;document.body.style.top='-'+bodyScrollY+'px';document.body.classList.add('scroll-locked')}
+function unlockBodyScroll(){if(!document.body.classList.contains('scroll-locked'))return;document.body.classList.remove('scroll-locked');document.body.style.top='';window.scrollTo(0,bodyScrollY||0)}
 function init(){resetToday();if(!S.onboard)$('onboard').classList.add('active');if(!S.chat.length){S.chat=[{role:'agent',text:'Привет. Я AI‑агент ПДД. Могу объяснить правило простыми словами, разобрать последнюю ошибку или подобрать тренировку по твоему слабому месту.'}];save()}render()}
 function finishOnboard(){S.cat=$('onCat').value;S.goal=+$('onGoal').value;S.onboard=true;save();$('onboard').classList.remove('active');render()}
 function showPage(id){document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$(id).classList.add('active');document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.toggle('active',x.dataset.page===id));render();scrollTo(0,0)}
@@ -90,16 +92,16 @@ function startSaved(){const p=S.bookmarks.map(i=>Q[i]).filter(Boolean);if(!p.len
 function startDue(){const p=dueReviews().map(r=>Q[r.idx]).filter(Boolean);if(!p.length)return toast('Повторений пока нет');startSession('review',p.slice(0,10))}
 function startTopic(t){startSession('topic',pick(Q.filter(q=>q.t===t),10))}
 function startExam(){startSession('exam',pick(Q,10))}
-function startSession(mode,questions){if(!questions.length)return toast('Для этого режима пока нет вопросов');session={mode,questions,index:0,answers:new Array(questions.length).fill(null),errors:0,correct:0,start:Date.now(),deadline:mode==='exam'?Date.now()+900000:null,finished:false};$('questionScreen').classList.add('active');if(mode==='exam'){clearInterval(timer);timer=setInterval(tickExam,500)}renderQuestion()}
+function startSession(mode,questions){if(!questions.length)return toast('Для этого режима пока нет вопросов');session={mode,questions,index:0,answers:new Array(questions.length).fill(null),errors:0,correct:0,start:Date.now(),deadline:mode==='exam'?Date.now()+900000:null,finished:false};lockBodyScroll();$('questionScreen').classList.add('active');if(mode==='exam'){clearInterval(timer);timer=setInterval(tickExam,500)}renderQuestion()}
 function tickExam(){if(!session||session.mode!=='exam')return;const left=Math.ceil((session.deadline-Date.now())/1000);if(left<=0){finishExam('time');return}renderMeta()}
 function renderMeta(){const total=session.questions.length;$('questionCounter').textContent='Вопрос '+(session.index+1)+' из '+total;if(session.mode==='exam')$('questionTimer').textContent=formatTime(Math.ceil((session.deadline-Date.now())/1000));else $('questionTimer').textContent=({practice:'Тренировка',smart:'Научи меня',weak:'Слабые',saved:'Избранное',review:'Повторение',topic:'Обучение'}[session.mode]||'Практика')}
 function sceneLabel(s){return {yield:'Нерегулируемый перекрёсток',city:'Городской перекрёсток',residential:'Жилая улица',pedestrian:'Пешеходный переход',lane:'Многополосная дорога',rain:'Дождь и ограниченная видимость',none:'Текстовый вопрос'}[s]||'Дорожная ситуация'}
 function renderQuestion(){const q=session.questions[session.index],ans=session.answers[session.index],exam=session.mode==='exam';renderMeta();$('questionTopic').textContent=TOPICS[q.t].name;const mi=masterIndex(q);$('bookmark').textContent=S.bookmarks.includes(mi)?'♥':'♡';const img=(window.SCENE_IMAGES||{})[q.s];$('scene').classList.toggle('has-photo',!!img);$('scene').style.backgroundImage=img?'linear-gradient(180deg,rgba(0,0,0,.02),rgba(0,0,0,.30)),url('+img+')':'';$('scene').innerHTML='<span class="scene-label">'+sceneLabel(q.s)+'</span>';$('scene').style.display=q.s==='none'?'none':'block';$('questionText').textContent=q.q;$('answers').innerHTML=q.a.map((a,i)=>{let cls='answer',mark='';if(ans!==null&&!exam){if(i===q.c){cls+=' correct';mark='✓'}else if(i===ans){cls+=' wrong';mark='×'}}return '<button class="'+cls+'" '+(ans!==null?'disabled':'')+' onclick="answerQuestion('+i+')"><span class="letter">'+String.fromCharCode(65+i)+'</span><span>'+a+'</span><span>'+mark+'</span></button>'}).join('');$('prevQuestion').disabled=session.index===0||exam;$('nextQuestion').disabled=ans===null;$('nextQuestion').textContent=session.index===session.questions.length-1?'Завершить':'Далее ›'}
-function answerQuestion(i){if(session.answers[session.index]!==null)return;const q=session.questions[session.index],mi=masterIndex(q),ok=i===q.c,st=stat(q.t);session.answers[session.index]=i;markActivity();S.answered++;S.todayCount++;st.n++;if(ok){S.correct++;session.correct++;st.c++;if(session.mode==='review')scheduleReview(mi,false)}else{session.errors++;st.w++;S.mistakes.push({idx:mi,topic:q.t,m:q.m,date:new Date().toISOString()});if(S.mistakes.length>200)S.mistakes=S.mistakes.slice(-200);scheduleReview(mi,true)}save();lastAnswer={q,choice:i,correct:ok,idx:mi};if(session.mode==='exam'){if(!ok&&session.errors>=2){finishExam('second');return}if(session.index===session.questions.length-1){finishExam('complete');return}session.index++;renderQuestion();return}renderQuestion();setTimeout(openExplanation,120)}
+function answerQuestion(i){if(session.answers[session.index]!==null)return;const q=session.questions[session.index],mi=masterIndex(q),ok=i===q.c,st=stat(q.t);session.answers[session.index]=i;markActivity();S.answered++;S.todayCount++;st.n++;if(ok){S.correct++;session.correct++;st.c++;if(session.mode==='review')scheduleReview(mi,false)}else{session.errors++;st.w++;S.mistakes.push({idx:mi,topic:q.t,m:q.m,choice:i,correct:q.c,date:new Date().toISOString()});if(S.mistakes.length>200)S.mistakes=S.mistakes.slice(-200);scheduleReview(mi,true)}save();lastAnswer={q,choice:i,correct:ok,idx:mi};if(session.mode==='exam'){if(!ok&&session.errors>=2){finishExam('second');return}if(session.index===session.questions.length-1){finishExam('complete');return}session.index++;renderQuestion();return}renderQuestion();setTimeout(openExplanation,120)}
 function previousQuestion(){if(session&&session.index>0){session.index--;renderQuestion()}}
 function nextQuestion(){if(!session)return;if(session.answers[session.index]===null)return toast('Сначала выбери ответ');if(session.index===session.questions.length-1){session.mode==='exam'?finishExam('complete'):finishTraining();return}session.index++;renderQuestion()}
 function attemptCloseQuestion(){if(session&&session.mode==='exam'&&session.answers.some(x=>x!==null)){if(!confirm('Завершить экзамен досрочно? Попытка будет сохранена как незавершённая.'))return;finishExam('abandoned');return}closeQuestion()}
-function closeQuestion(){clearInterval(timer);$('questionScreen').classList.remove('active');session=null;render()}
+function closeQuestion(){clearInterval(timer);$('questionScreen').classList.remove('active');session=null;unlockBodyScroll();render()}
 function toggleBookmark(){if(!session)return;const idx=masterIndex(session.questions[session.index]),p=S.bookmarks.indexOf(idx);if(p>=0)S.bookmarks.splice(p,1);else S.bookmarks.push(idx);save();renderQuestion();toast(p>=0?'Удалено из избранного':'Добавлено в избранное')}
 
 function openExplanation(){const x=lastAnswer;if(!x)return;$('questionScreen').classList.remove('active');$('explainScreen').classList.add('active');$('answerVerdict').className='verdict'+(x.correct?'':' bad');$('answerVerdict').innerHTML='<b class="'+(x.correct?'c-green':'c-red')+'">'+(x.correct?'✓ Правильный ответ':'× Ошибка')+'</b><br>'+String.fromCharCode(65+x.q.c)+'. '+x.q.a[x.q.c];let text=x.q.e;if(!x.correct)text+='<br><br><b>Почему выбранный вариант не подходит:</b> '+wrongReason(x.q,x.choice);if(S.explain==='brief')text=x.q.e;if(S.explain==='deep')text+='<br><br><b>Алгоритм:</b> выдели факты → определи главное правило → проверь конфликт траекторий → оцени безопасность.';$('explanationText').innerHTML=text;$('ruleBox').innerHTML='<b>Ключевой принцип</b><br>'+x.q.r;$('miniAIReply').textContent=''}
@@ -111,14 +113,155 @@ function miniAI(type){if(!lastAnswer)return;const q=lastAnswer.q;let t='';if(typ
 function finishTraining(){const answered=session.answers.filter(x=>x!==null).length;lastResult={pass:true,title:'Тренировка завершена',subtitle:'Правильно '+session.correct+' из '+answered+'. Следующая адаптивная сессия учтёт эти ответы.',errors:session.errors,answered,sec:Math.round((Date.now()-session.start)/1000),wrong:session.answers.map((x,i)=>x!==null&&x!==session.questions[i].c?masterIndex(session.questions[i]):null).filter(x=>x!==null)};clearInterval(timer);$('questionScreen').classList.remove('active');showResult();session=null;render()}
 function finishExam(reason){if(!session||session.finished)return;session.finished=true;clearInterval(timer);const answered=session.answers.filter(x=>x!==null).length,left=Math.max(0,Math.ceil((session.deadline-Date.now())/1000)),sec=900-left,pass=reason==='complete'&&answered===10&&session.errors<=1;const rec={date:new Date().toISOString(),pass,errors:session.errors,answered,sec,reason};S.history.push(rec);if(S.history.length>50)S.history=S.history.slice(-50);save();lastResult={pass,title:pass?'Экзамен сдан':'Экзамен не сдан',subtitle:pass?'Допущено не более одной ошибки. Отличная попытка.':reason==='second'?'Вторая ошибка — экзамен автоматически завершён.':reason==='time'?'Время истекло.':reason==='abandoned'?'Попытка завершена досрочно.':'Попытка завершена.',errors:session.errors,answered,sec,wrong:session.answers.map((x,i)=>x!==null&&x!==session.questions[i].c?masterIndex(session.questions[i]):null).filter(x=>x!==null)};$('questionScreen').classList.remove('active');showResult();session=null;render()}
 function showResult(){const r=lastResult;$('resultIcon').textContent=r.pass?'✓':'×';$('resultIcon').className='result-icon'+(r.pass?'':' fail');$('resultTitle').textContent=r.title;$('resultSubtitle').textContent=r.subtitle;$('resultMetrics').innerHTML='<div class="surface"><b>'+r.answered+'</b><small>ответов</small></div><div class="surface"><b>'+r.errors+'</b><small>ошибок</small></div><div class="surface"><b>'+formatTime(r.sec)+'</b><small>время</small></div>';$('resultReview').innerHTML=r.wrong.length?'<div class="surface result-review"><b>Что повторить:</b><br>'+[...new Set(r.wrong.map(i=>TOPICS[Q[i].t].name))].join(' • ')+'</div>':'<div class="surface result-review"><b class="c-green">Ошибок нет.</b> Закрепи результат на новых формулировках.</div>';$('resultReviewBtn').style.display=r.wrong.length?'block':'none';$('resultScreen').classList.add('active')}
-function closeResult(){$('resultScreen').classList.remove('active');showPage('home')}
+function closeResult(){$('resultScreen').classList.remove('active');unlockBodyScroll();showPage('home')}
 function reviewLastResult(){if(!lastResult||!lastResult.wrong.length)return;const p=[...new Set(lastResult.wrong)].map(i=>Q[i]);$('resultScreen').classList.remove('active');startSession('review',p)}
 function resetProgress(){if(confirm('Удалить локальный прогресс, историю и чат?')){localStorage.removeItem(KEY);location.reload()}}
 
-function renderAgent(){const w=weakTopic();$('agentFocus').textContent='Слабее всего: '+TOPICS[w].name+' — '+score(w)+'%';$('agentFocusText').textContent=dueReviews().length?'Есть '+dueReviews().length+' вопрос(а) для повторения. Можешь попросить меня объяснить их.':'Спроси правило или попроси составить тренировку.';$('chat').innerHTML=S.chat.slice(-30).map((m,i)=>'<div class="msg '+m.role+'">'+escapeHtml(m.text)+(m.topic?'<div class="actions"><button onclick="startTopic(\''+m.topic+'\')">Тренировать тему</button></div>':'')+'</div>').join('');setTimeout(()=>{$('chat').scrollTop=$('chat').scrollHeight},0)}
+function renderAgent(){
+ const w=weakTopic(),due=dueReviews().length;
+ $('agentFocus').textContent='Слабее всего: '+TOPICS[w].name+' — '+score(w)+'%';
+ $('agentFocusText').textContent=due?'Есть '+due+' вопрос(а) для интервального повторения. Агент учитывает их в рекомендациях.':'Агент учитывает категорию '+S.cat+', историю ошибок и текущую готовность '+readiness()+'%.';
+ $('chat').innerHTML=S.chat.slice(-40).map(m=>{
+   const actions=(m.actions||[]).map(a=>'<button onclick="agentAction(\''+a.cmd+'\',\''+(a.arg||'')+'\')">'+escapeHtml(a.label)+'</button>').join('');
+   const meta=m.meta?'<span class="msg-meta">'+escapeHtml(m.meta)+'</span>':'';
+   return '<div class="msg '+m.role+'">'+escapeHtml(m.text)+(actions?'<div class="actions">'+actions+'</div>':'')+meta+'</div>';
+ }).join('');
+ setTimeout(()=>{const c=$('chat');c.scrollTop=c.scrollHeight},0)
+}
 function escapeHtml(x){return String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function askPreset(t){$('agentInput').value=t;sendAgent()}
 function agentKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendAgent()}}
-async function sendAgent(){const input=$('agentInput'),q=input.value.trim();if(!q)return;input.value='';S.chat.push({role:'user',text:q});const answer=await agentAnswer(q);S.chat.push({role:'agent',text:answer.text,topic:answer.topic||null});if(S.chat.length>60)S.chat=S.chat.slice(-60);save();renderAgent()}
-async function agentAnswer(q){const low=q.toLowerCase();if(/последн.*ошиб|ошиб.*последн/.test(low)){const m=S.mistakes.at(-1);if(!m)return{text:'У тебя пока нет сохранённых ошибок. Пройди несколько вопросов — после этого я смогу разобрать конкретную ситуацию.'};const x=Q[m.idx];return{text:'Последняя ошибка была в теме «'+TOPICS[x.t].name+'». '+x.e+' Ключевой принцип: '+x.r+' Типичная причина: '+x.m+'.',topic:x.t}}if(/слаб|где.*ошиб|что.*повтор/.test(low)){const w=weakTopic();return{text:'Сейчас самая слабая тема — «'+TOPICS[w].name+'»: '+score(w)+'%. Я бы начал с короткой тренировки по этой теме, а затем повторил вопросы, на которых уже были ошибки.',topic:w}}if(/подготов|план|экзамен/.test(low)){const r=readiness(),d=S.goal||14,w=weakTopic();return{text:'Текущая оценка готовности — '+r+'%. На ближайший цикл: 1) ежедневно '+S.dailyGoal+' вопросов; 2) сначала «'+TOPICS[w].name+'»; 3) закрывать все вопросы из умного повторения; 4) после этого сдавать полный экзамен. Цель в профиле: '+(d?d+' дней':'без даты')+'.',topic:w}}let best=null,bestScore=0;for(const k of KB){let sc=0;k.keys.forEach(x=>{if(low.includes(x))sc+=2});const words=low.split(/[^а-яёa-z0-9]+/).filter(x=>x.length>3);words.forEach(w=>{if(k.text.toLowerCase().includes(w)||k.title.toLowerCase().includes(w))sc++});if(sc>bestScore){bestScore=sc;best=k}}if(best&&bestScore>0)return{text:best.title+': '+best.text+' Если хочешь, открой тренировку — я подберу вопросы именно по этой теме.',topic:best.topic};const words=low.split(/[^а-яёa-z0-9]+/).filter(x=>x.length>3);let ranked=Q.map((x,i)=>({x,i,s:words.reduce((n,w)=>n+(x.q.toLowerCase().includes(w)?2:0)+(x.e.toLowerCase().includes(w)?1:0)+(x.r.toLowerCase().includes(w)?1:0),0)})).sort((a,b)=>b.s-a.s);if(ranked[0]&&ranked[0].s>1){const x=ranked[0].x;return{text:'Ближе всего твой вопрос относится к теме «'+TOPICS[x.t].name+'». '+x.r+' '+x.e,topic:x.t}}return{text:'Я пока не хочу придумывать норму, которой нет в моей проверенной локальной базе. Переформулируй вопрос через конкретную ситуацию — кто куда едет, какой знак или сигнал действует. Тогда я смогу разобрать логику точнее.'}}
+function normalize(s){return String(s||'').toLowerCase().replace(/ё/g,'е').replace(/[^а-яa-z0-9\s-]/g,' ').replace(/\s+/g,' ').trim()}
+function tokens(s){return normalize(s).split(' ').filter(w=>w.length>2)}
+const TOPIC_ALIASES={
+ priority:['перекрест','приоритет','главн','уступ','помех','равнознач','круг'],
+ signals:['светофор','регулировщик','сигнал','зелен','желт','красн'],
+ signs:['знак','размет','полос','навигатор','временн'],
+ pedestrians:['пешеход','переход','велосипед','самокат'],
+ manoeuvres:['перестро','маневр','поворот','разворот','обгон','слеп'],
+ stopping:['останов','стоян','парков'],
+ speed:['скорост','дистанц','тормоз','дожд','видим','скольз'],
+ special:['спец','маяч','сирен','скорая','пожарн'],
+ wording:['обязан','может','разреш','запрещ','формулиров','ответ']
+};
+function detectTopic(text){
+ const n=normalize(text);let best=null,bestScore=0;
+ for(const [topic,arr] of Object.entries(TOPIC_ALIASES)){let s=0;arr.forEach(k=>{if(n.includes(k))s+=3});if(S.agentMemory.topic===topic&&/^(а|но|почему|тогда|если|а если|что если)/.test(n))s+=2;if(s>bestScore){bestScore=s;best=topic}}
+ return bestScore?best:null
+}
+function detectIntent(text){
+ const n=normalize(text);
+ if(/последн.*ошиб|ошиб.*последн/.test(n))return'last_error';
+ if(/диагност|мои ошиб|слаб.*мест|что.*не понимаю|где.*плох/.test(n))return'diagnose';
+ if(/план|подготов|готов.*экзам|сколько.*уч/.test(n))return'plan';
+ if(/задай.*вопрос|проверь меня|контрольн.*вопрос|мини.*тест/.test(n))return'quiz';
+ if(/проверь.*объяс|я правильно понял|правильно ли я/.test(n))return'check';
+ if(/объясн|что значит|как работает|почему/.test(n))return'explain';
+ if(/кто.*перв|кто.*уступ|можно ли|должен ли|имеет.*право|ситуац/.test(n))return'scenario';
+ if(/повтори|повторение/.test(n))return'review';
+ if(/экзамен/.test(n))return'exam';
+ return'general'
+}
+function scenarioMissing(text,topic){
+ const n=normalize(text),miss=[];
+ if(topic==='priority'||topic==='signals'){
+   if(!/(светофор|регулировщик|нерегулиру|знак|главн|уступ|равнознач)/.test(n))miss.push('чем регулируется перекрёсток или какие стоят знаки');
+   if(!/(прям|налево|направо|разворот|траектор)/.test(n))miss.push('направления движения участников');
+ }
+ if(topic==='manoeuvres'&&!/(сосед|полос|сзади|вперед|скорост|слеп)/.test(n))miss.push('положение и движение автомобиля в соседней полосе');
+ if(topic==='pedestrians'&&!/(переход|поворач|край|обзор|траектор)/.test(n))miss.push('где находится пешеход и куда движется автомобиль');
+ return miss
+}
+function findKnowledge(text,topic){
+ const n=normalize(text),ts=tokens(n);let ranked=[];
+ KB.forEach(k=>{let s=k.topic===topic?4:0;k.keys.forEach(x=>{if(n.includes(x))s+=4});ts.forEach(w=>{if(normalize(k.title+' '+k.text).includes(w))s++});ranked.push({k,s})});
+ const qrank=Q.map((x,i)=>{let s=x.t===topic?3:0;const blob=normalize(x.q+' '+x.e+' '+x.r+' '+x.m);ts.forEach(w=>{if(blob.includes(w))s+=1});return{x,i,s}}).sort((a,b)=>b.s-a.s);
+ ranked.sort((a,b)=>b.s-a.s);
+ return{kb:ranked[0]&&ranked[0].s>0?ranked[0]:null,q:qrank[0]&&qrank[0].s>1?qrank[0]:null}
+}
+function diagnoseAgent(){
+ const topicRows=Object.keys(TOPICS).filter(k=>stat(k).n).sort((a,b)=>score(a)-score(b)).slice(0,3);
+ const reasons={};S.mistakes.forEach(m=>reasons[m.m]=(reasons[m.m]||0)+1);
+ const topReason=Object.entries(reasons).sort((a,b)=>b[1]-a[1])[0];
+ if(!S.answered)return{text:'Мне пока мало данных для диагностики. Реши хотя бы 10–15 вопросов: после этого я смогу отличить случайные ошибки от устойчивой слабой темы.',actions:[{label:'Начать диагностику',cmd:'practice'}],meta:'Данных: 0 ответов'};
+ const parts=topicRows.map(k=>TOPICS[k].name+' '+score(k)+'%');
+ let text='По твоим результатам слабее всего: '+(parts.join(', ')||TOPICS[weakTopic()].name)+'.';
+ if(topReason)text+=' Самый частый тип ошибки: «'+topReason[0]+'» ('+topReason[1]+' раз).';
+ text+=' Я бы не шёл сразу в полный экзамен: сначала закрой слабую тему, затем интервальное повторение и только потом контрольную попытку.';
+ return{text,topic:topicRows[0]||weakTopic(),actions:[{label:'Тренировать слабую тему',cmd:'topic',arg:topicRows[0]||weakTopic()},{label:'Повторить ошибки',cmd:'review'}],meta:'Основано на '+S.answered+' ответах и '+S.mistakes.length+' ошибках'}
+}
+function planAgent(){
+ const r=readiness(),w=weakTopic(),due=dueReviews().length;
+ let phase=r<55?'сначала восстановить базовые правила':r<75?'сфокусироваться на слабых темах и стабильности':'переходить к экзаменационной устойчивости';
+ const text='Готовность сейчас около '+r+'%. План: 1) '+phase+'; 2) ежедневно '+S.dailyGoal+' вопросов; 3) первая тема — «'+TOPICS[w].name+'» ('+score(w)+'%); 4) '+(due?'закрыть '+due+' отложенных повторений':'пройти короткое интервальное повторение после новых ошибок')+'; 5) сдавать экзамен только после короткой разминки без повторных ошибок.';
+ return{text,topic:w,actions:[{label:'Начать план',cmd:'topic',arg:w},{label:'Экзамен',cmd:'exam'}],meta:'Категория '+S.cat+' • готовность '+r+'%'}
+}
+function lastErrorAgent(){
+ const m=S.mistakes.at(-1);if(!m)return{text:'Сохранённых ошибок пока нет. Реши несколько заданий, и я смогу разобрать конкретный неверный выбор.',actions:[{label:'Начать тренировку',cmd:'practice'}]};
+ const q=Q[m.idx];let text='Последняя ошибка — «'+TOPICS[q.t].name+'». '+q.e+' Ключевой принцип: '+q.r;
+ if(Number.isInteger(m.choice)&&m.choice!==q.c)text+=' Ты выбрал «'+q.a[m.choice]+'», но этот вариант '+wrongReason(q,m.choice).replace(/^Вариант «.*?» /,'');
+ text+=' Тип ошибки: '+q.m+'.';
+ return{text,topic:q.t,actions:[{label:'Похожая тренировка',cmd:'topic',arg:q.t},{label:'Повторить ошибку',cmd:'review'}],meta:'Разбор последней сохранённой ошибки'}
+}
+function quizAgent(topic){
+ const t=topic||weakTopic(),pool=Q.filter(x=>x.t===t),q=pool[Math.floor(Math.random()*pool.length)];
+ S.agentMemory.topic=t;S.agentMemory.lastQuestion=masterIndex(q);S.agentMemory.intent='quiz';save();
+ return{text:'Контрольный вопрос по теме «'+TOPICS[t].name+'»: '+q.q+'\n\nA. '+q.a[0]+'\nB. '+q.a[1]+'\nC. '+q.a[2]+'\nD. '+q.a[3]+'\n\nОтветь буквой или своими словами — я проверю логику.',topic:t,meta:'Контроль понимания • без подсказки'}
+}
+function evaluateQuizAnswer(text){
+ const idx=S.agentMemory.lastQuestion,q=Q[idx];if(!q)return null;
+ const n=normalize(text);let choice=null;
+ const letter=n.match(/^(a|b|c|d|а|б|в|г)(\s|$)/);
+ if(letter){const map={a:0,b:1,c:2,d:3,'а':0,'б':1,'в':2,'г':3};choice=map[letter[1]]}
+ if(choice===null){q.a.forEach((a,i)=>{const kws=tokens(a).filter(w=>w.length>4);if(kws.some(w=>n.includes(w)))choice=i})}
+ S.agentMemory.lastQuestion=null;save();
+ if(choice===q.c)return{text:'Верно. Но важнее причина: '+q.r+' Если можешь объяснить это без формулировки ответа, правило действительно усвоено.',topic:q.t,actions:[{label:'Ещё вопрос',cmd:'agentquiz',arg:q.t}],meta:'Проверка: правильный ответ'};
+ if(choice!==null)return{text:'Не совсем. Правильный вариант — '+String.fromCharCode(65+q.c)+'. '+q.a[q.c]+'. '+q.e+' Типичная ловушка: '+q.m+'.',topic:q.t,actions:[{label:'Тренировать тему',cmd:'topic',arg:q.t},{label:'Ещё вопрос',cmd:'agentquiz',arg:q.t}],meta:'Проверка: есть пробел в логике'};
+ return{text:'Я не смог однозначно определить выбранный вариант. Напиши букву A/B/C/D или сформулируй решение одной фразой.',topic:q.t,meta:'Нужен конкретный ответ'}
+}
+async function sendAgent(){
+ const input=$('agentInput'),q=input.value.trim();if(!q)return;input.value='';
+ S.chat.push({role:'user',text:q});renderAgent();
+ const pending={role:'agent',text:'Анализирую условие…',meta:'Проверяю контекст и твою статистику'};S.chat.push(pending);renderAgent();
+ await new Promise(r=>setTimeout(r,120));
+ S.chat.pop();
+ const answer=await agentAnswer(q);
+ S.chat.push({role:'agent',...answer});
+ if(S.chat.length>80)S.chat=S.chat.slice(-80);save();renderAgent()
+}
+async function agentAnswer(text){
+ const n=normalize(text);
+ if(S.agentMemory.lastQuestion!==null){const checked=evaluateQuizAnswer(text);if(checked)return checked}
+ const intent=detectIntent(text),topic=detectTopic(text)||S.agentMemory.topic||null;
+ S.agentMemory.intent=intent;if(topic)S.agentMemory.topic=topic;save();
+ if(intent==='last_error')return lastErrorAgent();
+ if(intent==='diagnose')return diagnoseAgent();
+ if(intent==='plan')return planAgent();
+ if(intent==='quiz')return quizAgent(topic);
+ if(intent==='review')return{text:'У тебя сейчас '+dueReviews().length+' вопрос(а) готовы к интервальному повторению. Начни с них: задача — ответить правильно не по памяти, а объясняя себе правило.',actions:[{label:'Начать повторение',cmd:'review'}],meta:'Интервальное повторение'};
+ if(intent==='exam')return{text:'Экзамен в приложении: 10 вопросов, 15 минут, вторая ошибка завершает попытку. Перед ним я рекомендую сначала закрыть текущие повторения и слабую тему «'+TOPICS[weakTopic()].name+'».',actions:[{label:'Начать экзамен',cmd:'exam'}],meta:'Текущий режим приложения'};
+ if(intent==='check'){S.agentMemory.awaitingCheck=true;save();return{text:'Напиши правило своими словами так, как объяснил бы его другому ученику. Я проверю, есть ли в объяснении главный принцип и не перепутан ли приоритет.',topic:topic||weakTopic(),meta:'Режим проверки понимания'}}
+ if(S.agentMemory.awaitingCheck){
+   const t=topic||S.agentMemory.topic||weakTopic(),info=findKnowledge(text,t),base=info.kb?info.kb.k.text:(info.q?info.q.x.r:'');
+   S.agentMemory.awaitingCheck=false;save();
+   const overlap=tokens(base).filter(w=>tokens(text).includes(w)).length;
+   return{text:overlap>=2?'Суть ты передал правильно. Я бы добавил одну вещь: '+base:'В объяснении есть часть идеи, но не хватает ключевого условия. Ориентир: '+base,topic:t,actions:[{label:'Проверить на вопросе',cmd:'agentquiz',arg:t}],meta:'Проверка понимания, а не запоминания'};
+ }
+ if(intent==='scenario'&&topic){const missing=scenarioMissing(text,topic);if(missing.length)return{text:'Чтобы ответить точно, мне не хватает условия: '+missing.join('; ')+'. Добавь это — и я разберу очередность по шагам.',topic,meta:'Не додумываю отсутствующие условия'}}
+ const info=findKnowledge(text,topic);
+ if(info.kb){
+   const k=info.kb.k;let textOut=k.title+': '+k.text;
+   if(intent==='scenario')textOut+=' Алгоритм для конкретной ситуации: сначала зафиксируй регулирование и знаки, затем направления движения, после этого проверь конфликт траекторий.';
+   return{text:textOut,topic:k.topic,actions:[{label:'Тренировать тему',cmd:'topic',arg:k.topic},{label:'Контрольный вопрос',cmd:'agentquiz',arg:k.topic}],meta:'Встроенная база знаний • '+TOPICS[k.topic].name};
+ }
+ if(info.q){const x=info.q.x;return{text:'Ближе всего вопрос относится к теме «'+TOPICS[x.t].name+'». '+x.r+' '+x.e,topic:x.t,actions:[{label:'Тренировать тему',cmd:'topic',arg:x.t}],meta:'Подобрано по базе учебных ситуаций'}}
+ return{text:'Я не хочу придумывать правило без достаточного основания. Опиши ситуацию конкретнее: какие знаки или сигнал действуют, кто откуда едет и какой манёвр выполняет. Тогда я разберу её по шагам.',topic:topic||null,meta:'Низкая уверенность — требуется уточнение'}
+}
+function agentAction(cmd,arg){
+ if(cmd==='topic')return startTopic(arg);
+ if(cmd==='review')return startDue();
+ if(cmd==='exam')return startExam();
+ if(cmd==='practice')return startPractice();
+ if(cmd==='agentquiz'){const a=quizAgent(arg);S.chat.push({role:'agent',...a});save();renderAgent();return}
+}
 init();
