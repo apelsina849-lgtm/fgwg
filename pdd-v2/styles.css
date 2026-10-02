@@ -22,3 +22,28 @@ body.scroll-locked{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .visual-zone{position:absolute;z-index:3;border:2px solid rgba(255,209,69,.92);box-shadow:0 0 0 3px rgba(0,0,0,.22),0 0 18px rgba(255,209,69,.2);pointer-events:none}
 .vz-cross{left:18%;right:18%;top:50%;height:26%;transform:skewX(-10deg);border-radius:10px}
 .vz-sign{right:7%;top:8%;width:26%;height:43%;border-radius:50%}
+
+/* v2.4 — clearer question imagery */
+.scene{
+  height:190px;
+  background-position:center;
+  background-size:cover;
+  filter:saturate(1.04) contrast(1.045);
+  transition:height .22s ease,border-radius .22s ease,background-size .22s ease;
+  touch-action:pan-y;
+}
+.scene.zoomed{
+  height:min(58vh,440px);
+  background-size:contain!important;
+  background-position:center!important;
+  background-color:#02070d;
+  filter:saturate(1.02) contrast(1.03);
+}
+.explanation-scene{margin-top:13px;border-color:rgba(69,169,255,.20)}
+.scene-hint{text-align:center;color:#627b91;font-size:8.8px;margin:5px 0 11px}
+.scene-analysis-tag{position:absolute;z-index:6;left:9px;top:9px;border-radius:8px;padding:6px 8px;font-size:8.5px;font-weight:900;background:rgba(4,14,23,.86);border:1px solid rgba(255,255,255,.15);backdrop-filter:blur(6px)}
+.scene-analysis-tag.good{color:#70e8b8;border-color:rgba(56,224,157,.36)}
+.scene-analysis-tag.bad{color:#ff8f94;border-color:rgba(255,98,104,.36)}
+.scene-tip{position:absolute;z-index:6;right:9px;bottom:9px;max-width:62%;padding:6px 8px;border-radius:8px;background:rgba(4,14,23,.82);border:1px solid rgba(255,255,255,.12);font-size:8px;line-height:1.3;color:#d9e8f4;backdrop-filter:blur(6px)}
+.answer{min-height:52px}
+.answer span:nth-child(2){font-weight:620}
