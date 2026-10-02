@@ -164,8 +164,56 @@ function sceneOverlay(type,analysis){
  }
  return x
 }
+function generatedSceneSvg(q){
+ const idx=Math.max(0,masterIndex(q)),type=q.t;
+ const palettes=[['#91bdd7','#dcecf4','#394651','#252d34'],['#aac6d3','#e5edf0','#46505a','#2b3136'],['#8eb3c6','#d8e7ec','#3c4851','#242b31']];
+ const p=palettes[idx%palettes.length],shift=(idx%5)*18;
+ const rain=type==='speed'&&q.s==='rain';
+ const intersection=['priority','signals','signs'].includes(type);
+ const ped=type==='pedestrians';
+ const lane=type==='manoeuvres'||type==='special';
+ const stop=type==='stopping';
+ let extras='';
+ if(intersection){
+   extras+='<path d="M0 250h1200v185H0z" fill="#3b434a"/><path d="M568 0h190v620H465z" fill="#3a4249" opacity=".9"/>';
+   extras+='<path d="M0 330h1200" stroke="#f5f5f5" stroke-width="7" stroke-dasharray="48 32" opacity=".75"/>';
+   extras+='<path d="M615 0v620" stroke="#f5f5f5" stroke-width="6" stroke-dasharray="46 35" opacity=".72"/>';
+   extras+=type==='signals'?'<g transform="translate(870 120)"><rect width="46" height="120" rx="10" fill="#14191e"/><circle cx="23" cy="24" r="14" fill="#ff5b5f"/><circle cx="23" cy="60" r="14" fill="#d4a835"/><circle cx="23" cy="96" r="14" fill="#49d99d"/><rect x="19" y="118" width="8" height="105" fill="#454b50"/></g>':'<g transform="translate(925 125)"><path d="M0 0h86L43 75z" fill="#fff" stroke="#e64f55" stroke-width="12"/><rect x="39" y="72" width="8" height="116" fill="#51575b"/></g>';
+ }
+ if(ped){
+   extras+='<g opacity=".98">'+[0,1,2,3,4,5,6].map(n=>'<rect x="'+(300+n*86)+'" y="'+(390-n*2)+'" width="56" height="118" rx="3" fill="#eee"/>').join('')+'</g>';
+   extras+='<g transform="translate('+(770-shift)+' 318)" fill="#20252a"><circle cx="18" cy="18" r="15"/><path d="M13 36h13l13 72H27l-8-39-8 39H0z"/></g>';
+   extras+='<g transform="translate(875 276)"><rect width="170" height="120" rx="18" fill="#d6d9dc"/><rect x="22" y="16" width="110" height="42" rx="8" fill="#6f8999"/><circle cx="35" cy="117" r="20" fill="#1b2024"/><circle cx="137" cy="117" r="20" fill="#1b2024"/></g>';
+ }
+ if(lane){
+   extras+='<g transform="translate('+(330+shift)+' 325)"><rect width="165" height="88" rx="24" fill="#354b61"/><path d="M28 8h108l22 38H8z" fill="#6e8ca2"/><circle cx="35" cy="86" r="20" fill="#171c20"/><circle cx="132" cy="86" r="20" fill="#171c20"/><rect x="8" y="52" width="18" height="11" rx="4" fill="#f7eaa7"/><rect x="139" y="52" width="18" height="11" rx="4" fill="#ef555a"/></g>';
+   extras+='<g transform="translate('+(700-shift)+' 270) scale(.72)"><rect width="165" height="88" rx="24" fill="#772f35"/><path d="M28 8h108l22 38H8z" fill="#8596a1"/><circle cx="35" cy="86" r="20" fill="#171c20"/><circle cx="132" cy="86" r="20" fill="#171c20"/></g>';
+   if(type==='special')extras+='<g transform="translate(545 245)"><rect width="170" height="115" rx="16" fill="#eef3f6"/><rect x="68" y="22" width="34" height="70" fill="#d94c55"/><rect x="50" y="40" width="70" height="34" fill="#d94c55"/><rect x="35" y="-8" width="34" height="10" rx="4" fill="#328cff"/><rect x="101" y="-8" width="34" height="10" rx="4" fill="#328cff"/></g>';
+ }
+ if(stop){
+   extras+='<g transform="translate(820 275)"><rect width="160" height="92" rx="20" fill="#495c6c"/><path d="M26 8h108l18 38H10z" fill="#7591a1"/><circle cx="34" cy="90" r="19" fill="#171c20"/><circle cx="130" cy="90" r="19" fill="#171c20"/></g><g transform="translate(1010 120)"><circle cx="38" cy="38" r="34" fill="#287ad5" stroke="#fff" stroke-width="6"/><text x="38" y="51" text-anchor="middle" fill="#fff" font-size="40" font-family="Arial" font-weight="700">P</text><rect x="34" y="72" width="8" height="110" fill="#555"/></g>';
+ }
+ const drops=rain?Array.from({length:35},(_,n)=>'<path d="M'+((n*97+idx*31)%1180)+' '+((n*53)%520)+'l-16 40" stroke="#dbeaf3" stroke-width="3" opacity=".38"/>').join(''):'';
+ const wet=rain?'<rect x="0" y="250" width="1200" height="370" fill="#24313a" opacity=".35"/><path d="M470 590L575 315" stroke="#9fc8e0" stroke-width="16" opacity=".18"/><path d="M765 590L650 315" stroke="#e46464" stroke-width="12" opacity=".16"/>':'';
+ const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620">'+
+ '<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="'+p[0]+'"/><stop offset="1" stop-color="'+p[1]+'"/></linearGradient><linearGradient id="road" x1="0" y1="0" x2="0" y2="1"><stop stop-color="'+p[2]+'"/><stop offset="1" stop-color="'+p[3]+'"/></linearGradient><filter id="sh"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-opacity=".26"/></filter></defs>'+
+ '<rect width="1200" height="620" fill="url(#sky)"/>'+
+ '<g opacity=".95">'+Array.from({length:9},(_,n)=>'<rect x="'+(n*132-20)+'" y="'+(115+(n%3)*18)+'" width="102" height="'+(150+(n%2)*55)+'" rx="4" fill="'+(n%2?'#d2c4ad':'#c7d0d2')+'"/><g fill="#637687">'+Array.from({length:6},(_,w)=>'<rect x="'+(n*132+2+(w%2)*45)+'" y="'+(138+Math.floor(w/2)*42+(n%3)*18)+'" width="25" height="22" rx="2"/>').join('')+'</g>').join('')+'</g>'+
+ '<g fill="#477548">'+Array.from({length:12},(_,n)=>'<circle cx="'+(45+n*101)+'" cy="'+(240+(n%2)*18)+'" r="'+(38+(n%3)*7)+'"/><rect x="'+(40+n*101)+'" y="'+(250+(n%2)*18)+'" width="10" height="75" fill="#66503d"/>').join('')+'</g>'+
+ '<path d="M410 250L0 620h1200L790 250z" fill="url(#road)"/>'+
+ '<path d="M590 270L565 620" stroke="#f5f0d6" stroke-width="8" stroke-dasharray="50 34" opacity=".9"/><path d="M665 270L710 620" stroke="#f5f0d6" stroke-width="8" stroke-dasharray="50 34" opacity=".9"/>'+
+ '<path d="M410 250L0 620M790 250l410 370" stroke="#c7c9c7" stroke-width="13"/>'+
+ extras+wet+drops+
+ '<path d="M0 570c180-28 260-24 380 0 210 42 430 34 820-6v56H0z" fill="#111820" opacity=".55"/>'+
+ '</svg>';
+ return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg)
+}
+function useGeneratedScene(q){
+ const idx=Math.max(0,masterIndex(q));
+ return q.s!=='none' && (idx%3!==0 || !(window.SCENE_IMAGES||{})[imageKeyFor(q)])
+}
 function applyScene(el,q,analysis=false){
- const k=imageKeyFor(q),img=(window.SCENE_IMAGES||{})[k],sv=sceneVariant(q);
+ const k=imageKeyFor(q),photo=(window.SCENE_IMAGES||{})[k],img=useGeneratedScene(q)?generatedSceneSvg(q):photo,sv=sceneVariant(q);
  el.classList.remove('zoomed');el.classList.toggle('has-photo',!!img);
  el.style.backgroundImage=img?'linear-gradient(180deg,rgba(0,0,0,.01),rgba(0,0,0,.22)),url('+img+')':'';
  el.style.backgroundPosition=sv.p;el.style.backgroundSize=sv.z;
