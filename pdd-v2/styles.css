@@ -11,3 +11,14 @@ body.scroll-locked{position:fixed;left:0;right:0;width:100%;overflow:hidden}
 .msg-meta{display:block;margin-top:7px;color:#6f8aa1;font-size:8.8px;line-height:1.35}
 .agent-thinking{opacity:.72;font-style:italic}
 .agent-score{display:inline-flex;margin-top:7px;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:4px 7px;color:#7590a7;font-size:8.5px}
+
+/* v2.3 visual question treatment */
+.scene{background-repeat:no-repeat;background-color:#0a1d2d;box-shadow:inset 0 0 0 1px rgba(255,255,255,.025)}
+.scene.has-photo:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(3,10,16,.02),transparent 55%,rgba(3,10,16,.26))}
+.visual-marker{position:absolute;z-index:4;background:rgba(4,14,23,.78);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(6px);color:#eef7ff;border-radius:8px;padding:5px 7px;font-size:8.5px;font-weight:850;letter-spacing:.1px}
+.vm-left{left:8px;top:9px}.vm-right{right:8px;top:9px}.vm-bottom{right:8px;bottom:9px}
+.visual-arrow{position:absolute;z-index:4;color:#fff;font-size:38px;font-weight:900;text-shadow:0 2px 10px rgba(0,0,0,.8);opacity:.88}
+.va-right{right:24%;bottom:19%}.va-center{left:48%;top:43%;transform:translate(-50%,-50%)}
+.visual-zone{position:absolute;z-index:3;border:2px solid rgba(255,209,69,.92);box-shadow:0 0 0 3px rgba(0,0,0,.22),0 0 18px rgba(255,209,69,.2);pointer-events:none}
+.vz-cross{left:18%;right:18%;top:50%;height:26%;transform:skewX(-10deg);border-radius:10px}
+.vz-sign{right:7%;top:8%;width:26%;height:43%;border-radius:50%}
