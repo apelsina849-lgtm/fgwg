@@ -535,7 +535,16 @@ input,textarea,select{width:100%;background:#0e1013;color:#fff;border:1px solid 
 textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1}.secondary{background:#24282d;color:#fff}
 .nav{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;width:min(690px,calc(100% - 20px));background:#111418ef;backdrop-filter:blur(18px);border:1px solid #2a2e33;border-radius:20px;padding:8px;display:flex;gap:6px;z-index:10}
 .nav button{flex:1;background:transparent;color:#8f969e;font-size:12px;padding:10px 4px}.nav button.active{background:#24200f;color:#ffd24b}
-.empty{text-align:center;padding:38px 10px;color:#89919a}.hide{display:none!important}.adminline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.adminline select{width:auto;min-width:150px;margin:8px 0}
+.empty{text-align:center;padding:38px 10px;color:#89919a;white-space:pre-line}.hide{display:none!important}.adminline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.adminline select{width:auto;min-width:150px;margin:8px 0}
+.spin-shell{background:linear-gradient(145deg,#12151a,#090b0d);border:1px solid #3a2c0a;border-radius:22px;padding:16px;margin:14px 0;overflow:hidden}
+.reel-window{position:relative;height:118px;border:1px solid #2b3036;background:#0b0d10;border-radius:18px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.reel-window:after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:#ffc21c;box-shadow:0 0 18px #ffc21c;transform:translateX(-50%)}
+.reel-item{font-size:20px;font-weight:950;text-align:center;padding:0 28px;transition:transform .15s,opacity .15s}
+.reel-item.spinning{animation:spinPulse .12s linear infinite}
+@keyframes spinPulse{0%{transform:translateY(-5px);opacity:.45}50%{transform:translateY(5px);opacity:1}100%{transform:translateY(-5px);opacity:.45}}
+.tier{display:inline-block;padding:5px 8px;border-radius:9px;background:#211a08;color:#ffd45b;font-size:11px;font-weight:900;letter-spacing:.6px}
+.spin-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:12px}
+.claim{width:100%;margin-top:8px;background:#20252b;color:#fff}.claim:disabled{opacity:.4}
 @media(max-width:390px){.grid{grid-template-columns:1fr}h1{font-size:25px}}
 </style>
 </head>
@@ -545,7 +554,7 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
   <main id="app"><div class="empty">Загрузка магазина…</div></main>
 </div>
 <div class="nav" id="nav">
-  <button data-tab="home">Главная</button><button data-tab="catalog">Каталог</button><button data-tab="orders">Заказы</button><button data-tab="support">Поддержка</button>
+  <button data-tab="home">Главная</button><button data-tab="catalog">Каталог</button><button data-tab="spin">SPIN</button><button data-tab="orders">Заказы</button><button data-tab="support">Поддержка</button>
 </div>
 <script>
 (function(){
@@ -582,6 +591,8 @@ const initData = tg ? (tg.initData || '') : '';
 const headers = {'Content-Type':'application/json','X-Telegram-Init-Data':initData};
 let products = [];
 let me = null;
+let spinState = null;
+let lastSpinReward = null;
 let tab = new URLSearchParams(location.search).get('tab') || (ADMIN ? 'admin' : 'home');
 
 function esc(v){
@@ -589,7 +600,7 @@ function esc(v){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
   });
 }
-function rub(n){ return Number(n).toLocaleString('ru-RU') + ' ₽'; }
+function stars(n){ return Number(n).toLocaleString('ru-RU') + ' ⭐'; }
 
 async function api(path, options){
   options = options || {};
@@ -621,28 +632,33 @@ function updateNav(){
 
 function cards(list){
   return '<div class="grid">' + list.map(function(p){
-    return '<div class="card"><div class="cat">'+esc(p.category)+'</div><div class="name">'+esc(p.name)+'</div><div class="desc">'+esc(p.description)+'</div><div class="price">'+rub(p.price)+'</div><button class="buy" data-buy="'+p.id+'">Купить</button></div>';
+    return '<div class="card"><div class="cat">'+esc(p.category)+'</div><div class="name">'+esc(p.name)+'</div><div class="desc">'+esc(p.description)+'</div><div class="price">'+stars(p.stars_price)+'</div><button class="buy" data-buy="'+p.id+'">Купить за Stars</button></div>';
   }).join('') + '</div>';
 }
 
 function home(){
-  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары • Буст • Квесты • Фарм<br>Быстрое оформление и отслеживание заказа прямо в Telegram.</div></section><h3>Популярное</h3>' + cards(products.slice(0,4));
+  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары • Буст • Квесты • Фарм<br>Оплата внутри Telegram через ⭐ Stars.</div></section><div class="spin-shell"><div class="cat">HYPE MODE</div><h2>HYPE SPIN</h2><div class="muted">Бесплатные спины с Metro-наградами и очками для гарантированного апгрейда.</div><button class="buy" id="homeSpinBtn" style="margin-top:12px">Открыть SPIN</button></div><h3>Популярное</h3>' + cards(products.slice(0,4));
 }
 
 function bindBuyButtons(){
   document.querySelectorAll('[data-buy]').forEach(function(btn){
     btn.addEventListener('click', function(){ orderForm(Number(btn.dataset.buy)); });
   });
+  const hs=document.getElementById('homeSpinBtn');
+  if(hs) hs.addEventListener('click',function(){tab='spin';render();});
 }
 
 function orderForm(id){
   const p = products.find(function(x){ return Number(x.id) === Number(id); });
   if(!p) return;
-  app.innerHTML = '<div class="hero"><div class="cat">'+esc(p.category)+'</div><h1>'+esc(p.name)+'</h1><div class="muted">'+esc(p.description)+'</div><div class="price">'+rub(p.price)+'</div></div><div class="card"><b>Данные заказа</b><input id="uid" placeholder="UID PUBG Mobile"><input id="nick" placeholder="Игровой ник"><textarea id="comment" placeholder="Комментарий к заказу"></textarea><button class="buy" id="createOrderBtn">Создать заказ</button></div>';
+  app.innerHTML = '<div class="hero"><div class="cat">'+esc(p.category)+'</div><h1>'+esc(p.name)+'</h1><div class="muted">'+esc(p.description)+'</div><div class="price">'+stars(p.stars_price)+'</div></div><div class="card"><b>Данные заказа</b><input id="uid" placeholder="UID PUBG Mobile"><input id="nick" placeholder="Игровой ник"><textarea id="comment" placeholder="Комментарий к заказу"></textarea><button class="buy" id="createOrderBtn">Создать заказ</button></div>';
   document.getElementById('createOrderBtn').addEventListener('click', function(){ createOrder(id); });
 }
 
 async function createOrder(id){
+  const btn=document.getElementById('createOrderBtn');
+  if(btn && btn.disabled) return;
+  if(btn){btn.disabled=true;btn.textContent='Создаём заказ…';}
   try{
     const o = await api('/api/orders',{
       method:'POST',
@@ -654,36 +670,96 @@ async function createOrder(id){
       })
     });
     showPay(o);
-  }catch(e){ alert(e.message); }
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='Создать заказ';}
+    alert(e.message);
+  }
 }
 
 function showPay(o){
-  app.innerHTML = '<div class="hero"><div class="cat">ЗАКАЗ #'+o.number+'</div><h1>Заказ создан</h1><div class="muted">Выберите способ оплаты.</div></div><div class="card"><div class="price">'+rub(o.amount)+'</div><button class="buy" id="starsBtn">Оплатить '+o.stars_amount+' ⭐</button><div style="height:8px"></div><button class="secondary" style="width:100%" id="manualBtn">Ручная оплата</button><p class="muted">'+esc(o.manual_payment)+'</p></div>';
+  app.innerHTML = '<div class="hero"><div class="cat">ЗАКАЗ #'+o.number+'</div><h1>Заказ создан</h1><div class="muted">Оплатите заказ через Telegram Stars.</div></div><div class="card"><div class="price">'+stars(o.stars_amount)+'</div><button class="buy" id="starsBtn">Оплатить '+o.stars_amount+' ⭐</button><p class="muted">Платёж проходит внутри Telegram.</p></div>';
   document.getElementById('starsBtn').addEventListener('click', function(){ payStars(o.id); });
-  document.getElementById('manualBtn').addEventListener('click', function(){ manualPay(o.id); });
 }
 
 async function payStars(id){
+  const btn=document.getElementById('starsBtn');
+  if(btn && btn.disabled) return;
+  if(btn){btn.disabled=true;btn.textContent='Открываем оплату…';}
   try{
     const d = await api('/api/orders/'+id+'/stars',{method:'POST'});
     if(tg && tg.openInvoice) tg.openInvoice(d.url,function(){ tab='orders'; render(); });
     else location.href=d.url;
-  }catch(e){ alert(e.message); }
-}
-async function manualPay(id){
-  try{
-    const d = await api('/api/orders/'+id+'/manual',{method:'POST'});
-    alert('Заявка на проверку оплаты отправлена.\\n\\n'+d.details);
-    tab='orders'; render();
-  }catch(e){ alert(e.message); }
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='Оплатить Stars';}
+    alert(e.message);
+  }
 }
 async function ordersHtml(){
   const list = await api('/api/orders');
   if(!list.length) return '<div class="empty">У вас пока нет заказов.</div>';
   return list.map(function(o){
-    return '<div class="order"><div class="cat">ЗАКАЗ #'+o.number+'</div><div class="name">'+esc(o.product_name)+'</div><div class="row"><div class="price">'+rub(o.amount)+'</div><div style="text-align:right"><span class="status">'+esc(o.status)+'</span></div></div><div class="muted">'+esc(o.created_at)+'</div></div>';
+    return '<div class="order"><div class="cat">ЗАКАЗ #'+o.number+'</div><div class="name">'+esc(o.product_name)+'</div><div class="row"><div class="price">'+stars(o.stars_amount)+'</div><div style="text-align:right"><span class="status">'+esc(o.status)+'</span></div></div><div class="muted">'+esc(o.created_at)+'</div></div>';
   }).join('');
 }
+async function spinHtml(){
+  spinState=await api('/api/spin/state');
+  const history=(spinState.history||[]).map(function(x){
+    return '<div class="order"><span class="tier">'+esc(x.reward_tier)+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="muted">+'+x.points+' upgrade pts • '+esc(x.created_at)+'</div></div>';
+  }).join('');
+  const claims=(spinState.upgrade_rewards||[]).map(function(x){
+    const ok=Number(spinState.upgrade_points)>=Number(x.points);
+    return '<button class="claim" data-claim="'+x.points+'" '+(ok?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' pts</button>';
+  }).join('');
+  const last=lastSpinReward?'<div class="order"><div class="cat">ВЫИГРЫШ</div><span class="tier">'+esc(lastSpinReward.tier)+'</span><div class="name">'+esc(lastSpinReward.name)+'</div><div class="muted">+'+lastSpinReward.points+' upgrade pts</div></div>':'';
+  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">Бесплатная рулетка Metro Royale. Награды выдаёт администратор в игре.</div></section>'+
+    '<div class="spin-stats"><div class="spin-stat"><div class="muted">Билеты</div><div class="price" id="ticketsCount">'+spinState.tickets+'</div></div><div class="spin-stat"><div class="muted">Upgrade pts</div><div class="price" id="pointsCount">'+spinState.upgrade_points+'</div></div></div>'+
+    '<div class="spin-shell"><div class="reel-window"><div class="reel-item" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px">'+(spinState.daily_available?'Ежедневный бесплатный SPIN':'SPIN за билет')+'</button><div class="muted" style="margin-top:10px">Шансы: Common 45% • Rare 28% • Epic 18% • Legendary 7% • Mythic 2%</div></div>'+
+    last+'<h3>Upgrade Lab</h3><div class="card"><div class="muted">Очки из спинов можно обменять на гарантированную награду — без риска потерять предмет.</div>'+claims+'</div>'+
+    '<h3>Последние спины</h3>'+(history||'<div class="empty">История пока пустая.</div>');
+}
+function bindSpin(){
+  const b=document.getElementById('spinBtn');
+  if(b) b.addEventListener('click',spinOnce);
+  document.querySelectorAll('[data-claim]').forEach(function(btn){
+    btn.addEventListener('click',function(){claimUpgrade(Number(btn.dataset.claim));});
+  });
+}
+async function spinOnce(){
+  const btn=document.getElementById('spinBtn');
+  if(btn && btn.disabled) return;
+  if(btn){btn.disabled=true;btn.textContent='Крутим…';}
+  const reel=document.getElementById('reelItem');
+  const names=(spinState.rewards||[]).map(function(x){return x.name;});
+  let i=0;
+  if(reel) reel.classList.add('spinning');
+  const timer=setInterval(function(){
+    if(reel && names.length){reel.textContent=names[i%names.length];i++;}
+  },90);
+  try{
+    const d=await api('/api/spin/free',{method:'POST'});
+    setTimeout(async function(){
+      clearInterval(timer);
+      lastSpinReward=d.reward;
+      if(reel){reel.classList.remove('spinning');reel.textContent=d.reward.name;}
+      await new Promise(function(r){setTimeout(r,450);});
+      app.innerHTML=await spinHtml();
+      bindSpin();
+    },1500);
+  }catch(e){
+    clearInterval(timer);
+    if(reel) reel.classList.remove('spinning');
+    if(btn){btn.disabled=false;btn.textContent='SPIN';}
+    alert(e.message);
+  }
+}
+async function claimUpgrade(points){
+  try{
+    const d=await api('/api/upgrade/claim',{method:'POST',body:JSON.stringify({points:points})});
+    alert('Заявка на выдачу создана: '+d.reward.name);
+    app.innerHTML=await spinHtml(); bindSpin();
+  }catch(e){alert(e.message);}
+}
+
 function supportHtml(){
   return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Создайте обращение — владелец получит уведомление в Telegram.</div></div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>';
 }
@@ -700,7 +776,7 @@ async function adminHtml(){
   return '<section class="hero"><div class="cat">OWNER PANEL</div><h1>Админ-панель</h1><div class="muted">Заказы: '+a.length+' • Обращения: '+t.length+'</div></section><h3>Заказы</h3>' +
     a.map(function(o){
       const statuses=['Ожидает оплаты','Ожидает проверки оплаты','Оплачен','Принят','В работе','Ожидает клиента','Выполнен','Отменён','Возврат'];
-      return '<div class="order"><div class="cat">#'+o.number+' • Telegram '+o.telegram_id+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+rub(o.amount)+' • UID '+esc(o.uid)+'</div><div class="adminline"><select id="s'+o.id+'">'+statuses.map(function(s){return '<option '+(s===o.status?'selected':'')+'>'+s+'</option>';}).join('')+'</select><button class="secondary" data-status="'+o.id+'">Сохранить</button></div></div>';
+      return '<div class="order"><div class="cat">#'+o.number+' • Telegram '+o.telegram_id+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+stars(o.stars_amount)+' • UID '+esc(o.uid)+'</div><div class="adminline"><select id="s'+o.id+'">'+statuses.map(function(s){return '<option '+(s===o.status?'selected':'')+'>'+s+'</option>';}).join('')+'</select><button class="secondary" data-status="'+o.id+'">Сохранить</button></div></div>';
     }).join('') +
     '<h3>Поддержка</h3>' +
     t.map(function(x){return '<div class="order"><div class="cat">#'+x.id+' • '+esc(x.category)+'</div><div>'+esc(x.message)+'</div><div class="muted">Telegram '+x.telegram_id+'</div></div>';}).join('');
@@ -725,6 +801,7 @@ async function render(){
     }
     if(tab==='home'){ app.innerHTML=home(); bindBuyButtons(); }
     else if(tab==='catalog'){ app.innerHTML='<h2>Каталог</h2>'+cards(products); bindBuyButtons(); }
+    else if(tab==='spin'){ app.innerHTML=await spinHtml(); bindSpin(); }
     else if(tab==='orders'){ app.innerHTML=await ordersHtml(); }
     else if(tab==='support'){ app.innerHTML=supportHtml(); document.getElementById('ticketBtn').addEventListener('click',sendTicket); }
   }catch(e){ showFatal(e.message); }
@@ -743,7 +820,7 @@ async function boot(){
     if(ADMIN && !me.owner) throw new Error('Нет доступа');
     render();
   }catch(e){
-    showFatal(e.message + '<br><br>Откройте приложение кнопкой из Telegram-бота.');
+    showFatal(e.message + '\n\nОткройте приложение кнопкой из Telegram-бота.');
   }
 }
 boot();
