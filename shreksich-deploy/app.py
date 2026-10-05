@@ -1355,14 +1355,19 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .win-item{font-size:12px;font-weight:800}.win-item.legendary{color:#ffc15a;text-shadow:0 0 12px #ff970055}.win-item.mythic{color:#ff7ee5;text-shadow:0 0 14px #ff40da77}
 @keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 
-/* 3D-style sticker tiles inspired by approved sticker set */
+/* Pure CSS 3D stickers: no raster images, so they stay sharp at any scale */
 .sticker-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0 18px}
-.sticker{position:relative;min-height:132px;border-radius:22px;overflow:hidden;border:1px solid #30363d;background:linear-gradient(145deg,#171b20,#0d0f12);padding:14px;cursor:pointer;box-shadow:inset 0 1px #ffffff0a,0 14px 28px #0005;transition:.18s transform}
-.sticker:active{transform:scale(.975)}.sticker:after{content:"";position:absolute;inset:auto -30px -45px auto;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,currentColor,transparent 67%);opacity:.11}
-.sticker-icon{width:88px;height:104px;display:block;margin:-6px auto 4px;background-image:url('/assets/stickers.webp');background-size:352px 208px;background-repeat:no-repeat;filter:drop-shadow(0 10px 12px #0008);border-radius:14px}
-.ico-shop{background-position:0 0}.ico-spin{background-position:-88px 0}.ico-orders{background-position:-176px 0}.ico-referral{background-position:-264px 0}.ico-promo{background-position:0 -104px}.ico-news{background-position:-88px -104px}.ico-chat{background-position:-176px -104px}.ico-support{background-position:-264px -104px}
-.sticker-title{font-size:15px;font-weight:950;line-height:1.05;text-transform:uppercase;text-shadow:0 2px 6px #000}
-.sticker-sub{font-size:10px;color:#b4bac1;margin-top:5px}.st-gold{color:#ffc229;border-color:#5a4516}.st-purple{color:#d766ff;border-color:#5a276a}.st-blue{color:#55b9ff;border-color:#1d5276}.st-red{color:#ff6674;border-color:#6a2731}.st-cyan{color:#4cebe0;border-color:#1d605c}
+.sticker{position:relative;min-height:104px;border-radius:22px;overflow:hidden;border:1px solid #30363d;background:linear-gradient(145deg,#171b20,#0d0f12);padding:14px;cursor:pointer;box-shadow:inset 0 1px #ffffff0c,0 14px 28px #0005;transition:.18s transform,.18s border-color;display:flex;align-items:center;gap:13px;text-align:left}
+.sticker:active{transform:scale(.975)}.sticker:after{content:"";position:absolute;inset:auto -35px -52px auto;width:125px;height:125px;border-radius:50%;background:radial-gradient(circle,currentColor,transparent 68%);opacity:.10;pointer-events:none}
+.sticker-icon{width:62px;height:62px;flex:0 0 62px;display:grid;place-items:center;border-radius:18px;position:relative;font-size:29px;font-weight:1000;line-height:1;color:#fff;background:linear-gradient(145deg,color-mix(in srgb,currentColor 48%,#fff 8%),color-mix(in srgb,currentColor 28%,#050607 72%));border:1px solid color-mix(in srgb,currentColor 48%,#fff 7%);box-shadow:inset 0 2px 1px #ffffff35,inset 0 -9px 18px #0008,0 10px 18px #0008,0 0 20px color-mix(in srgb,currentColor 24%,transparent);transform:perspective(120px) rotateX(4deg) rotateY(-5deg)}
+.sticker-icon:before{content:attr(data-glyph);filter:drop-shadow(0 3px 1px #0008);transform:translateY(-1px)}
+.sticker-icon:after{content:"";position:absolute;left:10px;right:10px;top:7px;height:12px;border-radius:50%;background:linear-gradient(180deg,#fff4,transparent);pointer-events:none}
+.sticker-copy{min-width:0;position:relative;z-index:2}.sticker-title{font-size:15px;font-weight:950;line-height:1.05;text-transform:uppercase;text-shadow:0 2px 6px #000;overflow-wrap:anywhere}
+.sticker-sub{font-size:11px;color:#b4bac1;margin-top:7px;line-height:1.25;overflow-wrap:anywhere}
+.st-gold{color:#ffc229;border-color:#5a4516}.st-purple{color:#d766ff;border-color:#5a276a}.st-blue{color:#55b9ff;border-color:#1d5276}.st-red{color:#ff6674;border-color:#6a2731}.st-cyan{color:#4cebe0;border-color:#1d605c}
+.nav{transition:transform .22s ease,opacity .18s ease}
+.nav.keyboard-hidden{transform:translate(-50%,calc(100% + 32px));opacity:0;pointer-events:none}
+body.keyboard-open .wrap{padding-bottom:30px}
 
 /* rarity */
 .tier{display:inline-block;padding:5px 8px;border-radius:9px;font-size:11px;font-weight:900;letter-spacing:.7px;border:1px solid transparent}
@@ -1434,6 +1439,28 @@ document.addEventListener('gestureend',e=>e.preventDefault(),{passive:false});
 document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault()},{passive:false});
 let lastTouchEnd=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouchEnd<=300)e.preventDefault();lastTouchEnd=n},{passive:false});
 
+function typingTarget(el){
+ if(!el)return false;
+ const tag=String(el.tagName||'').toLowerCase();
+ return tag==='input'||tag==='textarea'||tag==='select'||el.isContentEditable
+}
+function setKeyboardState(open){
+ document.body.classList.toggle('keyboard-open',!!open);
+ navEl.classList.toggle('keyboard-hidden',!!open)
+}
+document.addEventListener('focusin',e=>{if(typingTarget(e.target))setKeyboardState(true)});
+document.addEventListener('focusout',()=>setTimeout(()=>{if(!typingTarget(document.activeElement))setKeyboardState(false)},120));
+if(window.visualViewport){
+ let vvBase=window.visualViewport.height;
+ window.visualViewport.addEventListener('resize',()=>{
+  const h=window.visualViewport.height;
+  const keyboard=h<vvBase-110;
+  if(h>vvBase)vvBase=h;
+  if(keyboard||typingTarget(document.activeElement))setKeyboardState(true);
+  else setKeyboardState(false)
+ })
+}
+
 const initData=tg?(tg.initData||''):'';
 const headers={'Content-Type':'application/json','X-Telegram-Init-Data':initData};
 let products=[],me=null,spinState=null,lastSpinReward=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
@@ -1478,7 +1505,10 @@ function cards(list){
 }
 function bindProductButtons(){document.querySelectorAll('[data-buy]').forEach(b=>b.addEventListener('click',()=>orderForm(Number(b.dataset.buy))))}
 
-function sticker(title,sub,icon,cls,attrs){return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon ico-'+icon+'"></span><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div>'}
+function sticker(title,sub,icon,cls,attrs){
+ const glyphs={shop:'▦',spin:'↻',orders:'✓',referral:'∞',promo:'%',news:'!',chat:'•••',support:'?'};
+ return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon" data-glyph="'+(glyphs[icon]||'◆')+'"></span><div class="sticker-copy"><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div></div>'
+}
 function home(){
  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары, буст, квесты и Metro-награды. Оплата покупок — через ⭐ Telegram Stars.</div></section>'+
  '<div class="sticker-grid">'+
