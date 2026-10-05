@@ -418,16 +418,46 @@ async def process_update(update: dict):
     pq = update.get("pre_checkout_query")
     if pq:
         ok = False
+        error_message = "Платёж не соответствует заказу"
         payload = pq.get("invoice_payload", "")
         try:
             _, oid, uid = payload.split(":")
             conn = await db()
-            row = await (await conn.execute("SELECT * FROM orders WHERE id=? AND telegram_id=?", (int(oid), int(uid)))).fetchone()
-            await conn.close()
-            ok = bool(row and row["status"] == "Ожидает оплаты" and pq.get("currency") == "XTR" and int(pq.get("total_amount",0)) == int(row["stars_amount"]))
+            try:
+                row = await (await conn.execute(
+                    "SELECT * FROM orders WHERE id=? AND telegram_id=?",
+                    (int(oid), int(uid))
+                )).fetchone()
+                ok = bool(
+                    row and row["status"] == "Ожидает оплаты"
+                    and pq.get("currency") == "XTR"
+                    and int(pq.get("total_amount",0)) == int(row["stars_amount"])
+                )
+                if ok and row["promo_code"]:
+                    promo = await (await conn.execute(
+                        "SELECT * FROM promos WHERE code=? AND promo_type='discount' AND active=1 "
+                        "AND (max_uses=0 OR uses<max_uses) "
+                        "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
+                        (row["promo_code"],)
+                    )).fetchone()
+                    redeemed = None
+                    if promo:
+                        redeemed = await (await conn.execute(
+                            "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
+                            (promo["id"], int(uid))
+                        )).fetchone()
+                    if not promo or redeemed:
+                        ok = False
+                        error_message = "Промокод истёк, закончился или уже использован"
+            finally:
+                await conn.close()
         except Exception:
             ok = False
-        await tg("answerPreCheckoutQuery", {"pre_checkout_query_id":pq["id"],"ok":ok,"error_message":None if ok else "Платёж не соответствует заказу"})
+        await tg("answerPreCheckoutQuery", {
+            "pre_checkout_query_id":pq["id"],
+            "ok":ok,
+            "error_message":None if ok else error_message
+        })
         return
 
     sp = msg.get("successful_payment")
