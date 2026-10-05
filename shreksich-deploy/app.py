@@ -1114,15 +1114,24 @@ async def admin_promos(x_telegram_init_data: str | None = Header(default=None)):
 async def admin_create_promo(body: PromoCreateIn, x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
     code=body.code.strip().upper()
+    promo_type=body.promo_type.strip().lower()
     if not code.replace("_","").replace("-","").isalnum():
         raise HTTPException(400,"Код может содержать буквы, цифры, - и _")
+    if promo_type not in ("discount","spin"):
+        raise HTTPException(400,"Тип промокода: discount или spin")
+    if promo_type=="discount" and body.discount_percent<=0:
+        raise HTTPException(400,"Для скидочного промокода укажите процент скидки")
+    if promo_type=="spin" and body.spin_tickets<=0:
+        raise HTTPException(400,"Для SPIN-промокода укажите количество билетов")
     async with db_write_lock:
         conn=await db()
         try:
             try:
                 cur=await conn.execute(
-                    "INSERT INTO promos(code,discount_percent,max_uses,expires_at) VALUES(?,?,?,?)",
-                    (code,body.discount_percent,body.max_uses,body.expires_at.strip())
+                    "INSERT INTO promos(code,promo_type,discount_percent,spin_tickets,max_uses,expires_at) VALUES(?,?,?,?,?,?)",
+                    (code,promo_type,body.discount_percent if promo_type=="discount" else 0,
+                     body.spin_tickets if promo_type=="spin" else 0,
+                     body.max_uses,body.expires_at.strip())
                 )
                 await conn.commit()
             except Exception as e:
@@ -1131,7 +1140,7 @@ async def admin_create_promo(body: PromoCreateIn, x_telegram_init_data: str | No
                 raise
         finally:
             await conn.close()
-    return {"ok":True,"id":cur.lastrowid,"code":code}
+    return {"ok":True,"id":cur.lastrowid,"code":code,"promo_type":promo_type}
 
 
 @app.patch("/api/admin/promos/{promo_id}")
