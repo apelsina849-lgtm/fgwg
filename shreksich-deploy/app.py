@@ -117,7 +117,36 @@ async def init_db():
       points_spent INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS promos(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      discount_percent INTEGER NOT NULL,
+      max_uses INTEGER NOT NULL DEFAULT 0,
+      uses INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      expires_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS referrals(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      referrer_id INTEGER NOT NULL,
+      referred_id INTEGER UNIQUE NOT NULL,
+      rewarded INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     """)
+    # Lightweight SQLite migrations for the persistent Railway volume.
+    order_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(orders)")).fetchall()}
+    if "promo_code" not in order_cols:
+        await conn.execute("ALTER TABLE orders ADD COLUMN promo_code TEXT NOT NULL DEFAULT ''")
+    if "discount_percent" not in order_cols:
+        await conn.execute("ALTER TABLE orders ADD COLUMN discount_percent INTEGER NOT NULL DEFAULT 0")
+    if "telegram_charge_id" not in order_cols:
+        await conn.execute("ALTER TABLE orders ADD COLUMN telegram_charge_id TEXT NOT NULL DEFAULT ''")
+    reset = await (await conn.execute("SELECT value FROM settings WHERE key='bonus_tickets_v1'")).fetchone()
+    if not reset:
+        await conn.execute("UPDATE spin_state SET tickets=0")
+        await conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('bonus_tickets_v1','1')")
     row = await (await conn.execute("SELECT COUNT(*) c FROM products")).fetchone()
     if row["c"] == 0:
         items = [
@@ -289,6 +318,7 @@ class OrderIn(BaseModel):
     uid: str = Field(min_length=3, max_length=64)
     nickname: str = Field(default="", max_length=64)
     comment: str = Field(default="", max_length=1000)
+    promo_code: str = Field(default="", max_length=32)
 
 
 class TicketIn(BaseModel):
@@ -298,6 +328,40 @@ class TicketIn(BaseModel):
 
 class StatusIn(BaseModel):
     status: str
+
+
+class AdminGrantIn(BaseModel):
+    telegram_id: int
+    amount: int = Field(ge=1, le=100)
+
+
+class PromoCreateIn(BaseModel):
+    code: str = Field(min_length=3, max_length=32)
+    discount_percent: int = Field(ge=1, le=90)
+    max_uses: int = Field(default=0, ge=0, le=100000)
+    expires_at: str = Field(default="", max_length=32)
+
+
+class PromoToggleIn(BaseModel):
+    active: bool
+
+
+class ProductAdminIn(BaseModel):
+    category: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=1200)
+    stars_price: int = Field(ge=1, le=1000000)
+    active: bool = True
+    sort_order: int = Field(default=0, ge=0, le=10000)
+
+
+class AdminReplyIn(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class AdminMessageIn(BaseModel):
+    telegram_id: int
+    message: str = Field(min_length=1, max_length=3000)
 
 
 @app.get("/health")
