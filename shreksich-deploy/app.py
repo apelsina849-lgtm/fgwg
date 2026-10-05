@@ -1121,7 +1121,7 @@ async def admin_broadcast(body:BroadcastIn, x_telegram_init_data: str | None = H
 
 def page(admin=False):
     mode = "true" if admin else "false"
-    tpl = """<!doctype html>
+    tpl = r"""<!doctype html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
@@ -1129,67 +1129,91 @@ def page(admin=False):
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <title>__APP_NAME__</title>
 <style>
+:root{--bg:#090b0d;--card:#13161a;--line:#292e34;--gold:#ffc21c;--muted:#949ba4;--blue:#58aaff;--red:#ff5567}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:#090b0d;color:#f5f5f5;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100%;touch-action:manipulation;-webkit-text-size-adjust:100%}
+html,body{margin:0;min-height:100%;background:var(--bg);color:#f5f5f5;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:manipulation;-webkit-text-size-adjust:100%}
 body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 85% 0,#5a3b001f,transparent 32%),radial-gradient(circle at 10% 30%,#ffb3000c,transparent 25%);pointer-events:none}
-.wrap{max-width:720px;margin:auto;padding:18px 16px 110px;position:relative}
-.top{display:flex;align-items:center;justify-content:space-between;margin:8px 0 18px}
-.brand{font-weight:900;letter-spacing:.7px;font-size:22px}.brand b{color:#ffc21c}
+.wrap{max-width:760px;margin:auto;padding:18px 16px 118px;position:relative}
+.top{display:flex;align-items:center;justify-content:space-between;margin:8px 0 12px}
+.brand{font-weight:950;letter-spacing:.8px;font-size:23px}.brand b{color:var(--gold)}
 .pill{font-size:12px;color:#ffcf4b;border:1px solid #5f4918;background:#1b160b;padding:7px 10px;border-radius:999px}
-.hero{background:linear-gradient(135deg,#1b1e22,#111315 55%,#31250a);border:1px solid #393017;border-radius:24px;padding:24px;box-shadow:0 18px 50px #0008;margin-bottom:20px;overflow:hidden;position:relative}
+.hero{background:linear-gradient(135deg,#1b1e22,#111315 55%,#31250a);border:1px solid #393017;border-radius:24px;padding:24px;box-shadow:0 18px 50px #0008;margin-bottom:18px;overflow:hidden;position:relative}
 .hero:after{content:"METRO";position:absolute;right:-10px;bottom:-18px;font-size:62px;font-weight:1000;color:#ffffff08;transform:rotate(-7deg)}
-h1{margin:0 0 8px;font-size:29px}.muted{color:#9ea4ab;line-height:1.5}.gold{color:#ffc21c}
-button,.btn{border:0;border-radius:14px;padding:12px 15px;font-weight:800;cursor:pointer}
+h1{margin:0 0 8px;font-size:29px}h2,h3{margin-top:20px}.muted{color:var(--muted);line-height:1.5}.gold{color:var(--gold)}
+button,.btn{border:0;border-radius:14px;padding:12px 15px;font-weight:850;cursor:pointer;font-family:inherit}
+button:disabled{opacity:.42;cursor:not-allowed}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.card{background:#13161a;border:1px solid #252a30;border-radius:19px;padding:15px;min-width:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:19px;padding:15px;min-width:0}
 .cat{font-size:11px;color:#e2ad22;text-transform:uppercase;letter-spacing:.8px}
 .name{font-weight:850;font-size:16px;margin:6px 0}.desc{font-size:12px;color:#9299a1;min-height:38px;line-height:1.4}
-.price{font-size:20px;font-weight:950;margin:12px 0}.buy{width:100%;background:linear-gradient(135deg,#ffd12d,#f5a900);color:#181000}
+.price{font-size:20px;font-weight:950;margin:12px 0}.old-price{text-decoration:line-through;color:#777;font-size:14px;margin-left:8px}
+.buy{width:100%;background:linear-gradient(135deg,#ffd12d,#f5a900);color:#181000;box-shadow:0 8px 24px #e3a40022}
+.secondary{background:#24282d;color:#fff}.danger{background:#40151a;color:#ff9ea8}.blue{background:#102a43;color:#72b9ff}
 .order{background:#13161a;border:1px solid #272c31;border-radius:18px;padding:15px;margin:10px 0}
-.status{display:inline-block;padding:5px 8px;border-radius:9px;background:#27200d;color:#ffd158;font-size:12px;font-weight:800}
-input,textarea,select{width:100%;background:#0e1013;color:#fff;border:1px solid #30353b;border-radius:13px;padding:13px;margin:6px 0 10px;outline:none}
-textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1}.secondary{background:#24282d;color:#fff}
-.nav{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;width:min(690px,calc(100% - 20px));background:#111418ef;backdrop-filter:blur(18px);border:1px solid #2a2e33;border-radius:20px;padding:8px;display:flex;gap:6px;z-index:10}
-.nav button{flex:1;background:transparent;color:#8f969e;font-size:12px;padding:10px 4px}.nav button.active{background:#24200f;color:#ffd24b}
-.empty{text-align:center;padding:38px 10px;color:#89919a;white-space:pre-line}.hide{display:none!important}.adminline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.adminline select{width:auto;min-width:150px;margin:8px 0}
-.spin-shell{background:linear-gradient(145deg,#12151a,#090b0d);border:1px solid #3a2c0a;border-radius:22px;padding:16px;margin:14px 0;overflow:hidden}
-.reel-window{position:relative;height:118px;border:1px solid #2b3036;background:#0b0d10;border-radius:18px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.reel-window:after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:#ffc21c;box-shadow:0 0 18px #ffc21c;transform:translateX(-50%)}
-.reel-item{font-size:20px;font-weight:950;text-align:center;padding:0 28px;transition:transform .15s,opacity .15s}
-.reel-item.spinning{animation:spinPulse .12s linear infinite}
-@keyframes spinPulse{0%{transform:translateY(-5px);opacity:.45}50%{transform:translateY(5px);opacity:1}100%{transform:translateY(-5px);opacity:.45}}
+.status{display:inline-block;padding:5px 8px;border-radius:9px;background:#27200d;color:#ffd158;font-size:12px;font-weight:850}
+input,textarea,select{width:100%;background:#0e1013;color:#fff;border:1px solid #30353b;border-radius:13px;padding:13px;margin:6px 0 10px;outline:none;font-family:inherit}
+input:focus,textarea:focus,select:focus{border-color:#80651d;box-shadow:0 0 0 3px #ffc21c12}
+textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1}.empty{text-align:center;padding:38px 10px;color:#89919a;white-space:pre-line}.hide{display:none!important}
+.nav{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;width:min(710px,calc(100% - 20px));background:#111418ef;backdrop-filter:blur(18px);border:1px solid #2a2e33;border-radius:20px;padding:8px;display:flex;gap:4px;z-index:20}
+.nav button{flex:1;background:transparent;color:#8f969e;font-size:12px;padding:10px 3px}.nav button.active{background:#24200f;color:#ffd24b}
+
+/* live big wins */
+.wins{height:42px;border:1px solid #2a2f35;background:#0d1013;border-radius:14px;overflow:hidden;margin:0 0 16px;display:flex;align-items:center;position:relative}
+.wins:before{content:"LIVE";position:absolute;z-index:3;left:0;top:0;bottom:0;display:flex;align-items:center;padding:0 10px;font-size:10px;font-weight:950;color:#111;background:linear-gradient(135deg,#ffd431,#f4a900);box-shadow:7px 0 18px #000}
+.wins-track{display:flex;align-items:center;gap:28px;white-space:nowrap;width:max-content;padding-left:65px;animation:ticker 28s linear infinite}
+.win-item{font-size:12px;font-weight:800}.win-item.legendary{color:#ffc15a;text-shadow:0 0 12px #ff970055}.win-item.mythic{color:#ff7ee5;text-shadow:0 0 14px #ff40da77}
+@keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* 3D-style sticker tiles inspired by approved sticker set */
+.sticker-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0 18px}
+.sticker{position:relative;min-height:132px;border-radius:22px;overflow:hidden;border:1px solid #30363d;background:linear-gradient(145deg,#171b20,#0d0f12);padding:14px;cursor:pointer;box-shadow:inset 0 1px #ffffff0a,0 14px 28px #0005;transition:.18s transform}
+.sticker:active{transform:scale(.975)}.sticker:after{content:"";position:absolute;inset:auto -30px -45px auto;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,currentColor,transparent 67%);opacity:.11}
+.sticker-icon{font-size:46px;line-height:1;filter:drop-shadow(0 10px 12px #0008);text-shadow:0 2px 0 #fff2,0 0 20px currentColor;display:block;margin-bottom:10px}
+.sticker-title{font-size:15px;font-weight:950;line-height:1.05;text-transform:uppercase;text-shadow:0 2px 6px #000}
+.sticker-sub{font-size:10px;color:#b4bac1;margin-top:5px}.st-gold{color:#ffc229;border-color:#5a4516}.st-purple{color:#d766ff;border-color:#5a276a}.st-blue{color:#55b9ff;border-color:#1d5276}.st-red{color:#ff6674;border-color:#6a2731}.st-cyan{color:#4cebe0;border-color:#1d605c}
+
+/* rarity */
 .tier{display:inline-block;padding:5px 8px;border-radius:9px;font-size:11px;font-weight:900;letter-spacing:.7px;border:1px solid transparent}
 .tier-common{color:#d2d7dd;background:#20242a;border-color:#555d66}
 .tier-rare{color:#67b7ff;background:#0b2136;border-color:#1e72b8;box-shadow:0 0 14px #1e72b833}
 .tier-epic{color:#c985ff;background:#261034;border-color:#8b3fc7;box-shadow:0 0 16px #8b3fc744}
 .tier-legendary{color:#ffbd4a;background:#362109;border-color:#ff9900;box-shadow:0 0 22px #ff990055}
 .tier-mythic{color:#ff79df;background:linear-gradient(135deg,#3b0b34,#21113d);border-color:#ff4bd8;box-shadow:0 0 26px #ff4bd866}
-.reel-item.tier-common{color:#d1d6dc}
-.reel-item.tier-rare{color:#67b7ff;text-shadow:0 0 18px #249cff}
-.reel-item.tier-epic{color:#c985ff;text-shadow:0 0 20px #a84cff}
-.reel-item.tier-legendary{color:#ffc250;text-shadow:0 0 24px #ff9800}
-.reel-item.tier-mythic{color:#ff79df;text-shadow:0 0 26px #ff37d2,0 0 44px #7d45ff}
-.spin-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:12px}
+
+/* spin */
+.spin-shell{background:linear-gradient(145deg,#12151a,#090b0d);border:1px solid #3a2c0a;border-radius:22px;padding:16px;margin:14px 0;overflow:hidden}
+.reel-window{position:relative;height:118px;border:1px solid #2b3036;background:#0b0d10;border-radius:18px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.reel-window:after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:#ffc21c;box-shadow:0 0 18px #ffc21c;transform:translateX(-50%)}
+.reel-item{font-size:20px;font-weight:950;text-align:center;padding:0 28px;transition:transform .15s,opacity .15s}
+.reel-item.spinning{animation:spinPulse .11s linear infinite}
+.reel-item.tier-common{color:#d1d6dc}.reel-item.tier-rare{color:#67b7ff;text-shadow:0 0 18px #249cff}.reel-item.tier-epic{color:#c985ff;text-shadow:0 0 20px #a84cff}.reel-item.tier-legendary{color:#ffc250;text-shadow:0 0 24px #ff9800}.reel-item.tier-mythic{color:#ff79df;text-shadow:0 0 26px #ff37d2,0 0 44px #7d45ff}
+@keyframes spinPulse{0%{transform:translateY(-5px);opacity:.45}50%{transform:translateY(5px);opacity:1}100%{transform:translateY(-5px);opacity:.45}}
+.spin-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:11px}.spin-stat .price{font-size:17px}
 .claim{width:100%;margin-top:8px;background:#20252b;color:#fff}.claim:disabled{opacity:.4}
-.socials{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.social-btn{width:100%;background:#171b20;color:#fff;border:1px solid #303640}.social-btn b{color:#ffc21c}
 .drop-fx{position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:24px;background:#000c;backdrop-filter:blur(7px);animation:fxFade .25s ease-out}
 .drop-card{width:min(520px,100%);border-radius:28px;padding:34px 22px;text-align:center;background:#101318;border:1px solid #343941;transform:scale(.72);animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards;position:relative;overflow:hidden}
-.drop-card h2{font-size:32px;margin:10px 0}.drop-card .drop-name{font-size:23px;font-weight:950;margin:15px 0}
+.drop-card h2{font-size:32px;margin:10px 0}.drop-name{font-size:23px;font-weight:950;margin:15px 0}
 .drop-fx.legendary .drop-card{border-color:#ff9d00;box-shadow:0 0 60px #ff9d0088,0 0 120px #ff6a0033;animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards,legendaryPulse .85s ease-in-out 2}
 .drop-fx.mythic{background:radial-gradient(circle at 50% 40%,#5c175c99,#000e 58%)}
 .drop-fx.mythic .drop-card{border-color:#ff4bd8;box-shadow:0 0 80px #ff4bd899,0 0 140px #7547ff66;animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards,mythicPulse .7s ease-in-out 3}
 .drop-fx.mythic .drop-card:before{content:"";position:absolute;inset:-70%;background:conic-gradient(from 0deg,transparent,#ff4bd844,transparent,#7d45ff55,transparent);animation:mythicSpin 2s linear infinite}
 .drop-content{position:relative;z-index:2}.spark{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 14px currentColor;animation:sparkFly 1.2s ease-out forwards}
-@keyframes fxFade{from{opacity:0}to{opacity:1}}@keyframes dropPop{to{transform:scale(1)}}
-@keyframes legendaryPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
-@keyframes mythicPulse{0%,100%{filter:brightness(1);transform:scale(1)}50%{filter:brightness(1.55);transform:scale(1.06)}}
-@keyframes mythicSpin{to{transform:rotate(360deg)}}@keyframes sparkFly{from{transform:translate(0,0) scale(1);opacity:1}to{transform:translate(var(--x),var(--y)) scale(0);opacity:0}}
-@media(max-width:390px){.grid{grid-template-columns:1fr}h1{font-size:25px}}
+@keyframes fxFade{from{opacity:0}to{opacity:1}}@keyframes dropPop{to{transform:scale(1)}}@keyframes legendaryPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}@keyframes mythicPulse{0%,100%{filter:brightness(1);transform:scale(1)}50%{filter:brightness(1.55);transform:scale(1.06)}}@keyframes mythicSpin{to{transform:rotate(360deg)}}@keyframes sparkFly{from{transform:translate(0,0) scale(1);opacity:1}to{transform:translate(var(--x),var(--y)) scale(0);opacity:0}}
+
+/* admin */
+.admin-nav{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px;margin-bottom:8px;scrollbar-width:none}.admin-nav::-webkit-scrollbar{display:none}
+.admin-nav button{white-space:nowrap;background:#181c21;color:#9ea5ad;border:1px solid #292f36;padding:9px 11px}.admin-nav button.active{background:#2b230d;color:#ffd056;border-color:#63501c}
+.metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.metric{padding:14px;border:1px solid #282d33;background:#121519;border-radius:17px}.metric b{display:block;font-size:23px;margin-top:4px}
+.adminline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.adminline>*{flex:1;min-width:120px}.admin-card{background:#111419;border:1px solid #252b31;border-radius:18px;padding:14px;margin:10px 0}
+.mini{font-size:11px;color:#8e959d}.ok{color:#68d391}.warn{color:#ffd166}
+
+@media(max-width:390px){.grid,.sticker-grid{grid-template-columns:1fr 1fr}.spin-stats{grid-template-columns:1fr 1fr}.metrics{grid-template-columns:1fr 1fr}h1{font-size:25px}.sticker{min-height:122px;padding:12px}.sticker-icon{font-size:40px}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top"><div class="brand">ШРЕКСИЧ <b>SHOP</b></div><div class="pill">PUBG MOBILE</div></div>
+  <div class="wins" id="winsTicker"><div class="wins-track"><span class="muted">Загружаем крупные выигрыши…</span></div></div>
   <main id="app"><div class="empty">Загрузка магазина…</div></main>
 </div>
 <div class="nav" id="nav">
@@ -1198,327 +1222,249 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 <script>
 (function(){
 'use strict';
+const ADMIN=__ADMIN__;
+const app=document.getElementById('app');
+const navEl=document.getElementById('nav');
+const tg=window.Telegram&&window.Telegram.WebApp?window.Telegram.WebApp:null;
+if(tg){try{tg.ready();tg.expand();tg.setHeaderColor('#090b0d');tg.setBackgroundColor('#090b0d')}catch(_){}}
+document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
+document.addEventListener('gesturechange',e=>e.preventDefault(),{passive:false});
+document.addEventListener('gestureend',e=>e.preventDefault(),{passive:false});
+document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault()},{passive:false});
+let lastTouchEnd=0;document.addEventListener('touchend',e=>{const n=Date.now();if(n-lastTouchEnd<=300)e.preventDefault();lastTouchEnd=n},{passive:false});
 
-const ADMIN = __ADMIN__;
-const app = document.getElementById('app');
-const navEl = document.getElementById('nav');
-const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+const initData=tg?(tg.initData||''):'';
+const headers={'Content-Type':'application/json','X-Telegram-Init-Data':initData};
+let products=[],me=null,spinState=null,lastSpinReward=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
+let adminSection='overview',adminData=null;
 
-function showFatal(message){
-  app.innerHTML = '<div class="empty">' + esc(message) + '</div>';
-}
-window.addEventListener('error', function(e){ showFatal('Ошибка интерфейса: ' + (e.message || 'неизвестная ошибка')); });
-window.addEventListener('unhandledrejection', function(e){ showFatal('Ошибка загрузки: ' + ((e.reason && e.reason.message) || String(e.reason || 'неизвестная ошибка'))); });
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function stars(n){return Number(n||0).toLocaleString('ru-RU')+' ⭐'}
+function tierClass(t){return 'tier-'+String(t||'COMMON').toLowerCase()}
+function formatReset(sec){sec=Math.max(0,Number(sec||0));if(!sec)return'';const h=Math.floor(sec/3600),m=Math.ceil((sec%3600)/60);return(h?h+' ч ':'')+m+' мин'}
+function showFatal(m){app.innerHTML='<div class="empty">'+esc(m)+'</div>'}
+window.addEventListener('error',e=>showFatal('Ошибка интерфейса: '+(e.message||'неизвестная')));
+window.addEventListener('unhandledrejection',e=>showFatal('Ошибка загрузки: '+((e.reason&&e.reason.message)||String(e.reason||''))));
 
-document.addEventListener('gesturestart', function(e){ e.preventDefault(); }, {passive:false});
-document.addEventListener('gesturechange', function(e){ e.preventDefault(); }, {passive:false});
-document.addEventListener('gestureend', function(e){ e.preventDefault(); }, {passive:false});
-document.addEventListener('touchmove', function(e){ if(e.touches && e.touches.length > 1) e.preventDefault(); }, {passive:false});
-let lastTouchEnd = 0;
-document.addEventListener('touchend', function(e){
-  const now = Date.now();
-  if(now - lastTouchEnd <= 300) e.preventDefault();
-  lastTouchEnd = now;
-}, {passive:false});
+async function api(path,options={}){
+ const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),15000);
+ try{
+  const r=await fetch(path,Object.assign({},options,{headers:Object.assign({},headers,options.headers||{}),signal:ctl.signal}));
+  let d={};try{d=await r.json()}catch(_){}
+  if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));
+  return d;
+ }catch(e){if(e&&e.name==='AbortError')throw new Error('Сервер не ответил за 15 секунд');throw e}
+ finally{clearTimeout(timer)}
+}
+function openTelegram(url){try{if(tg&&tg.openTelegramLink)tg.openTelegramLink(url);else window.open(url,'_blank')}catch(_){window.open(url,'_blank')}}
+function bindSocials(){document.querySelectorAll('[data-tg]').forEach(b=>b.addEventListener('click',()=>openTelegram(b.dataset.tg)))}
+function updateNav(){document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(ADMIN)navEl.classList.add('hide')}
+function go(t){tab=t;render()}
 
-if(tg){
-  try{ tg.ready(); tg.expand(); }catch(_){}
-  try{ tg.setHeaderColor('#090b0d'); tg.setBackgroundColor('#090b0d'); }catch(_){}
-}
-
-const initData = tg ? (tg.initData || '') : '';
-const headers = {'Content-Type':'application/json','X-Telegram-Init-Data':initData};
-let products = [];
-let me = null;
-let spinState = null;
-let lastSpinReward = null;
-let tab = new URLSearchParams(location.search).get('tab') || (ADMIN ? 'admin' : 'home');
-
-function esc(v){
-  return String(v == null ? '' : v).replace(/[&<>"']/g,function(m){
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
-  });
-}
-function stars(n){ return Number(n).toLocaleString('ru-RU') + ' ⭐'; }
-function tierClass(t){ return 'tier-' + String(t||'COMMON').toLowerCase(); }
-function formatReset(sec){
-  sec=Math.max(0,Number(sec||0));
-  if(!sec) return '';
-  const h=Math.floor(sec/3600), m=Math.ceil((sec%3600)/60);
-  return (h?h+' ч ':'')+m+' мин';
-}
-function openTelegram(url){
-  try{
-    if(tg && tg.openTelegramLink) tg.openTelegramLink(url);
-    else window.open(url,'_blank');
-  }catch(_){ window.open(url,'_blank'); }
-}
-function bindSocials(){
-  document.querySelectorAll('[data-tg]').forEach(function(btn){
-    btn.addEventListener('click',function(){openTelegram(btn.dataset.tg);});
-  });
-}
-function showDropFx(reward){
-  if(!reward || (reward.tier!=='LEGENDARY' && reward.tier!=='MYTHIC')) return;
-  try{
-    if(tg && tg.HapticFeedback){
-      tg.HapticFeedback.notificationOccurred('success');
-      if(reward.tier==='MYTHIC') tg.HapticFeedback.impactOccurred('heavy');
-    }
-  }catch(_){}
-  const fx=document.createElement('div');
-  fx.className='drop-fx '+reward.tier.toLowerCase();
-  fx.innerHTML='<div class="drop-card"><div class="drop-content"><span class="tier '+tierClass(reward.tier)+'">'+esc(reward.tier)+'</span><h2>'+(reward.tier==='MYTHIC'?'MYTHIC DROP!':'LEGENDARY DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div><div class="muted">+'+reward.points+' upgrade pts</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
-  document.body.appendChild(fx);
-  const card=fx.querySelector('.drop-card');
-  const total=reward.tier==='MYTHIC'?30:20;
-  for(let i=0;i<total;i++){
-    const s=document.createElement('i'); s.className='spark';
-    const a=(Math.PI*2*i)/total, d=90+Math.random()*170;
-    s.style.left=(45+Math.random()*10)+'%'; s.style.top=(45+Math.random()*10)+'%';
-    s.style.setProperty('--x',(Math.cos(a)*d)+'px'); s.style.setProperty('--y',(Math.sin(a)*d)+'px');
-    s.style.color=reward.tier==='MYTHIC'?(i%2?'#ff4bd8':'#8b62ff'):'#ffad25';
-    card.appendChild(s);
-  }
-  fx.querySelector('#closeDrop').addEventListener('click',function(){fx.remove();});
-}
-
-async function api(path, options){
-  options = options || {};
-  const controller = new AbortController();
-  const timer = setTimeout(function(){ controller.abort(); }, 12000);
-  try{
-    const response = await fetch(path, Object.assign({}, options, {
-      headers:Object.assign({}, headers, options.headers || {}),
-      signal:controller.signal
-    }));
-    let data = {};
-    try{ data = await response.json(); }catch(_){}
-    if(!response.ok) throw new Error(data.detail || ('HTTP ' + response.status));
-    return data;
-  }catch(e){
-    if(e && e.name === 'AbortError') throw new Error('Сервер не ответил за 12 секунд');
-    throw e;
-  }finally{
-    clearTimeout(timer);
-  }
-}
-
-function updateNav(){
-  document.querySelectorAll('#nav button').forEach(function(b){
-    b.classList.toggle('active', b.dataset.tab === tab);
-  });
-  if(ADMIN) navEl.classList.add('hide');
+async function loadWinsFeed(){
+ try{
+  const wins=await api('/api/wins-feed');
+  const el=document.querySelector('#winsTicker .wins-track');if(!el)return;
+  if(!wins.length){el.innerHTML='<span class="muted">Пока ждём первый Legendary / Mythic дроп</span>';return}
+  const one=wins.map(x=>'<span class="win-item '+String(x.reward_tier).toLowerCase()+'">'+(x.reward_tier==='MYTHIC'?'◆':'★')+' '+esc(x.player)+' выбил '+esc(x.reward_name)+' <b>'+esc(x.reward_tier)+'</b></span>').join('');
+  el.innerHTML=one+one;
+ }catch(_){}
 }
 
 function cards(list){
-  return '<div class="grid">' + list.map(function(p){
-    return '<div class="card"><div class="cat">'+esc(p.category)+'</div><div class="name">'+esc(p.name)+'</div><div class="desc">'+esc(p.description)+'</div><div class="price">'+stars(p.stars_price)+'</div><button class="buy" data-buy="'+p.id+'">Купить за Stars</button></div>';
-  }).join('') + '</div>';
+ return '<div class="grid">'+list.map(p=>'<div class="card"><div class="cat">'+esc(p.category)+'</div><div class="name">'+esc(p.name)+'</div><div class="desc">'+esc(p.description)+'</div><div class="price">'+stars(p.stars_price)+'</div><button class="buy" data-buy="'+p.id+'">Купить за Stars</button></div>').join('')+'</div>'
 }
+function bindProductButtons(){document.querySelectorAll('[data-buy]').forEach(b=>b.addEventListener('click',()=>orderForm(Number(b.dataset.buy))))}
 
+function sticker(title,sub,icon,cls,attrs){return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon">'+icon+'</span><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div>'}
 function home(){
-  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары • Буст • Квесты • Фарм<br>Оплата внутри Telegram через ⭐ Stars.</div></section><div class="socials"><button class="social-btn" data-tg="https://t.me/shreksi4PubgNEWS">📢 <b>Новости</b></button><button class="social-btn" data-tg="https://t.me/chatshreksi4">💬 <b>Наш чат</b></button></div><div class="spin-shell"><div class="cat">HYPE MODE</div><h2>HYPE SPIN</h2><div class="muted">1 бесплатный SPIN за 24 часа, Metro-награды и гарантированный Upgrade Lab.</div><button class="buy" id="homeSpinBtn" style="margin-top:12px">Открыть SPIN</button></div><h3>Популярное</h3>' + cards(products.slice(0,4));
+ return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары, буст, квесты и Metro-награды. Оплата покупок — через ⭐ Telegram Stars.</div></section>'+
+ '<div class="sticker-grid">'+
+ sticker('Каталог','Товары и услуги','📦','st-gold','data-go="catalog"')+
+ sticker('HYPE SPIN','1 free / 24h','🎰','st-purple','data-go="spin"')+
+ sticker('Мои заказы','Статусы покупок','🛒','st-blue','data-go="orders"')+
+ sticker('Рефералы','Билеты и бонусы','👥','st-red','data-go="referral"')+
+ sticker('Новости','@shreksi4PubgNEWS','📣','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+
+ sticker('Наш чат','@chatshreksi4','💬','st-cyan','data-tg="https://t.me/chatshreksi4"')+
+ '</div><h3>Популярное</h3>'+cards(products.slice(0,4))
 }
-
-function bindBuyButtons(){
-  document.querySelectorAll('[data-buy]').forEach(function(btn){
-    btn.addEventListener('click', function(){ orderForm(Number(btn.dataset.buy)); });
-  });
-  const hs=document.getElementById('homeSpinBtn');
-  if(hs) hs.addEventListener('click',function(){tab='spin';render();});
-  bindSocials();
-}
+function bindHome(){bindProductButtons();document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));bindSocials()}
 
 function orderForm(id){
-  const p = products.find(function(x){ return Number(x.id) === Number(id); });
-  if(!p) return;
-  app.innerHTML = '<div class="hero"><div class="cat">'+esc(p.category)+'</div><h1>'+esc(p.name)+'</h1><div class="muted">'+esc(p.description)+'</div><div class="price">'+stars(p.stars_price)+'</div></div><div class="card"><b>Данные заказа</b><input id="uid" placeholder="UID PUBG Mobile"><input id="nick" placeholder="Игровой ник"><textarea id="comment" placeholder="Комментарий к заказу"></textarea><button class="buy" id="createOrderBtn">Создать заказ</button></div>';
-  document.getElementById('createOrderBtn').addEventListener('click', function(){ createOrder(id); });
+ const p=products.find(x=>Number(x.id)===Number(id));if(!p)return;
+ app.innerHTML='<div class="hero"><div class="cat">'+esc(p.category)+'</div><h1>'+esc(p.name)+'</h1><div class="muted">'+esc(p.description)+'</div><div class="price" id="orderPrice">'+stars(p.stars_price)+'</div></div>'+
+ '<div class="card"><b>Данные заказа</b><input id="uid" placeholder="UID PUBG Mobile"><input id="nick" placeholder="Игровой ник"><textarea id="comment" placeholder="Комментарий к заказу"></textarea>'+
+ '<div class="row"><input id="promo" placeholder="Промокод"><button class="secondary" id="promoBtn">Проверить</button></div><div class="mini" id="promoInfo"></div>'+
+ '<button class="buy" id="createOrderBtn" style="margin-top:10px">Создать заказ</button></div>';
+ document.getElementById('promoBtn').addEventListener('click',()=>checkPromo(id,p.stars_price));
+ document.getElementById('createOrderBtn').addEventListener('click',()=>createOrder(id))
 }
-
+async function checkPromo(id,base){
+ const info=document.getElementById('promoInfo'),code=document.getElementById('promo').value.trim();
+ if(!code){info.textContent='Введите промокод';return}
+ try{
+  const d=await api('/api/promo/check',{method:'POST',body:JSON.stringify({product_id:id,uid:'preview',nickname:'',comment:'',promo_code:code})});
+  info.innerHTML='<span class="ok">Промокод '+esc(d.code)+' • скидка '+d.discount_percent+'% • '+stars(d.final_stars)+'</span>';
+  document.getElementById('orderPrice').innerHTML=stars(d.final_stars)+' <span class="old-price">'+stars(base)+'</span>'
+ }catch(e){info.innerHTML='<span class="warn">'+esc(e.message)+'</span>'}
+}
 async function createOrder(id){
-  const btn=document.getElementById('createOrderBtn');
-  if(btn && btn.disabled) return;
-  if(btn){btn.disabled=true;btn.textContent='Создаём заказ…';}
-  try{
-    const o = await api('/api/orders',{
-      method:'POST',
-      body:JSON.stringify({
-        product_id:id,
-        uid:document.getElementById('uid').value,
-        nickname:document.getElementById('nick').value,
-        comment:document.getElementById('comment').value
-      })
-    });
-    showPay(o);
-  }catch(e){
-    if(btn){btn.disabled=false;btn.textContent='Создать заказ';}
-    alert(e.message);
-  }
+ const btn=document.getElementById('createOrderBtn');if(btn.disabled)return;btn.disabled=true;btn.textContent='Создаём заказ…';
+ try{
+  const o=await api('/api/orders',{method:'POST',body:JSON.stringify({product_id:id,uid:document.getElementById('uid').value,nickname:document.getElementById('nick').value,comment:document.getElementById('comment').value,promo_code:document.getElementById('promo').value})});
+  showPay(o)
+ }catch(e){btn.disabled=false;btn.textContent='Создать заказ';alert(e.message)}
 }
-
 function showPay(o){
-  app.innerHTML = '<div class="hero"><div class="cat">ЗАКАЗ #'+o.number+'</div><h1>Заказ создан</h1><div class="muted">Оплатите заказ через Telegram Stars.</div></div><div class="card"><div class="price">'+stars(o.stars_amount)+'</div><button class="buy" id="starsBtn">Оплатить '+o.stars_amount+' ⭐</button><p class="muted">Платёж проходит внутри Telegram.</p></div>';
-  document.getElementById('starsBtn').addEventListener('click', function(){ payStars(o.id); });
+ const sale=o.discount_percent?'<div class="ok">Промокод '+esc(o.promo_code)+' • -'+o.discount_percent+'%</div>':'';
+ app.innerHTML='<div class="hero"><div class="cat">ЗАКАЗ #'+o.number+'</div><h1>Заказ создан</h1><div class="muted">Оплата через Telegram Stars.</div></div><div class="card">'+sale+'<div class="price">'+stars(o.stars_amount)+(o.original_stars_amount>o.stars_amount?' <span class="old-price">'+stars(o.original_stars_amount)+'</span>':'')+'</div><button class="buy" id="starsBtn">Оплатить '+o.stars_amount+' ⭐</button></div>';
+ document.getElementById('starsBtn').addEventListener('click',()=>payStars(o.id))
 }
-
 async function payStars(id){
-  const btn=document.getElementById('starsBtn');
-  if(btn && btn.disabled) return;
-  if(btn){btn.disabled=true;btn.textContent='Открываем оплату…';}
-  try{
-    const d = await api('/api/orders/'+id+'/stars',{method:'POST'});
-    if(tg && tg.openInvoice) tg.openInvoice(d.url,function(){ tab='orders'; render(); });
-    else location.href=d.url;
-  }catch(e){
-    if(btn){btn.disabled=false;btn.textContent='Оплатить Stars';}
-    alert(e.message);
-  }
+ const b=document.getElementById('starsBtn');if(b.disabled)return;b.disabled=true;b.textContent='Открываем оплату…';
+ try{
+  const d=await api('/api/orders/'+id+'/stars',{method:'POST'});
+  if(tg&&tg.openInvoice)tg.openInvoice(d.url,()=>{tab='orders';render()});else location.href=d.url
+ }catch(e){b.disabled=false;b.textContent='Оплатить Stars';alert(e.message)}
 }
 async function ordersHtml(){
-  const list = await api('/api/orders');
-  if(!list.length) return '<div class="empty">У вас пока нет заказов.</div>';
-  return list.map(function(o){
-    return '<div class="order"><div class="cat">ЗАКАЗ #'+o.number+'</div><div class="name">'+esc(o.product_name)+'</div><div class="row"><div class="price">'+stars(o.stars_amount)+'</div><div style="text-align:right"><span class="status">'+esc(o.status)+'</span></div></div><div class="muted">'+esc(o.created_at)+'</div></div>';
-  }).join('');
-}
-async function spinHtml(){
-  spinState=await api('/api/spin/state');
-  const history=(spinState.history||[]).map(function(x){
-    return '<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+esc(x.reward_tier)+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="muted">+'+x.points+' upgrade pts • '+esc(x.created_at)+'</div></div>';
-  }).join('');
-  const claims=(spinState.upgrade_rewards||[]).map(function(x){
-    const ok=Number(spinState.upgrade_points)>=Number(x.points);
-    return '<button class="claim" data-claim="'+x.points+'" '+(ok?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' pts</button>';
-  }).join('');
-  const last=lastSpinReward?'<div class="order"><div class="cat">ПОСЛЕДНИЙ ДРОП</div><span class="tier '+tierClass(lastSpinReward.tier)+'">'+esc(lastSpinReward.tier)+'</span><div class="name">'+esc(lastSpinReward.name)+'</div><div class="muted">+'+lastSpinReward.points+' upgrade pts</div></div>':'';
-  const remaining=Number(spinState.remaining_spins||0);
-  const resetText=remaining>0?'Доступно сейчас: '+remaining+' из '+spinState.max_spins:'Лимит исчерпан • следующий SPIN через '+formatReset(spinState.next_reset_seconds);
-  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Награды выдаются администратором в игре.</div></section>'+
-    '<div class="spin-stats"><div class="spin-stat"><div class="muted">SPIN осталось</div><div class="price" id="ticketsCount">'+remaining+' / '+spinState.max_spins+'</div></div><div class="spin-stat"><div class="muted">Upgrade pts</div><div class="price" id="pointsCount">'+spinState.upgrade_points+'</div></div></div>'+
-    '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(remaining<=0?'disabled':'')+'>'+(remaining>0?'КРУТИТЬ SPIN':'ЛИМИТ ИСЧЕРПАН')+'</button><div class="muted" style="margin-top:10px">'+resetText+'</div><div class="muted" style="margin-top:7px">Common 75% • Rare 18% • Epic 5% • Legendary 1.5% • Mythic 0.5%</div></div>'+
-    last+'<h3>Upgrade Lab</h3><div class="card"><div class="muted">Очки из бесплатных спинов можно обменять на гарантированную награду.</div>'+claims+'</div>'+
-    '<h3>Последние спины</h3>'+(history||'<div class="empty">История пока пустая.</div>');
-}
-function bindSpin(){
-  const b=document.getElementById('spinBtn');
-  if(b && !b.disabled) b.addEventListener('click',spinOnce);
-  document.querySelectorAll('[data-claim]').forEach(function(btn){
-    btn.addEventListener('click',function(){claimUpgrade(Number(btn.dataset.claim));});
-  });
-}
-async function spinOnce(){
-  const btn=document.getElementById('spinBtn');
-  if(btn && btn.disabled) return;
-  if(btn){btn.disabled=true;btn.textContent='КРУТИМ…';}
-  const reel=document.getElementById('reelItem');
-  const pool=(spinState.rewards||[]);
-  let i=0;
-  if(reel) reel.classList.add('spinning');
-  const timer=setInterval(function(){
-    if(reel && pool.length){
-      const x=pool[i%pool.length]; i++;
-      reel.textContent=x.name;
-      reel.className='reel-item spinning '+tierClass(x.tier);
-    }
-  },80);
-  try{
-    const d=await api('/api/spin/free',{method:'POST'});
-    setTimeout(async function(){
-      clearInterval(timer);
-      lastSpinReward=d.reward;
-      if(reel){
-        reel.className='reel-item '+tierClass(d.reward.tier);
-        reel.textContent=d.reward.name;
-      }
-      try{ if(tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred(d.reward.tier==='MYTHIC'?'heavy':'medium'); }catch(_){}
-      await new Promise(function(r){setTimeout(r,650);});
-      showDropFx(d.reward);
-      app.innerHTML=await spinHtml();
-      bindSpin();
-    },1800);
-  }catch(e){
-    clearInterval(timer);
-    if(reel) reel.classList.remove('spinning');
-    if(btn){btn.disabled=false;btn.textContent='КРУТИТЬ SPIN';}
-    alert(e.message);
-  }
-}
-async function claimUpgrade(points){
-  try{
-    const d=await api('/api/upgrade/claim',{method:'POST',body:JSON.stringify({points:points})});
-    alert('Заявка на выдачу создана: '+d.reward.name);
-    app.innerHTML=await spinHtml(); bindSpin();
-  }catch(e){alert(e.message);}
+ const list=await api('/api/orders');if(!list.length)return'<div class="empty">У вас пока нет заказов.</div>';
+ return '<h2>Мои заказы</h2>'+list.map(o=>'<div class="order"><div class="cat">ЗАКАЗ #'+o.number+'</div><div class="name">'+esc(o.product_name)+'</div><div class="row"><div class="price">'+stars(o.stars_amount)+'</div><div style="text-align:right"><span class="status">'+esc(o.status)+'</span></div></div>'+(o.promo_code?'<div class="mini">Промокод: '+esc(o.promo_code)+' (-'+o.discount_percent+'%)</div>':'')+'<div class="muted">'+esc(o.created_at)+'</div></div>').join('')
 }
 
-function supportHtml(){
-  return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Создайте обращение — оно появится в админ-панели без лишних сообщений в чате бота.</div></div><div class="socials"><button class="social-btn" data-tg="https://t.me/shreksi4PubgNEWS">📢 <b>Новости</b></button><button class="social-btn" data-tg="https://t.me/chatshreksi4">💬 <b>Наш чат</b></button></div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>';
+function showDropFx(reward){
+ if(!reward||(reward.tier!=='LEGENDARY'&&reward.tier!=='MYTHIC'))return;
+ try{if(tg&&tg.HapticFeedback){tg.HapticFeedback.notificationOccurred('success');tg.HapticFeedback.impactOccurred(reward.tier==='MYTHIC'?'heavy':'medium')}}catch(_){}
+ const fx=document.createElement('div');fx.className='drop-fx '+reward.tier.toLowerCase();
+ fx.innerHTML='<div class="drop-card"><div class="drop-content"><span class="tier '+tierClass(reward.tier)+'">'+esc(reward.tier)+'</span><h2>'+(reward.tier==='MYTHIC'?'MYTHIC DROP!':'LEGENDARY DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div><div class="muted">+'+reward.points+' Upgrade pts</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
+ document.body.appendChild(fx);const card=fx.querySelector('.drop-card'),total=reward.tier==='MYTHIC'?30:20;
+ for(let i=0;i<total;i++){const s=document.createElement('i');s.className='spark';const a=Math.PI*2*i/total,d=90+Math.random()*170;s.style.left=(45+Math.random()*10)+'%';s.style.top=(45+Math.random()*10)+'%';s.style.setProperty('--x',(Math.cos(a)*d)+'px');s.style.setProperty('--y',(Math.sin(a)*d)+'px');s.style.color=reward.tier==='MYTHIC'?(i%2?'#ff4bd8':'#8b62ff'):'#ffad25';card.appendChild(s)}
+ fx.querySelector('#closeDrop').addEventListener('click',()=>fx.remove())
 }
-async function sendTicket(){
-  try{
-    const d=await api('/api/support',{method:'POST',body:JSON.stringify({category:document.getElementById('tc').value,message:document.getElementById('tm').value})});
-    alert('Обращение #'+d.id+' создано');
-    document.getElementById('tm').value='';
-  }catch(e){ alert(e.message); }
+async function spinHtml(){
+ spinState=await api('/api/spin/state');
+ const history=(spinState.history||[]).map(x=>'<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+esc(x.reward_tier)+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="mini">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • +'+x.points+' pts • '+esc(x.created_at)+'</div></div>').join('');
+ const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.upgrade_points)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' pts</button>').join('');
+ const total=Number(spinState.remaining_spins||0);
+ const buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
+ return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — только бонусными билетами.</div></section>'+
+ '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">UPGRADE</div><div class="price">'+spinState.upgrade_points+'</div></div></div>'+
+ '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button><div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div><div class="mini" style="margin-top:8px">Common 75% • Rare 18% • Epic 5% • Legendary 1.5% • Mythic 0.5%</div></div>'+
+ '<h3>Upgrade Lab</h3><div class="card"><div class="muted">Upgrade pts обмениваются на гарантированную награду — без случайной ставки.</div>'+claims+'</div><h3>История</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
-async function adminHtml(){
-  const results = await Promise.all([api('/api/admin/orders'),api('/api/admin/tickets'),api('/api/admin/spins'),api('/api/admin/upgrades')]);
-  const a=results[0], t=results[1], spins=results[2], upgrades=results[3];
-  return '<section class="hero"><div class="cat">OWNER PANEL</div><h1>Админ-панель</h1><div class="muted">Заказы: '+a.length+' • Обращения: '+t.length+' • SPIN: '+spins.length+' • Upgrade: '+upgrades.length+'</div></section><h3>Заказы</h3>' +
-    a.map(function(o){
-      const statuses=['Ожидает оплаты','Ожидает проверки оплаты','Оплачен','Принят','В работе','Ожидает клиента','Выполнен','Отменён','Возврат'];
-      return '<div class="order"><div class="cat">#'+o.number+' • Telegram '+o.telegram_id+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+stars(o.stars_amount)+' • UID '+esc(o.uid)+'</div><div class="adminline"><select id="s'+o.id+'">'+statuses.map(function(s){return '<option '+(s===o.status?'selected':'')+'>'+s+'</option>';}).join('')+'</select><button class="secondary" data-status="'+o.id+'">Сохранить</button></div></div>';
-    }).join('') +
-    '<h3>Выигрыши HYPE SPIN</h3>' +
-    (spins.map(function(x){return '<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+esc(x.reward_tier)+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="muted">Telegram '+x.telegram_id+' • +'+x.points+' pts • '+esc(x.created_at)+'</div></div>';}).join('') || '<div class="empty">Пока нет выигрышей.</div>') +
-    '<h3>Заявки Upgrade Lab</h3>' +
-    (upgrades.map(function(x){return '<div class="order"><div class="name">'+esc(x.reward_name)+'</div><div class="muted">Telegram '+x.telegram_id+' • списано '+x.points_spent+' pts • '+esc(x.created_at)+'</div></div>';}).join('') || '<div class="empty">Пока нет заявок.</div>') +
-    '<h3>Поддержка</h3>' +
-    (t.map(function(x){return '<div class="order"><div class="cat">#'+x.id+' • '+esc(x.category)+'</div><div>'+esc(x.message)+'</div><div class="muted">Telegram '+x.telegram_id+'</div></div>';}).join('') || '<div class="empty">Обращений нет.</div>');
+function bindSpin(){
+ const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
+ document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
 }
-async function setStatus(id){
-  try{
-    await api('/api/admin/orders/'+id,{method:'PATCH',body:JSON.stringify({status:document.getElementById('s'+id).value})});
-    alert('Статус обновлён');
-  }catch(e){ alert(e.message); }
+async function spinOnce(){
+ const b=document.getElementById('spinBtn');if(!b||b.disabled)return;b.disabled=true;b.textContent='КРУТИМ…';
+ const reel=document.getElementById('reelItem'),pool=spinState.rewards||[];let i=0;if(reel)reel.classList.add('spinning');
+ const timer=setInterval(()=>{if(reel&&pool.length){const x=pool[i%pool.length];i++;reel.textContent=x.name;reel.className='reel-item spinning '+tierClass(x.tier)}},80);
+ try{
+  const d=await api('/api/spin/free',{method:'POST'});
+  setTimeout(async()=>{clearInterval(timer);lastSpinReward=d.reward;if(reel){reel.className='reel-item '+tierClass(d.reward.tier);reel.textContent=d.reward.name}await new Promise(r=>setTimeout(r,650));showDropFx(d.reward);app.innerHTML=await spinHtml();bindSpin();loadWinsFeed()},1800)
+ }catch(e){clearInterval(timer);if(reel)reel.classList.remove('spinning');b.disabled=false;b.textContent='КРУТИТЬ SPIN';alert(e.message)}
+}
+async function claimUpgrade(points){try{const d=await api('/api/upgrade/claim',{method:'POST',body:JSON.stringify({points})});alert('Заявка создана: '+d.reward.name);app.innerHTML=await spinHtml();bindSpin()}catch(e){alert(e.message)}}
+
+async function referralHtml(){
+ const r=await api('/api/referral');
+ return '<section class="hero"><div class="cat">REFERRAL</div><h1>Приглашай друзей</h1><div class="muted">'+esc(r.reward_text)+'</div></section>'+
+ '<div class="metrics"><div class="metric"><span class="mini">ПРИГЛАШЕНО</span><b>'+r.invited+'</b></div><div class="metric"><span class="mini">НАГРАЖДЕНО</span><b>'+r.rewarded+'</b></div><div class="metric"><span class="mini">БИЛЕТЫ</span><b>🎟 '+r.bonus_tickets+'</b></div><div class="metric"><span class="mini">UPGRADE PTS</span><b>'+r.upgrade_points+'</b></div></div>'+
+ '<div class="card" style="margin-top:12px"><div class="mini">ВАША ССЫЛКА</div><input id="refLink" readonly value="'+esc(r.link)+'"><button class="buy" id="copyRef">Скопировать ссылку</button></div>'
+}
+function bindReferral(){const b=document.getElementById('copyRef');if(b)b.addEventListener('click',async()=>{const v=document.getElementById('refLink').value;try{await navigator.clipboard.writeText(v);alert('Ссылка скопирована')}catch(_){document.getElementById('refLink').select()}})}
+
+function supportHtml(){return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Обращения попадают в Owner Panel. Бот не спамит автоматическими сообщениями.</div></div><div class="sticker-grid">'+sticker('Новости','@shreksi4PubgNEWS','📣','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+sticker('Наш чат','@chatshreksi4','💬','st-cyan','data-tg="https://t.me/chatshreksi4"')+'</div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>'}
+async function sendTicket(){try{const d=await api('/api/support',{method:'POST',body:JSON.stringify({category:document.getElementById('tc').value,message:document.getElementById('tm').value})});alert('Обращение #'+d.id+' создано');document.getElementById('tm').value=''}catch(e){alert(e.message)}}
+function bindSupport(){document.getElementById('ticketBtn').addEventListener('click',sendTicket);bindSocials()}
+
+/* OWNER PANEL */
+async function loadAdminData(){
+ const r=await Promise.all([
+  api('/api/admin/stats'),api('/api/admin/orders'),api('/api/admin/users'),api('/api/admin/products'),
+  api('/api/admin/promos'),api('/api/admin/tickets'),api('/api/admin/spins'),api('/api/admin/upgrades'),api('/api/admin/referrals')
+ ]);
+ adminData={stats:r[0],orders:r[1],users:r[2],products:r[3],promos:r[4],tickets:r[5],spins:r[6],upgrades:r[7],referrals:r[8]}
+}
+function adminNav(){
+ const items=[['overview','Обзор'],['orders','Заказы'],['users','Игроки'],['products','Товары'],['promos','Промо'],['rewards','Награды'],['support','Поддержка'],['bot','Бот']];
+ return '<div class="admin-nav">'+items.map(x=>'<button data-admin="'+x[0]+'" class="'+(adminSection===x[0]?'active':'')+'">'+x[1]+'</button>').join('')+'</div>'
+}
+function metric(label,val){return '<div class="metric"><span class="mini">'+label+'</span><b>'+val+'</b></div>'}
+function adminOverview(){
+ const s=adminData.stats;
+ return '<section class="hero"><div class="cat">OWNER PANEL</div><h1>Управление проектом</h1><div class="muted">Все основные функции бота и Mini App из одной панели.</div></section><div class="metrics">'+
+ metric('ПОЛЬЗОВАТЕЛИ',s.users)+metric('ЗАКАЗЫ',s.orders)+metric('ОПЛАЧЕНО',s.paid_orders)+metric('ВЫРУЧКА',stars(s.stars_revenue))+metric('СЕГОДНЯ',s.orders_today)+metric('ТИКЕТЫ',s.open_tickets)+metric('ПРОМО',s.active_promos)+metric('РЕФЕРАЛЫ',s.rewarded_referrals+'/'+s.referrals)+'</div>'+
+ (s.top_product?'<div class="card" style="margin-top:12px"><div class="mini">ТОП ТОВАР</div><div class="name">'+esc(s.top_product)+'</div></div>':'')
+}
+function adminOrders(){
+ return '<h2>Заказы</h2>'+adminData.orders.map(o=>{const st=['Ожидает оплаты','Оплачен','Принят','В работе','Ожидает клиента','Выполнен','Отменён','Возврат'];return '<div class="admin-card"><div class="cat">#'+o.number+' • TG '+o.telegram_id+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+stars(o.stars_amount)+' • UID '+esc(o.uid)+(o.promo_code?' • '+esc(o.promo_code):'')+'</div><div class="adminline"><select id="os'+o.id+'">'+st.map(s=>'<option '+(s===o.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-order-save="'+o.id+'">Сохранить</button></div></div>'}).join('')
+}
+function adminUsers(){
+ return '<h2>Игроки и бонусы</h2><div class="card"><div class="adminline"><input id="grantUid" type="number" placeholder="Telegram ID"><input id="grantTickets" type="number" min="0" value="1" placeholder="Билеты"><input id="grantPts" type="number" min="0" value="0" placeholder="Upgrade pts"><button class="buy" id="grantBtn">Выдать</button></div></div>'+
+ adminData.users.map(u=>'<div class="admin-card"><div class="name">'+esc(u.first_name||u.username||'Игрок')+' '+(u.username?'@'+esc(u.username):'')+'</div><div class="mini">TG '+u.telegram_id+' • заказов '+u.orders_count+' • рефералов '+u.referrals_count+' • 🎟 '+u.tickets+' • pts '+u.upgrade_points+'</div><button class="secondary" data-message-user="'+u.telegram_id+'" style="margin-top:8px">Написать</button></div>').join('')
+}
+function adminProducts(){
+ return '<h2>Товары</h2><div class="card"><input id="newPName" placeholder="Название"><input id="newPCat" placeholder="Категория"><textarea id="newPDesc" placeholder="Описание"></textarea><div class="row"><input id="newPStars" type="number" placeholder="Цена ⭐"><input id="newPSort" type="number" value="0" placeholder="Сортировка"></div><button class="buy" id="newPBtn">Добавить товар</button></div>'+
+ adminData.products.map(p=>'<div class="admin-card" data-product-card="'+p.id+'"><input data-p="name" value="'+esc(p.name)+'"><input data-p="category" value="'+esc(p.category)+'"><textarea data-p="description">'+esc(p.description)+'</textarea><div class="row"><input data-p="stars_price" type="number" value="'+p.stars_price+'"><input data-p="sort_order" type="number" value="'+p.sort_order+'"></div><label class="mini"><input data-p="active" type="checkbox" '+(p.active?'checked':'')+' style="width:auto"> Активен</label><button class="secondary" data-product-save="'+p.id+'" style="width:100%;margin-top:8px">Сохранить</button></div>').join('')
+}
+function adminPromos(){
+ return '<h2>Промокоды</h2><div class="card"><div class="row"><input id="promoCodeNew" placeholder="Код"><input id="promoDiscountNew" type="number" placeholder="Скидка %"></div><div class="row"><input id="promoUsesNew" type="number" value="0" placeholder="Лимит (0=∞)"><input id="promoExpiryNew" placeholder="2026-12-31 23:59:59"></div><button class="buy" id="promoCreateBtn">Создать промокод</button></div>'+
+ adminData.promos.map(p=>'<div class="admin-card"><div class="name">'+esc(p.code)+' • -'+p.discount_percent+'%</div><div class="mini">Использовано '+p.uses+(p.max_uses?' / '+p.max_uses:' / ∞')+(p.expires_at?' • до '+esc(p.expires_at):'')+'</div><div class="row" style="margin-top:8px"><button class="secondary" data-promo-toggle="'+p.id+'" data-active="'+p.active+'">'+(p.active?'Отключить':'Включить')+'</button><button class="danger" data-promo-del="'+p.id+'">Удалить</button></div></div>').join('')
+}
+function adminRewards(){
+ const spin=adminData.spins.slice(0,80).map(x=>'<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+x.reward_tier+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="mini">TG '+x.telegram_id+' • '+esc(x.created_at)+'</div></div>').join('');
+ const ups=adminData.upgrades.slice(0,80).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div><div class="mini">TG '+x.telegram_id+' • '+x.points_spent+' pts • '+esc(x.created_at)+'</div></div>').join('');
+ const refs=adminData.referrals.slice(0,80).map(x=>'<div class="order"><div class="name">'+esc(x.referrer_name||x.referrer_username||x.referrer_id)+' → '+esc(x.referred_name||x.referred_username||x.referred_id)+'</div><div class="mini">'+(x.rewarded?'✅ Награда выдана':'⏳ Ждём первую оплату')+' • '+esc(x.created_at)+'</div></div>').join('');
+ return '<h2>Выигрыши</h2>'+(spin||'<div class="empty">Нет</div>')+'<h2>Upgrade Lab</h2>'+(ups||'<div class="empty">Нет</div>')+'<h2>Рефералы</h2>'+(refs||'<div class="empty">Нет</div>')
+}
+function adminSupport(){
+ return '<h2>Обращения</h2>'+adminData.tickets.map(t=>'<div class="admin-card"><div class="cat">#'+t.id+' • '+esc(t.category)+' • '+esc(t.status)+'</div><div style="margin:8px 0">'+esc(t.message)+'</div><div class="mini">TG '+t.telegram_id+'</div><textarea id="tr'+t.id+'" placeholder="Ответ пользователю"></textarea><div class="row"><button class="blue" data-ticket-reply="'+t.id+'">Ответить</button><button class="secondary" data-ticket-close="'+t.id+'">Закрыть</button></div></div>').join('')
+}
+function adminBot(){
+ return '<h2>Управление ботом</h2><div class="card"><h3>Сообщение пользователю</h3><input id="botUserId" type="number" placeholder="Telegram ID"><textarea id="botUserMsg" placeholder="Сообщение"></textarea><button class="buy" id="botSendBtn">Отправить</button></div><div class="card" style="margin-top:12px"><h3>Рассылка</h3><textarea id="broadcastMsg" placeholder="Сообщение всем зарегистрированным пользователям"></textarea><button class="danger" id="broadcastBtn">Запустить рассылку</button></div><div class="card" style="margin-top:12px"><div class="name">Команды бота</div><div class="muted">/start • /shop • /faq • /ref • /help<br>Обычные вопросы по оплате, заказам, SPIN, промокодам и рефералам бот распознаёт автоматически.</div></div>'
+}
+function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
+async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+adminSectionHtml()}
+async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">Обновляем…</div>';app.innerHTML=await adminHtml();bindAdmin()}
+function bindAdmin(){
+ document.querySelectorAll('[data-admin]').forEach(b=>b.addEventListener('click',()=>{adminSection=b.dataset.admin;app.innerHTML=adminNav()+adminSectionHtml();bindAdmin()}));
+ document.querySelectorAll('[data-order-save]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.orderSave;try{await api('/api/admin/orders/'+id,{method:'PATCH',body:JSON.stringify({status:document.getElementById('os'+id).value})});alert('Статус сохранён')}catch(e){alert(e.message)}}));
+ const gb=document.getElementById('grantBtn');if(gb)gb.addEventListener('click',async()=>{try{await api('/api/admin/rewards/grant',{method:'POST',body:JSON.stringify({telegram_id:Number(document.getElementById('grantUid').value),tickets:Number(document.getElementById('grantTickets').value||0),upgrade_points:Number(document.getElementById('grantPts').value||0)})});alert('Награда выдана');refreshAdmin()}catch(e){alert(e.message)}});
+ document.querySelectorAll('[data-message-user]').forEach(b=>b.addEventListener('click',()=>{adminSection='bot';app.innerHTML=adminNav()+adminBot();document.getElementById('botUserId').value=b.dataset.messageUser;bindAdmin()}));
+ const np=document.getElementById('newPBtn');if(np)np.addEventListener('click',async()=>{try{await api('/api/admin/products',{method:'POST',body:JSON.stringify({name:document.getElementById('newPName').value,category:document.getElementById('newPCat').value,description:document.getElementById('newPDesc').value,stars_price:Number(document.getElementById('newPStars').value),sort_order:Number(document.getElementById('newPSort').value||0),active:true})});alert('Товар добавлен');refreshAdmin()}catch(e){alert(e.message)}});
+ document.querySelectorAll('[data-product-save]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.productSave,card=document.querySelector('[data-product-card="'+id+'"]'),v=n=>card.querySelector('[data-p="'+n+'"]');try{await api('/api/admin/products/'+id,{method:'PATCH',body:JSON.stringify({name:v('name').value,category:v('category').value,description:v('description').value,stars_price:Number(v('stars_price').value),sort_order:Number(v('sort_order').value||0),active:v('active').checked})});alert('Товар сохранён')}catch(e){alert(e.message)}}));
+ const pc=document.getElementById('promoCreateBtn');if(pc)pc.addEventListener('click',async()=>{try{await api('/api/admin/promos',{method:'POST',body:JSON.stringify({code:document.getElementById('promoCodeNew').value,discount_percent:Number(document.getElementById('promoDiscountNew').value),max_uses:Number(document.getElementById('promoUsesNew').value||0),expires_at:document.getElementById('promoExpiryNew').value})});alert('Промокод создан');refreshAdmin()}catch(e){alert(e.message)}});
+ document.querySelectorAll('[data-promo-toggle]').forEach(b=>b.addEventListener('click',async()=>{try{await api('/api/admin/promos/'+b.dataset.promoToggle,{method:'PATCH',body:JSON.stringify({active:!(Number(b.dataset.active)===1)})});refreshAdmin()}catch(e){alert(e.message)}}));
+ document.querySelectorAll('[data-promo-del]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Удалить промокод?'))return;try{await api('/api/admin/promos/'+b.dataset.promoDel,{method:'DELETE'});refreshAdmin()}catch(e){alert(e.message)}}));
+ document.querySelectorAll('[data-ticket-reply]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.ticketReply;try{await api('/api/admin/tickets/'+id+'/reply',{method:'POST',body:JSON.stringify({message:document.getElementById('tr'+id).value})});alert('Ответ отправлен');refreshAdmin()}catch(e){alert(e.message)}}));
+ document.querySelectorAll('[data-ticket-close]').forEach(b=>b.addEventListener('click',async()=>{try{await api('/api/admin/tickets/'+b.dataset.ticketClose+'/close',{method:'POST'});refreshAdmin()}catch(e){alert(e.message)}}));
+ const bs=document.getElementById('botSendBtn');if(bs)bs.addEventListener('click',async()=>{try{await api('/api/admin/message',{method:'POST',body:JSON.stringify({telegram_id:Number(document.getElementById('botUserId').value),message:document.getElementById('botUserMsg').value})});alert('Сообщение отправлено')}catch(e){alert(e.message)}});
+ const br=document.getElementById('broadcastBtn');if(br)br.addEventListener('click',async()=>{if(!confirm('Отправить всем пользователям?'))return;try{await api('/api/admin/broadcast',{method:'POST',body:JSON.stringify({message:document.getElementById('broadcastMsg').value})});alert('Рассылка запущена')}catch(e){alert(e.message)}}))
 }
 
 async function render(){
-  updateNav();
-  app.innerHTML='<div class="empty">Загрузка…</div>';
-  try{
-    if(ADMIN){
-      app.innerHTML=await adminHtml();
-      document.querySelectorAll('[data-status]').forEach(function(btn){
-        btn.addEventListener('click',function(){ setStatus(Number(btn.dataset.status)); });
-      });
-      return;
-    }
-    if(tab==='home'){ app.innerHTML=home(); bindBuyButtons(); }
-    else if(tab==='catalog'){ app.innerHTML='<h2>Каталог</h2>'+cards(products); bindBuyButtons(); }
-    else if(tab==='spin'){ app.innerHTML=await spinHtml(); bindSpin(); }
-    else if(tab==='orders'){ app.innerHTML=await ordersHtml(); }
-    else if(tab==='support'){ app.innerHTML=supportHtml(); document.getElementById('ticketBtn').addEventListener('click',sendTicket); bindSocials(); }
-  }catch(e){ showFatal(e.message); }
+ updateNav();app.innerHTML='<div class="empty">Загрузка…</div>';
+ try{
+  if(ADMIN){app.innerHTML=await adminHtml();bindAdmin();return}
+  if(tab==='home'){app.innerHTML=home();bindHome()}
+  else if(tab==='catalog'){app.innerHTML='<h2>Каталог</h2>'+cards(products);bindProductButtons()}
+  else if(tab==='spin'){app.innerHTML=await spinHtml();bindSpin()}
+  else if(tab==='orders'){app.innerHTML=await ordersHtml()}
+  else if(tab==='referral'){app.innerHTML=await referralHtml();bindReferral()}
+  else if(tab==='support'){app.innerHTML=supportHtml();bindSupport()}
+ }catch(e){showFatal(e.message)}
 }
-
-document.querySelectorAll('#nav button').forEach(function(b){
-  b.addEventListener('click',function(){ tab=b.dataset.tab; render(); });
-});
+document.querySelectorAll('#nav button').forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.tab;render()}));
 
 async function boot(){
-  try{
-    app.innerHTML='<div class="empty">Загрузка каталога…</div>';
-    products=await api('/api/catalog');
-    app.innerHTML='<div class="empty">Проверка Telegram…</div>';
-    me=await api('/api/me');
-    if(ADMIN && !me.owner) throw new Error('Нет доступа');
-    render();
-  }catch(e){
-    showFatal(e.message + '\\n\\nОткройте приложение кнопкой из Telegram-бота.');
-  }
+ try{
+  products=await api('/api/catalog');
+  me=await api('/api/me');
+  if(ADMIN&&!me.owner)throw new Error('Нет доступа');
+  await loadWinsFeed();setInterval(loadWinsFeed,20000);render()
+ }catch(e){showFatal(e.message+'\n\nОткройте приложение кнопкой из Telegram-бота.')}
 }
 boot();
 })();
