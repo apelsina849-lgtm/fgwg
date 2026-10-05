@@ -1525,14 +1525,14 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .sticker{position:relative;min-height:108px;border-radius:22px;overflow:hidden;padding:14px;cursor:pointer;display:flex;align-items:center;gap:13px;text-align:left;border:1px solid currentColor;box-shadow:inset 0 1px #ffffff22,0 14px 30px #0007,0 0 22px color-mix(in srgb,currentColor 12%,transparent);transition:.18s transform,.18s box-shadow}
 .sticker:active{transform:scale(.975)}.sticker:before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,#ffffff12 0%,transparent 34%,transparent 68%,#ffffff08 100%);pointer-events:none}
 .sticker:after{content:"";position:absolute;right:-24px;bottom:-42px;width:125px;height:125px;border-radius:50%;background:radial-gradient(circle,currentColor 0%,transparent 68%);opacity:.17;filter:blur(2px);pointer-events:none}
-.st-gold{color:#ffc928;background:linear-gradient(145deg,#3a2a00 0%,#1b1200 58%,#0b0905 100%);border-color:#bb8e13}
-.st-purple{color:#d869ff;background:linear-gradient(145deg,#351044 0%,#1b0925 58%,#0c0710 100%);border-color:#8b3bae}
-.st-blue{color:#4fb9ff;background:linear-gradient(145deg,#0c3150 0%,#091a2c 58%,#060b10 100%);border-color:#2479b2}
-.st-red{color:#ff667b;background:linear-gradient(145deg,#43101a 0%,#230911 58%,#0e0608 100%);border-color:#9f2d41}
-.st-cyan{color:#49e6dc;background:linear-gradient(145deg,#0b3b38 0%,#092321 58%,#050d0c 100%);border-color:#248f88}
-.sticker-icon{width:64px;height:64px;flex:0 0 64px;display:grid;place-items:center;border-radius:19px;position:relative;color:#fff;background:linear-gradient(145deg,color-mix(in srgb,currentColor 82%,#fff 16%),color-mix(in srgb,currentColor 48%,#080a0c 52%));border:1px solid #ffffff55;box-shadow:inset 0 2px 1px #ffffff66,inset 0 -12px 18px #0007,0 11px 18px #0008,0 0 24px color-mix(in srgb,currentColor 48%,transparent);transform:perspective(160px) rotateX(7deg) rotateY(-8deg);animation:stickerFloat 3.2s ease-in-out infinite}
-.sticker-icon:after{content:"";position:absolute;left:9px;right:9px;top:7px;height:15px;border-radius:50%;background:linear-gradient(180deg,#fff7,transparent);pointer-events:none}
-.sticker-icon svg{width:34px;height:34px;stroke:currentColor;fill:none;stroke-width:2.35;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 3px 1px #0008)}
+.st-gold{--accent:#ffc928;color:var(--accent);background:linear-gradient(145deg,#4a3400 0%,#241700 58%,#0b0905 100%);border-color:#c99a18}
+.st-purple{--accent:#d869ff;color:var(--accent);background:linear-gradient(145deg,#421455 0%,#220b2e 58%,#0c0710 100%);border-color:#9a45bd}
+.st-blue{--accent:#4fb9ff;color:var(--accent);background:linear-gradient(145deg,#0f3b60 0%,#0a2138 58%,#060b10 100%);border-color:#2d8dcb}
+.st-red{--accent:#ff667b;color:var(--accent);background:linear-gradient(145deg,#521521 0%,#2a0b14 58%,#0e0608 100%);border-color:#b43b4f}
+.st-cyan{--accent:#49e6dc;color:var(--accent);background:linear-gradient(145deg,#0d4945 0%,#0a2a27 58%,#050d0c 100%);border-color:#2aa69e}
+.sticker-icon{width:64px;height:64px;flex:0 0 64px;display:grid;place-items:center;border-radius:19px;position:relative;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 88%,#fff 12%),color-mix(in srgb,var(--accent) 58%,#090b0d 42%));border:1px solid color-mix(in srgb,var(--accent) 74%,#fff 26%);box-shadow:inset 0 2px 1px #ffffff77,inset 0 -12px 18px #0006,0 11px 18px #0008,0 0 26px color-mix(in srgb,var(--accent) 58%,transparent);transform:perspective(160px) rotateX(7deg) rotateY(-8deg);animation:stickerFloat 3.2s ease-in-out infinite}
+.sticker-icon:after{content:"";position:absolute;left:9px;right:9px;top:7px;height:15px;border-radius:50%;background:linear-gradient(180deg,#fff8,transparent);pointer-events:none}
+.sticker-icon svg{width:34px;height:34px;stroke:#fff;fill:none;stroke-width:2.35;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 3px 1px #0008) drop-shadow(0 0 6px color-mix(in srgb,var(--accent) 60%,transparent))}
 .sticker-copy{min-width:0;position:relative;z-index:2}
 .sticker-title{font-size:15px;font-weight:950;line-height:1.05;text-transform:uppercase;color:currentColor;text-shadow:0 0 12px color-mix(in srgb,currentColor 40%,transparent),0 2px 6px #000;overflow-wrap:anywhere}
 .sticker-sub{font-size:11px;color:#f4f7fb;margin-top:7px;line-height:1.25;opacity:.92;overflow-wrap:anywhere}
