@@ -1341,6 +1341,15 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .tier-epic{color:#c985ff;background:#261034;border-color:#8b3fc7;box-shadow:0 0 16px #8b3fc744}
 .tier-legendary{color:#ffbd4a;background:#362109;border-color:#ff9900;box-shadow:0 0 22px #ff990055}
 .tier-mythic{color:#ff79df;background:linear-gradient(135deg,#3b0b34,#21113d);border-color:#ff4bd8;box-shadow:0 0 26px #ff4bd866}
+.rarity-row{margin-top:10px}.rarity-label{font-size:10px;font-weight:950;letter-spacing:1px;margin-bottom:5px}
+.rarity-bar{height:5px;border-radius:999px;position:relative;overflow:hidden;background:#252a30}
+.rarity-bar:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#fff8,transparent);transform:translateX(-120%);animation:raritySweep 2.2s linear infinite}
+.rb-common{background:linear-gradient(90deg,#58616a,#aeb6be)}
+.rb-rare{background:linear-gradient(90deg,#146bb0,#5fc0ff);box-shadow:0 0 10px #2fa8ff66}
+.rb-epic{background:linear-gradient(90deg,#6b28a4,#d071ff);box-shadow:0 0 13px #b349ff77}
+.rb-legendary{background:linear-gradient(90deg,#8c5000,#ff9d00,#ffe27a,#ff9d00);background-size:220% 100%;animation:legendaryFlow 1.8s linear infinite;box-shadow:0 0 12px #ff9d00,0 0 25px #ff9d0077}
+.rb-mythic{background:linear-gradient(90deg,#64185f,#ff39d0,#8a5cff,#ff39d0,#64185f);background-size:260% 100%;animation:mythicFlow 1.25s linear infinite;box-shadow:0 0 14px #ff39d0,0 0 30px #8a5cffaa}
+@keyframes raritySweep{to{transform:translateX(120%)}}@keyframes legendaryFlow{to{background-position:220% 0}}@keyframes mythicFlow{to{background-position:260% 0}}
 
 /* spin */
 .spin-shell{background:linear-gradient(145deg,#12151a,#090b0d);border:1px solid #3a2c0a;border-radius:22px;padding:16px;margin:14px 0;overflow:hidden}
@@ -1403,6 +1412,7 @@ let adminSection='overview',adminData=null;
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function stars(n){return Number(n||0).toLocaleString('ru-RU')+' ⭐'}
 function tierClass(t){return 'tier-'+String(t||'COMMON').toLowerCase()}
+function rarityBar(t){const k=String(t||'COMMON').toLowerCase();return '<div class="rarity-row"><div class="rarity-label '+tierClass(t)+'">'+esc(t)+'</div><div class="rarity-bar rb-'+k+'"></div></div>'}
 function formatReset(sec){sec=Math.max(0,Number(sec||0));if(!sec)return'';const h=Math.floor(sec/3600),m=Math.ceil((sec%3600)/60);return(h?h+' ч ':'')+m+' мин'}
 function showFatal(m){app.innerHTML='<div class="empty">'+esc(m)+'</div>'}
 window.addEventListener('error',e=>showFatal('Ошибка интерфейса: '+(e.message||'неизвестная')));
@@ -1498,25 +1508,37 @@ function showDropFx(reward){
  if(!reward||(reward.tier!=='LEGENDARY'&&reward.tier!=='MYTHIC'))return;
  try{if(tg&&tg.HapticFeedback){tg.HapticFeedback.notificationOccurred('success');tg.HapticFeedback.impactOccurred(reward.tier==='MYTHIC'?'heavy':'medium')}}catch(_){}
  const fx=document.createElement('div');fx.className='drop-fx '+reward.tier.toLowerCase();
- fx.innerHTML='<div class="drop-card"><div class="drop-content"><span class="tier '+tierClass(reward.tier)+'">'+esc(reward.tier)+'</span><h2>'+(reward.tier==='MYTHIC'?'MYTHIC DROP!':'LEGENDARY DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div><div class="muted">+'+reward.points+' Upgrade pts</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
+ fx.innerHTML='<div class="drop-card"><div class="drop-content"><h2>'+(reward.tier==='MYTHIC'?'MYTHIC DROP!':'LEGENDARY DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div>'+rarityBar(reward.tier)+'<div class="muted" style="margin-top:12px">+'+reward.points+' Upgrade pts</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
  document.body.appendChild(fx);const card=fx.querySelector('.drop-card'),total=reward.tier==='MYTHIC'?30:20;
  for(let i=0;i<total;i++){const s=document.createElement('i');s.className='spark';const a=Math.PI*2*i/total,d=90+Math.random()*170;s.style.left=(45+Math.random()*10)+'%';s.style.top=(45+Math.random()*10)+'%';s.style.setProperty('--x',(Math.cos(a)*d)+'px');s.style.setProperty('--y',(Math.sin(a)*d)+'px');s.style.color=reward.tier==='MYTHIC'?(i%2?'#ff4bd8':'#8b62ff'):'#ffad25';card.appendChild(s)}
  fx.querySelector('#closeDrop').addEventListener('click',()=>fx.remove())
 }
 async function spinHtml(){
  spinState=await api('/api/spin/state');
- const history=(spinState.history||[]).map(x=>'<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+esc(x.reward_tier)+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="mini">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • +'+x.points+' pts • '+esc(x.created_at)+'</div></div>').join('');
+ const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • +'+x.points+' pts • '+esc(x.created_at)+'</div></div>').join('');
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.upgrade_points)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' pts</button>').join('');
  const total=Number(spinState.remaining_spins||0);
  const buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
- return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — только бонусными билетами.</div></section>'+
+ return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">UPGRADE</div><div class="price">'+spinState.upgrade_points+'</div></div></div>'+
  '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button><div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div><div class="mini" style="margin-top:8px">Common 75% • Rare 18% • Epic 5% • Legendary 1.5% • Mythic 0.5%</div></div>'+
+ '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<h3>Upgrade Lab</h3><div class="card"><div class="muted">Upgrade pts обмениваются на гарантированную награду — без случайной ставки.</div>'+claims+'</div><h3>История</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
+ const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
+}
+async function applySpinPromo(){
+ const code=(document.getElementById('spinPromoCode').value||'').trim(),info=document.getElementById('spinPromoInfo');
+ if(!code){info.innerHTML='<span class="warn">Введите промокод</span>';return}
+ const b=document.getElementById('spinPromoBtn');b.disabled=true;b.textContent='Проверяем…';
+ try{
+  const d=await api('/api/spin/promo',{method:'POST',body:JSON.stringify({code})});
+  info.innerHTML='<span class="ok">+'+d.tickets_added+' SPIN-билет(а). Теперь у вас 🎟 '+d.bonus_tickets+'</span>';
+  setTimeout(async()=>{app.innerHTML=await spinHtml();bindSpin()},650)
+ }catch(e){info.innerHTML='<span class="warn">'+esc(e.message)+'</span>';b.disabled=false;b.textContent='Активировать'}
 }
 async function spinOnce(){
  const b=document.getElementById('spinBtn');if(!b||b.disabled)return;b.disabled=true;b.textContent='КРУТИМ…';
@@ -1572,8 +1594,8 @@ function adminProducts(){
  adminData.products.map(p=>'<div class="admin-card" data-product-card="'+p.id+'"><input data-p="name" value="'+esc(p.name)+'"><input data-p="category" value="'+esc(p.category)+'"><textarea data-p="description">'+esc(p.description)+'</textarea><div class="row"><input data-p="stars_price" type="number" value="'+p.stars_price+'"><input data-p="sort_order" type="number" value="'+p.sort_order+'"></div><label class="mini"><input data-p="active" type="checkbox" '+(p.active?'checked':'')+' style="width:auto"> Активен</label><button class="secondary" data-product-save="'+p.id+'" style="width:100%;margin-top:8px">Сохранить</button></div>').join('')
 }
 function adminPromos(){
- return '<h2>Промокоды</h2><div class="card"><div class="row"><input id="promoCodeNew" placeholder="Код"><input id="promoDiscountNew" type="number" placeholder="Скидка %"></div><div class="row"><input id="promoUsesNew" type="number" value="0" placeholder="Лимит (0=∞)"><input id="promoExpiryNew" placeholder="2026-12-31 23:59:59"></div><button class="buy" id="promoCreateBtn">Создать промокод</button></div>'+
- adminData.promos.map(p=>'<div class="admin-card"><div class="name">'+esc(p.code)+' • -'+p.discount_percent+'%</div><div class="mini">Использовано '+p.uses+(p.max_uses?' / '+p.max_uses:' / ∞')+(p.expires_at?' • до '+esc(p.expires_at):'')+'</div><div class="row" style="margin-top:8px"><button class="secondary" data-promo-toggle="'+p.id+'" data-active="'+p.active+'">'+(p.active?'Отключить':'Включить')+'</button><button class="danger" data-promo-del="'+p.id+'">Удалить</button></div></div>').join('')
+ return '<h2>Промокоды</h2><div class="card"><select id="promoTypeNew"><option value="discount">Скидка на покупку</option><option value="spin">SPIN-билеты</option></select><input id="promoCodeNew" placeholder="Код"><div class="row"><input id="promoDiscountNew" type="number" min="0" max="90" placeholder="Скидка %"><input id="promoSpinNew" type="number" min="0" max="100" placeholder="SPIN-билетов"></div><div class="row"><input id="promoUsesNew" type="number" value="0" placeholder="Участников (0=∞)"><input id="promoExpiryNew" placeholder="Срок: 2026-12-31 23:59:59"></div><div class="mini">Можно оставить только срок, только лимит участников или задать оба ограничения сразу.</div><button class="buy" id="promoCreateBtn" style="margin-top:10px">Создать промокод</button></div>'+
+ adminData.promos.map(p=>{const reward=p.promo_type==='spin'?('🎟 +'+p.spin_tickets+' SPIN'):('-'+p.discount_percent+'% ⭐');return '<div class="admin-card"><div class="name">'+esc(p.code)+' • '+reward+'</div><div class="mini">'+(p.promo_type==='spin'?'SPIN-промокод':'Скидочный промокод')+' • участников '+p.uses+(p.max_uses?' / '+p.max_uses:' / ∞')+(p.expires_at?' • до '+esc(p.expires_at):' • без срока')+'</div><div class="row" style="margin-top:8px"><button class="secondary" data-promo-toggle="'+p.id+'" data-active="'+p.active+'">'+(p.active?'Отключить':'Включить')+'</button><button class="danger" data-promo-del="'+p.id+'">Удалить</button></div></div>'}).join('')
 }
 function adminRewards(){
  const spin=adminData.spins.slice(0,80).map(x=>'<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+x.reward_tier+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="mini">TG '+x.telegram_id+' • '+esc(x.created_at)+'</div></div>').join('');
@@ -1597,7 +1619,7 @@ function bindAdmin(){
  document.querySelectorAll('[data-message-user]').forEach(b=>b.addEventListener('click',()=>{adminSection='bot';app.innerHTML=adminNav()+adminBot();document.getElementById('botUserId').value=b.dataset.messageUser;bindAdmin()}));
  const np=document.getElementById('newPBtn');if(np)np.addEventListener('click',async()=>{try{await api('/api/admin/products',{method:'POST',body:JSON.stringify({name:document.getElementById('newPName').value,category:document.getElementById('newPCat').value,description:document.getElementById('newPDesc').value,stars_price:Number(document.getElementById('newPStars').value),sort_order:Number(document.getElementById('newPSort').value||0),active:true})});alert('Товар добавлен');refreshAdmin()}catch(e){alert(e.message)}});
  document.querySelectorAll('[data-product-save]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.productSave,card=document.querySelector('[data-product-card="'+id+'"]'),v=n=>card.querySelector('[data-p="'+n+'"]');try{await api('/api/admin/products/'+id,{method:'PATCH',body:JSON.stringify({name:v('name').value,category:v('category').value,description:v('description').value,stars_price:Number(v('stars_price').value),sort_order:Number(v('sort_order').value||0),active:v('active').checked})});alert('Товар сохранён')}catch(e){alert(e.message)}}));
- const pc=document.getElementById('promoCreateBtn');if(pc)pc.addEventListener('click',async()=>{try{await api('/api/admin/promos',{method:'POST',body:JSON.stringify({code:document.getElementById('promoCodeNew').value,discount_percent:Number(document.getElementById('promoDiscountNew').value),max_uses:Number(document.getElementById('promoUsesNew').value||0),expires_at:document.getElementById('promoExpiryNew').value})});alert('Промокод создан');refreshAdmin()}catch(e){alert(e.message)}});
+ const pc=document.getElementById('promoCreateBtn');if(pc)pc.addEventListener('click',async()=>{try{await api('/api/admin/promos',{method:'POST',body:JSON.stringify({code:document.getElementById('promoCodeNew').value,promo_type:document.getElementById('promoTypeNew').value,discount_percent:Number(document.getElementById('promoDiscountNew').value||0),spin_tickets:Number(document.getElementById('promoSpinNew').value||0),max_uses:Number(document.getElementById('promoUsesNew').value||0),expires_at:document.getElementById('promoExpiryNew').value})});alert('Промокод создан');refreshAdmin()}catch(e){alert(e.message)}});
  document.querySelectorAll('[data-promo-toggle]').forEach(b=>b.addEventListener('click',async()=>{try{await api('/api/admin/promos/'+b.dataset.promoToggle,{method:'PATCH',body:JSON.stringify({active:!(Number(b.dataset.active)===1)})});refreshAdmin()}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-promo-del]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Удалить промокод?'))return;try{await api('/api/admin/promos/'+b.dataset.promoDel,{method:'DELETE'});refreshAdmin()}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-ticket-reply]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.ticketReply;try{await api('/api/admin/tickets/'+id+'/reply',{method:'POST',body:JSON.stringify({message:document.getElementById('tr'+id).value})});alert('Ответ отправлен');refreshAdmin()}catch(e){alert(e.message)}}));
