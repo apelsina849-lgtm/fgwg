@@ -144,6 +144,9 @@ async def init_db():
         await conn.execute("ALTER TABLE orders ADD COLUMN discount_percent INTEGER NOT NULL DEFAULT 0")
     if "telegram_charge_id" not in order_cols:
         await conn.execute("ALTER TABLE orders ADD COLUMN telegram_charge_id TEXT NOT NULL DEFAULT ''")
+    spin_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(spin_history)")).fetchall()}
+    if "source" not in spin_cols:
+        await conn.execute("ALTER TABLE spin_history ADD COLUMN source TEXT NOT NULL DEFAULT 'free'")
     reset = await (await conn.execute("SELECT value FROM settings WHERE key='bonus_tickets_v1'")).fetchone()
     if not reset:
         await conn.execute("UPDATE spin_state SET tickets=0")
@@ -527,6 +530,7 @@ async def me(x_telegram_init_data: str | None = Header(default=None)):
 @app.post("/api/orders")
 async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
+    promo_code = body.promo_code.strip().upper()
     async with db_write_lock:
         conn = await db()
         try:
@@ -535,17 +539,61 @@ async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(
             if not p:
                 await conn.rollback()
                 raise HTTPException(404,"Товар не найден")
+
+            discount = 0
+            if promo_code:
+                promo = await (await conn.execute(
+                    "SELECT * FROM promos WHERE code=? AND active=1 AND (max_uses=0 OR uses<max_uses) "
+                    "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
+                    (promo_code,)
+                )).fetchone()
+                if not promo:
+                    await conn.rollback()
+                    raise HTTPException(400,"Промокод недействителен или закончился")
+                discount = int(promo["discount_percent"])
+
+            stars_amount = max(1, (int(p["stars_price"]) * (100 - discount) + 99) // 100)
             last = await (await conn.execute("SELECT COALESCE(MAX(number),10499) n FROM orders")).fetchone()
             number = int(last["n"]) + 1
             cur = await conn.execute(
-              "INSERT INTO orders(number,telegram_id,product_id,product_name,amount,stars_amount,uid,nickname,comment) VALUES(?,?,?,?,?,?,?,?,?)",
-              (number,int(u["id"]),p["id"],p["name"],p["price"],p["stars_price"],body.uid,body.nickname,body.comment)
+              "INSERT INTO orders(number,telegram_id,product_id,product_name,amount,stars_amount,uid,nickname,comment,promo_code,discount_percent) "
+              "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+              (number,int(u["id"]),p["id"],p["name"],p["price"],stars_amount,body.uid,body.nickname,body.comment,promo_code,discount)
             )
             oid = cur.lastrowid
             await conn.commit()
         finally:
             await conn.close()
-    return {"id":oid,"number":number,"status":"Ожидает оплаты","stars_amount":p["stars_price"]}
+    return {
+      "id":oid,"number":number,"status":"Ожидает оплаты",
+      "stars_amount":stars_amount,"original_stars_amount":int(p["stars_price"]),
+      "promo_code":promo_code,"discount_percent":discount
+    }
+
+
+@app.post("/api/promo/check")
+async def promo_check(body: OrderIn, x_telegram_init_data: str | None = Header(default=None)):
+    await current_user(x_telegram_init_data)
+    code = body.promo_code.strip().upper()
+    if not code:
+        raise HTTPException(400,"Введите промокод")
+    conn = await db()
+    try:
+        p = await (await conn.execute("SELECT * FROM products WHERE id=? AND active=1",(body.product_id,))).fetchone()
+        promo = await (await conn.execute(
+            "SELECT * FROM promos WHERE code=? AND active=1 AND (max_uses=0 OR uses<max_uses) "
+            "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
+            (code,)
+        )).fetchone()
+    finally:
+        await conn.close()
+    if not p:
+        raise HTTPException(404,"Товар не найден")
+    if not promo:
+        raise HTTPException(400,"Промокод недействителен или закончился")
+    discount = int(promo["discount_percent"])
+    final_stars = max(1, (int(p["stars_price"]) * (100-discount) + 99)//100)
+    return {"code":code,"discount_percent":discount,"original_stars":int(p["stars_price"]),"final_stars":final_stars}
 
 
 @app.get("/api/orders")
@@ -586,24 +634,31 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
     async with db_write_lock:
         conn = await db()
         try:
-            await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id) VALUES(?)",(uid,))
+            await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",(uid,))
             await conn.commit()
             state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
-            history = await (await conn.execute("SELECT reward_name,reward_tier,points,created_at FROM spin_history WHERE telegram_id=? ORDER BY id DESC LIMIT 12",(uid,))).fetchall()
+            history = await (await conn.execute(
+                "SELECT reward_name,reward_tier,points,source,created_at FROM spin_history WHERE telegram_id=? ORDER BY id DESC LIMIT 12",
+                (uid,)
+            )).fetchall()
             used_row = await (await conn.execute(
-                "SELECT COUNT(*) c, MIN(strftime('%s', created_at)) first_ts FROM spin_history WHERE telegram_id=? AND created_at >= datetime('now','-24 hours')",
+                "SELECT COUNT(*) c, MIN(strftime('%s', created_at)) first_ts FROM spin_history "
+                "WHERE telegram_id=? AND source='free' AND created_at >= datetime('now','-24 hours')",
                 (uid,)
             )).fetchone()
         finally:
             await conn.close()
     used = int(used_row["c"] or 0)
-    remaining = max(0, MAX_FREE_SPINS_24H - used)
+    free_remaining = max(0, MAX_FREE_SPINS_24H - used)
+    bonus_tickets = max(0, int(state["tickets"] or 0))
     next_reset = 0
-    if remaining == 0 and used_row["first_ts"]:
+    if free_remaining == 0 and used_row["first_ts"]:
         next_reset = max(0, int(used_row["first_ts"]) + 86400 - int(time.time()))
     return {
-      "remaining_spins":remaining,
-      "max_spins":MAX_FREE_SPINS_24H,
+      "free_remaining":free_remaining,
+      "max_free_spins":MAX_FREE_SPINS_24H,
+      "bonus_tickets":bonus_tickets,
+      "remaining_spins":free_remaining + bonus_tickets,
       "upgrade_points":int(state["upgrade_points"]),
       "next_reset_seconds":next_reset,
       "history":[dict(x) for x in history],
@@ -620,24 +675,80 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
         conn = await db()
         try:
             await conn.execute("BEGIN IMMEDIATE")
-            await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id) VALUES(?)",(uid,))
+            await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",(uid,))
+            state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
             used_row = await (await conn.execute(
-                "SELECT COUNT(*) c FROM spin_history WHERE telegram_id=? AND created_at >= datetime('now','-24 hours')",
+                "SELECT COUNT(*) c FROM spin_history WHERE telegram_id=? AND source='free' AND created_at >= datetime('now','-24 hours')",
                 (uid,)
             )).fetchone()
             used = int(used_row["c"] or 0)
+            source = "free"
             if used >= MAX_FREE_SPINS_24H:
-                await conn.rollback()
-                raise HTTPException(429,"Лимит исчерпан: максимум 1 бесплатный SPIN за 24 часа.")
+                if int(state["tickets"] or 0) <= 0:
+                    await conn.rollback()
+                    raise HTTPException(429,"Бесплатный SPIN уже использован. Следующее вращение будет доступно позже.")
+                source = "ticket"
+                await conn.execute("UPDATE spin_state SET tickets=tickets-1 WHERE telegram_id=?",(uid,))
+
             reward = random.choices(SPIN_REWARDS, weights=[x["weight"] for x in SPIN_REWARDS], k=1)[0]
             await conn.execute("UPDATE spin_state SET upgrade_points=upgrade_points+? WHERE telegram_id=?",(reward["points"],uid))
-            await conn.execute("INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points) VALUES(?,?,?,?)",(uid,reward["name"],reward["tier"],reward["points"]))
+            await conn.execute(
+                "INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points,source) VALUES(?,?,?,?,?)",
+                (uid,reward["name"],reward["tier"],reward["points"],source)
+            )
             await conn.commit()
             state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
         finally:
             await conn.close()
-    remaining = max(0, MAX_FREE_SPINS_24H - used - 1)
-    return {"reward":reward,"remaining_spins":remaining,"max_spins":MAX_FREE_SPINS_24H,"upgrade_points":int(state["upgrade_points"])}
+
+    free_remaining = max(0, MAX_FREE_SPINS_24H - used - (1 if source=="free" else 0))
+    return {
+      "reward":reward,"source":source,
+      "free_remaining":free_remaining,
+      "bonus_tickets":int(state["tickets"] or 0),
+      "remaining_spins":free_remaining + int(state["tickets"] or 0),
+      "upgrade_points":int(state["upgrade_points"])
+    }
+
+
+@app.get("/api/wins-feed")
+async def wins_feed():
+    conn = await db()
+    try:
+        rows = await (await conn.execute(
+            "SELECT h.id,h.reward_name,h.reward_tier,h.created_at,"
+            "CASE WHEN COALESCE(u.username,'')<>'' THEN '@'||u.username "
+            "WHEN COALESCE(u.first_name,'')<>'' THEN u.first_name ELSE 'Игрок' END player "
+            "FROM spin_history h LEFT JOIN users u ON u.telegram_id=h.telegram_id "
+            "WHERE h.reward_tier IN ('LEGENDARY','MYTHIC') ORDER BY h.id DESC LIMIT 30"
+        )).fetchall()
+    finally:
+        await conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/referral")
+async def referral_info(x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    link = await referral_link(uid)
+    conn = await db()
+    try:
+        row = await (await conn.execute(
+            "SELECT COUNT(*) total,SUM(CASE WHEN rewarded=1 THEN 1 ELSE 0 END) rewarded FROM referrals WHERE referrer_id=?",
+            (uid,)
+        )).fetchone()
+        state = await (await conn.execute("SELECT tickets,upgrade_points FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+    finally:
+        await conn.close()
+    return {
+      "link":link,
+      "invited":int(row["total"] or 0),
+      "rewarded":int(row["rewarded"] or 0),
+      "bonus_tickets":int(state["tickets"] or 0) if state else 0,
+      "upgrade_points":int(state["upgrade_points"] or 0) if state else 0,
+      "reward_text":"+1 бонусный SPIN-билет и +3 Upgrade pts за первую оплаченную покупку друга"
+    }
 
 
 class UpgradeClaimIn(BaseModel):
