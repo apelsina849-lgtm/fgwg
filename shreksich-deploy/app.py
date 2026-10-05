@@ -28,30 +28,30 @@ poll_offset = 0
 bot_username = ""
 db_write_lock = asyncio.Lock()
 
-MAX_FREE_SPINS_24H = 3
+MAX_FREE_SPINS_24H = 1
 
 SPIN_REWARDS = [
-    {"name":"250K Metro Cash","tier":"COMMON","weight":8,"points":1},
-    {"name":"500K Metro Cash","tier":"COMMON","weight":8,"points":1},
-    {"name":"Набор патронов","tier":"COMMON","weight":8,"points":1},
-    {"name":"Набор аптечек","tier":"COMMON","weight":7,"points":1},
-    {"name":"Набор ремонта","tier":"COMMON","weight":7,"points":1},
-    {"name":"Ящик базовых ресурсов","tier":"COMMON","weight":7,"points":1},
+    {"name":"250K Metro Cash","tier":"COMMON","weight":13,"points":1},
+    {"name":"500K Metro Cash","tier":"COMMON","weight":13,"points":1},
+    {"name":"Набор патронов","tier":"COMMON","weight":13,"points":1},
+    {"name":"Набор аптечек","tier":"COMMON","weight":12,"points":1},
+    {"name":"Набор ремонта","tier":"COMMON","weight":12,"points":1},
+    {"name":"Ящик базовых ресурсов","tier":"COMMON","weight":12,"points":1},
 
-    {"name":"1M Metro Cash","tier":"RARE","weight":7,"points":2},
-    {"name":"Усиленный набор патронов","tier":"RARE","weight":7,"points":2},
-    {"name":"Набор брони","tier":"RARE","weight":7,"points":2},
-    {"name":"Набор модулей оружия","tier":"RARE","weight":7,"points":2},
+    {"name":"1M Metro Cash","tier":"RARE","weight":5,"points":2},
+    {"name":"Усиленный набор патронов","tier":"RARE","weight":5,"points":2},
+    {"name":"Набор брони","tier":"RARE","weight":4,"points":2},
+    {"name":"Набор модулей оружия","tier":"RARE","weight":4,"points":2},
 
-    {"name":"3M Metro Cash","tier":"EPIC","weight":6,"points":3},
-    {"name":"Metro Starter Kit+","tier":"EPIC","weight":6,"points":3},
-    {"name":"Elite Supply Pack","tier":"EPIC","weight":6,"points":3},
+    {"name":"3M Metro Cash","tier":"EPIC","weight":2,"points":3},
+    {"name":"Metro Starter Kit+","tier":"EPIC","weight":2,"points":3},
+    {"name":"Elite Supply Pack","tier":"EPIC","weight":1,"points":3},
 
-    {"name":"Premium Metro Pack","tier":"LEGENDARY","weight":4,"points":6},
-    {"name":"Буст 3 квестов","tier":"LEGENDARY","weight":3,"points":6},
+    {"name":"Premium Metro Pack","tier":"LEGENDARY","weight":0.75,"points":6},
+    {"name":"Буст 3 квестов","tier":"LEGENDARY","weight":0.75,"points":6},
 
-    {"name":"Black Market Pack","tier":"MYTHIC","weight":1,"points":10},
-    {"name":"Ultimate Metro Bundle","tier":"MYTHIC","weight":1,"points":10},
+    {"name":"Black Market Pack","tier":"MYTHIC","weight":0.25,"points":10},
+    {"name":"Ultimate Metro Bundle","tier":"MYTHIC","weight":0.25,"points":10},
 ]
 UPGRADE_REWARDS = [
     {"points":5,"name":"Набор расходников"},
@@ -280,7 +280,7 @@ async def send_faq(chat_id: int):
         "<b>Частые вопросы</b>\n\n"
         "⭐ <b>Оплата:</b> покупки оплачиваются Telegram Stars прямо внутри Mini App.\n"
         "📦 <b>Заказы:</b> статус смотрите в разделе «Заказы».\n"
-        "🎰 <b>SPIN:</b> 3 бесплатных прокрутки за 24 часа + бонусные билеты от админа и рефералов.\n"
+        "🎰 <b>SPIN:</b> 1 бесплатное вращение за 24 часа + бонусные билеты от админа и рефералов.\n"
         "🎟 <b>Промокоды:</b> вводятся при оформлении заказа и уменьшают цену в Stars.\n"
         "👥 <b>Рефералы:</b> после первой оплаченной покупки приглашённого вы получаете 1 бонусный SPIN-билет и 3 Upgrade pts.\n"
         "💬 <b>Поддержка:</b> создайте обращение в Mini App или напишите в нашем чате."
@@ -304,7 +304,7 @@ async def answer_question(chat_id: int, text: str):
     elif any(x in q for x in ("заказ", "статус", "где мой")):
         answer = "📦 Все ваши заказы и их статусы находятся в Mini App → «Заказы»."
     elif any(x in q for x in ("спин", "рулет", "билет")):
-        answer = "🎰 Доступно 3 бесплатных SPIN за 24 часа. Дополнительные бонусные билеты можно получить от администратора или за рефералов."
+        answer = "🎰 Доступно 1 бесплатный SPIN за 24 часа. Дополнительные бонусные билеты можно получить от администратора или за рефералов."
     elif any(x in q for x in ("промо", "скидк", "купон")):
         answer = "🎟 Промокод вводится перед созданием заказа. Если он активен, цена в Stars пересчитается автоматически."
     elif any(x in q for x in ("рефер", "приглас", "друг")):
@@ -628,7 +628,7 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
             used = int(used_row["c"] or 0)
             if used >= MAX_FREE_SPINS_24H:
                 await conn.rollback()
-                raise HTTPException(429,"Лимит исчерпан: максимум 3 бесплатных SPIN за 24 часа.")
+                raise HTTPException(429,"Лимит исчерпан: максимум 1 бесплатный SPIN за 24 часа.")
             reward = random.choices(SPIN_REWARDS, weights=[x["weight"] for x in SPIN_REWARDS], k=1)[0]
             await conn.execute("UPDATE spin_state SET upgrade_points=upgrade_points+? WHERE telegram_id=?",(reward["points"],uid))
             await conn.execute("INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points) VALUES(?,?,?,?)",(uid,reward["name"],reward["tier"],reward["points"]))
@@ -937,7 +937,7 @@ function cards(list){
 }
 
 function home(){
-  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары • Буст • Квесты • Фарм<br>Оплата внутри Telegram через ⭐ Stars.</div></section><div class="socials"><button class="social-btn" data-tg="https://t.me/shreksi4PubgNEWS">📢 <b>Новости</b></button><button class="social-btn" data-tg="https://t.me/chatshreksi4">💬 <b>Наш чат</b></button></div><div class="spin-shell"><div class="cat">HYPE MODE</div><h2>HYPE SPIN</h2><div class="muted">3 бесплатных SPIN за 24 часа, Metro-награды и гарантированный Upgrade Lab.</div><button class="buy" id="homeSpinBtn" style="margin-top:12px">Открыть SPIN</button></div><h3>Популярное</h3>' + cards(products.slice(0,4));
+  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары • Буст • Квесты • Фарм<br>Оплата внутри Telegram через ⭐ Stars.</div></section><div class="socials"><button class="social-btn" data-tg="https://t.me/shreksi4PubgNEWS">📢 <b>Новости</b></button><button class="social-btn" data-tg="https://t.me/chatshreksi4">💬 <b>Наш чат</b></button></div><div class="spin-shell"><div class="cat">HYPE MODE</div><h2>HYPE SPIN</h2><div class="muted">1 бесплатный SPIN за 24 часа, Metro-награды и гарантированный Upgrade Lab.</div><button class="buy" id="homeSpinBtn" style="margin-top:12px">Открыть SPIN</button></div><h3>Популярное</h3>' + cards(products.slice(0,4));
 }
 
 function bindBuyButtons(){
@@ -1014,9 +1014,9 @@ async function spinHtml(){
   const last=lastSpinReward?'<div class="order"><div class="cat">ПОСЛЕДНИЙ ДРОП</div><span class="tier '+tierClass(lastSpinReward.tier)+'">'+esc(lastSpinReward.tier)+'</span><div class="name">'+esc(lastSpinReward.name)+'</div><div class="muted">+'+lastSpinReward.points+' upgrade pts</div></div>':'';
   const remaining=Number(spinState.remaining_spins||0);
   const resetText=remaining>0?'Доступно сейчас: '+remaining+' из '+spinState.max_spins:'Лимит исчерпан • следующий SPIN через '+formatReset(spinState.next_reset_seconds);
-  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">3 бесплатных прокрутки за 24 часа. Награды выдаются администратором в игре.</div></section>'+
+  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Награды выдаются администратором в игре.</div></section>'+
     '<div class="spin-stats"><div class="spin-stat"><div class="muted">SPIN осталось</div><div class="price" id="ticketsCount">'+remaining+' / '+spinState.max_spins+'</div></div><div class="spin-stat"><div class="muted">Upgrade pts</div><div class="price" id="pointsCount">'+spinState.upgrade_points+'</div></div></div>'+
-    '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(remaining<=0?'disabled':'')+'>'+(remaining>0?'КРУТИТЬ SPIN':'ЛИМИТ ИСЧЕРПАН')+'</button><div class="muted" style="margin-top:10px">'+resetText+'</div><div class="muted" style="margin-top:7px">Common 45% • Rare 28% • Epic 18% • Legendary 7% • Mythic 2%</div></div>'+
+    '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(remaining<=0?'disabled':'')+'>'+(remaining>0?'КРУТИТЬ SPIN':'ЛИМИТ ИСЧЕРПАН')+'</button><div class="muted" style="margin-top:10px">'+resetText+'</div><div class="muted" style="margin-top:7px">Common 75% • Rare 18% • Epic 5% • Legendary 1.5% • Mythic 0.5%</div></div>'+
     last+'<h3>Upgrade Lab</h3><div class="card"><div class="muted">Очки из бесплатных спинов можно обменять на гарантированную награду.</div>'+claims+'</div>'+
     '<h3>Последние спины</h3>'+(history||'<div class="empty">История пока пустая.</div>');
 }
