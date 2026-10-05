@@ -362,11 +362,11 @@ async def admin_tickets(x_telegram_init_data: str | None = Header(default=None))
 
 def page(admin=False):
     mode = "true" if admin else "false"
-    return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <title>{html.escape(APP_NAME)}</title>
 <style>
-*{{box-sizing:border-box}}body{{margin:0;background:#090b0d;color:#f5f5f5;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}}
+*{{box-sizing:border-box;-webkit-tap-highlight-color:transparent}}html,body{{touch-action:manipulation;-webkit-text-size-adjust:100%;overscroll-behavior-y:none}}body{{margin:0;background:#090b0d;color:#f5f5f5;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}}
 body:before{{content:"";position:fixed;inset:0;background:radial-gradient(circle at 85% 0,#5a3b001f,transparent 32%),radial-gradient(circle at 10% 30%,#ffb3000c,transparent 25%);pointer-events:none}}
 .wrap{{max-width:720px;margin:auto;padding:18px 16px 110px;position:relative}}.top{{display:flex;align-items:center;justify-content:space-between;margin:8px 0 18px}}
 .brand{{font-weight:900;letter-spacing:.7px;font-size:22px}}.brand b{{color:#ffc21c}}.pill{{font-size:12px;color:#ffcf4b;border:1px solid #5f4918;background:#1b160b;padding:7px 10px;border-radius:999px}}
@@ -382,7 +382,13 @@ input,textarea,select{{width:100%;background:#0e1013;color:#fff;border:1px solid
 </style></head><body><div class="wrap"><div class="top"><div class="brand">ШРЕКСИЧ <b>SHOP</b></div><div class="pill">PUBG MOBILE</div></div><main id="app"><div class="empty">Загрузка магазина…</div></main></div>
 <div class="nav" id="nav"><button data-tab="home">Главная</button><button data-tab="catalog">Каталог</button><button data-tab="orders">Заказы</button><button data-tab="support">Поддержка</button></div>
 <script>
-const ADMIN={mode}; const tg=window.Telegram?.WebApp; tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#090b0d'); tg?.setBackgroundColor?.('#090b0d');
+const ADMIN={mode}; const tg=window.Telegram?.WebApp;
+document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
+document.addEventListener('gesturechange',e=>e.preventDefault(),{passive:false});
+document.addEventListener('gestureend',e=>e.preventDefault(),{passive:false});
+document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault()},{passive:false});
+let __lastTouchEnd=0;
+document.addEventListener('touchend',e=>{const now=Date.now();if(now-__lastTouchEnd<=300)e.preventDefault();__lastTouchEnd=now},{passive:false}); tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#090b0d'); tg?.setBackgroundColor?.('#090b0d');
 const init=tg?.initData||''; const H={{'Content-Type':'application/json','X-Telegram-Init-Data':init}}; let products=[],me=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
 async function api(p,o={{}}){{let r=await fetch(p,{{...o,headers:{{...H,...(o.headers||{{}})}}}});let d;try{{d=await r.json()}}catch{{d={{detail:'Ошибка сервера'}}}}if(!r.ok)throw Error(d.detail||'Ошибка');return d}}
 const rub=n=>Number(n).toLocaleString('ru-RU')+' ₽'; const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[m]));
