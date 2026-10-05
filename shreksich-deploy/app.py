@@ -533,9 +533,15 @@ class BroadcastIn(BaseModel):
 
 class PromoCreateIn(BaseModel):
     code: str = Field(min_length=3, max_length=32)
-    discount_percent: int = Field(ge=1, le=90)
+    promo_type: str = Field(default="discount", max_length=16)
+    discount_percent: int = Field(default=0, ge=0, le=90)
+    spin_tickets: int = Field(default=0, ge=0, le=100)
     max_uses: int = Field(default=0, ge=0, le=100000)
     expires_at: str = Field(default="", max_length=32)
+
+
+class SpinPromoIn(BaseModel):
+    code: str = Field(min_length=3, max_length=32)
 
 
 class PromoToggleIn(BaseModel):
