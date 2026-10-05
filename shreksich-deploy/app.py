@@ -412,7 +412,7 @@ async def send_token(chat_id: int, user_id: int):
     await tg("sendMessage", {
         "chat_id":chat_id,
         "parse_mode":"HTML",
-        "text":f"🎫 <b>Ваш жетон Шрексича</b>\n\n<code>{html.escape(token)}</code>\n\nПо этому жетону поддержка может найти ваш аккаунт. Telegram ID сообщать не нужно."
+        "text":f"🎫 <b>Ваш жетон Шрексича</b>\n\n<code>{html.escape(token)}</code>\n\nПо этому жетону поддержка может найти ваш аккаунт. Для связи с поддержкой достаточно этого жетона."
     })
 
 
@@ -1831,7 +1831,7 @@ function adminSupport(){
  return '<h2>Обращения</h2>'+adminData.tickets.map(t=>'<div class="admin-card"><div class="cat">#'+t.id+' • '+esc(t.category)+' • '+esc(t.status)+'</div><div style="margin:8px 0">'+esc(t.message)+'</div><div class="token-code">'+esc(t.user_token||'Без жетона')+'</div><textarea id="tr'+t.id+'" placeholder="Ответ пользователю"></textarea><div class="row"><button class="blue" data-ticket-reply="'+t.id+'">Ответить</button><button class="secondary" data-ticket-close="'+t.id+'">Закрыть</button></div></div>').join('')
 }
 function adminBot(){
- return '<h2>Управление ботом</h2><div class="card"><h3>Сообщение пользователю</h3><input id="botUserToken" placeholder="Жетон SHX-..."><textarea id="botUserMsg" placeholder="Сообщение"></textarea><button class="buy" id="botSendBtn">Отправить</button></div><div class="card" style="margin-top:12px"><h3>Рассылка</h3><textarea id="broadcastMsg" placeholder="Сообщение всем зарегистрированным пользователям"></textarea><button class="danger" id="broadcastBtn">Запустить рассылку</button></div><div class="card" style="margin-top:12px"><div class="name">Команды бота</div><div class="muted">/start • /shop • /faq • /ref • /token • /help<br>Каждый пользователь имеет постоянный жетон SHX-.... Telegram ID в интерфейсе не используется.</div></div>'
+ return '<h2>Управление ботом</h2><div class="card"><h3>Сообщение пользователю</h3><input id="botUserToken" placeholder="Жетон SHX-..."><textarea id="botUserMsg" placeholder="Сообщение"></textarea><button class="buy" id="botSendBtn">Отправить</button></div><div class="card" style="margin-top:12px"><h3>Рассылка</h3><textarea id="broadcastMsg" placeholder="Сообщение всем зарегистрированным пользователям"></textarea><button class="danger" id="broadcastBtn">Запустить рассылку</button></div><div class="card" style="margin-top:12px"><div class="name">Команды бота</div><div class="muted">/start • /shop • /faq • /ref • /token • /help<br>Каждый пользователь имеет постоянный жетон SHX-.... Вся работа с пользователями идёт по жетонам.</div></div>'
 }
 function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
 async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+adminSectionHtml()}
