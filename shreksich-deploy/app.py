@@ -362,53 +362,253 @@ async def admin_tickets(x_telegram_init_data: str | None = Header(default=None))
 
 def page(admin=False):
     mode = "true" if admin else "false"
-    return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+    tpl = """<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<title>{html.escape(APP_NAME)}</title>
+<title>__APP_NAME__</title>
 <style>
-*{{box-sizing:border-box;-webkit-tap-highlight-color:transparent}}html,body{{touch-action:manipulation;-webkit-text-size-adjust:100%;overscroll-behavior-y:none}}body{{margin:0;background:#090b0d;color:#f5f5f5;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}}
-body:before{{content:"";position:fixed;inset:0;background:radial-gradient(circle at 85% 0,#5a3b001f,transparent 32%),radial-gradient(circle at 10% 30%,#ffb3000c,transparent 25%);pointer-events:none}}
-.wrap{{max-width:720px;margin:auto;padding:18px 16px 110px;position:relative}}.top{{display:flex;align-items:center;justify-content:space-between;margin:8px 0 18px}}
-.brand{{font-weight:900;letter-spacing:.7px;font-size:22px}}.brand b{{color:#ffc21c}}.pill{{font-size:12px;color:#ffcf4b;border:1px solid #5f4918;background:#1b160b;padding:7px 10px;border-radius:999px}}
-.hero{{background:linear-gradient(135deg,#1b1e22,#111315 55%,#31250a);border:1px solid #393017;border-radius:24px;padding:24px;box-shadow:0 18px 50px #0008;margin-bottom:20px;overflow:hidden;position:relative}}
-.hero:after{{content:"METRO";position:absolute;right:-10px;bottom:-18px;font-size:62px;font-weight:1000;color:#ffffff08;transform:rotate(-7deg)}}h1{{margin:0 0 8px;font-size:29px}}.muted{{color:#9ea4ab;line-height:1.5}}.gold{{color:#ffc21c}}
-.tabs{{display:flex;gap:8px;overflow:auto;padding:2px 0 14px;scrollbar-width:none}}button,.btn{{border:0;border-radius:14px;padding:12px 15px;font-weight:800;cursor:pointer}}.tab{{background:#171a1e;color:#b9bec4;white-space:nowrap;border:1px solid #24282d}}.tab.active{{background:#ffc21c;color:#15100a;border-color:#ffc21c}}
-.grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}}.card{{background:#13161a;border:1px solid #252a30;border-radius:19px;padding:15px;min-width:0}}.cat{{font-size:11px;color:#e2ad22;text-transform:uppercase;letter-spacing:.8px}}.name{{font-weight:850;font-size:16px;margin:6px 0}}.desc{{font-size:12px;color:#9299a1;min-height:38px;line-height:1.4}}.price{{font-size:20px;font-weight:950;margin:12px 0}}.buy{{width:100%;background:linear-gradient(135deg,#ffd12d,#f5a900);color:#181000}}
-.order{{background:#13161a;border:1px solid #272c31;border-radius:18px;padding:15px;margin:10px 0}}.status{{display:inline-block;padding:5px 8px;border-radius:9px;background:#27200d;color:#ffd158;font-size:12px;font-weight:800}}
-input,textarea,select{{width:100%;background:#0e1013;color:#fff;border:1px solid #30353b;border-radius:13px;padding:13px;margin:6px 0 10px;outline:none}}textarea{{min-height:90px;resize:vertical}}.row{{display:flex;gap:8px}}.row>*{{flex:1}}.secondary{{background:#24282d;color:#fff}}.danger{{background:#402020;color:#ffb0a8}}.ok{{background:#183621;color:#9cf2ad}}
-.nav{{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;width:min(690px,calc(100% - 20px));background:#111418eF;backdrop-filter:blur(18px);border:1px solid #2a2e33;border-radius:20px;padding:8px;display:flex;gap:6px;z-index:10}}.nav button{{flex:1;background:transparent;color:#8f969e;font-size:12px;padding:10px 4px}}.nav button.active{{background:#24200f;color:#ffd24b}}
-.empty{{text-align:center;padding:38px 10px;color:#89919a}}.hide{{display:none!important}}.adminline{{display:flex;gap:8px;align-items:center;flex-wrap:wrap}}.adminline select{{width:auto;min-width:150px;margin:8px 0}}
-@media(max-width:390px){{.grid{{grid-template-columns:1fr}}h1{{font-size:25px}}}}
-</style></head><body><div class="wrap"><div class="top"><div class="brand">ШРЕКСИЧ <b>SHOP</b></div><div class="pill">PUBG MOBILE</div></div><main id="app"><div class="empty">Загрузка магазина…</div></main></div>
-<div class="nav" id="nav"><button data-tab="home">Главная</button><button data-tab="catalog">Каталог</button><button data-tab="orders">Заказы</button><button data-tab="support">Поддержка</button></div>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:#090b0d;color:#f5f5f5;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100%;touch-action:manipulation;-webkit-text-size-adjust:100%}
+body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 85% 0,#5a3b001f,transparent 32%),radial-gradient(circle at 10% 30%,#ffb3000c,transparent 25%);pointer-events:none}
+.wrap{max-width:720px;margin:auto;padding:18px 16px 110px;position:relative}
+.top{display:flex;align-items:center;justify-content:space-between;margin:8px 0 18px}
+.brand{font-weight:900;letter-spacing:.7px;font-size:22px}.brand b{color:#ffc21c}
+.pill{font-size:12px;color:#ffcf4b;border:1px solid #5f4918;background:#1b160b;padding:7px 10px;border-radius:999px}
+.hero{background:linear-gradient(135deg,#1b1e22,#111315 55%,#31250a);border:1px solid #393017;border-radius:24px;padding:24px;box-shadow:0 18px 50px #0008;margin-bottom:20px;overflow:hidden;position:relative}
+.hero:after{content:"METRO";position:absolute;right:-10px;bottom:-18px;font-size:62px;font-weight:1000;color:#ffffff08;transform:rotate(-7deg)}
+h1{margin:0 0 8px;font-size:29px}.muted{color:#9ea4ab;line-height:1.5}.gold{color:#ffc21c}
+button,.btn{border:0;border-radius:14px;padding:12px 15px;font-weight:800;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.card{background:#13161a;border:1px solid #252a30;border-radius:19px;padding:15px;min-width:0}
+.cat{font-size:11px;color:#e2ad22;text-transform:uppercase;letter-spacing:.8px}
+.name{font-weight:850;font-size:16px;margin:6px 0}.desc{font-size:12px;color:#9299a1;min-height:38px;line-height:1.4}
+.price{font-size:20px;font-weight:950;margin:12px 0}.buy{width:100%;background:linear-gradient(135deg,#ffd12d,#f5a900);color:#181000}
+.order{background:#13161a;border:1px solid #272c31;border-radius:18px;padding:15px;margin:10px 0}
+.status{display:inline-block;padding:5px 8px;border-radius:9px;background:#27200d;color:#ffd158;font-size:12px;font-weight:800}
+input,textarea,select{width:100%;background:#0e1013;color:#fff;border:1px solid #30353b;border-radius:13px;padding:13px;margin:6px 0 10px;outline:none}
+textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1}.secondary{background:#24282d;color:#fff}
+.nav{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;width:min(690px,calc(100% - 20px));background:#111418ef;backdrop-filter:blur(18px);border:1px solid #2a2e33;border-radius:20px;padding:8px;display:flex;gap:6px;z-index:10}
+.nav button{flex:1;background:transparent;color:#8f969e;font-size:12px;padding:10px 4px}.nav button.active{background:#24200f;color:#ffd24b}
+.empty{text-align:center;padding:38px 10px;color:#89919a}.hide{display:none!important}.adminline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.adminline select{width:auto;min-width:150px;margin:8px 0}
+@media(max-width:390px){.grid{grid-template-columns:1fr}h1{font-size:25px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div class="brand">ШРЕКСИЧ <b>SHOP</b></div><div class="pill">PUBG MOBILE</div></div>
+  <main id="app"><div class="empty">Загрузка магазина…</div></main>
+</div>
+<div class="nav" id="nav">
+  <button data-tab="home">Главная</button><button data-tab="catalog">Каталог</button><button data-tab="orders">Заказы</button><button data-tab="support">Поддержка</button>
+</div>
 <script>
-const ADMIN={mode}; const tg=window.Telegram?.WebApp;
-document.addEventListener('gesturestart',e=>e.preventDefault(),{{passive:false}});
-document.addEventListener('gesturechange',e=>e.preventDefault(),{{passive:false}});
-document.addEventListener('gestureend',e=>e.preventDefault(),{{passive:false}});
-document.addEventListener('touchmove',e=>{{if(e.touches&&e.touches.length>1)e.preventDefault()}},{{passive:false}});
-let __lastTouchEnd=0;
-document.addEventListener('touchend',e=>{{const now=Date.now();if(now-__lastTouchEnd<=300)e.preventDefault();__lastTouchEnd=now}},{{passive:false}}); tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#090b0d'); tg?.setBackgroundColor?.('#090b0d');
-const init=tg?.initData||''; const H={{'Content-Type':'application/json','X-Telegram-Init-Data':init}}; let products=[],me=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
-async function api(p,o={{}}){{let r=await fetch(p,{{...o,headers:{{...H,...(o.headers||{{}})}}}});let d;try{{d=await r.json()}}catch{{d={{detail:'Ошибка сервера'}}}}if(!r.ok)throw Error(d.detail||'Ошибка');return d}}
-const rub=n=>Number(n).toLocaleString('ru-RU')+' ₽'; const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[m]));
-function nav(){{document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(ADMIN)document.getElementById('nav').classList.add('hide')}}
-async function boot(){{try{{me=await api('/api/me');products=await api('/api/catalog');if(ADMIN&&!me.owner)throw Error('Нет доступа');render()}}catch(e){{document.getElementById('app').innerHTML='<div class="empty">'+esc(e.message)+'<br><br>Откройте приложение кнопкой из Telegram-бота.</div>'}}}}
-function home(){{return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары • Буст • Квесты • Фарм<br>Быстрое оформление и отслеживание заказа прямо в Telegram.</div></section><h3>Популярное</h3>'+cards(products.slice(0,4))}}
-function cards(a){{return '<div class="grid">'+a.map(p=>'<div class="card"><div class="cat">'+esc(p.category)+'</div><div class="name">'+esc(p.name)+'</div><div class="desc">'+esc(p.description)+'</div><div class="price">'+rub(p.price)+'</div><button class="buy" onclick="orderForm('+p.id+')">Купить</button></div>').join('')+'</div>'}}
-function orderForm(id){{let p=products.find(x=>x.id===id);document.getElementById('app').innerHTML='<div class="hero"><div class="cat">'+esc(p.category)+'</div><h1>'+esc(p.name)+'</h1><div class="muted">'+esc(p.description)+'</div><div class="price">'+rub(p.price)+'</div></div><div class="card"><b>Данные заказа</b><input id="uid" placeholder="UID PUBG Mobile"><input id="nick" placeholder="Игровой ник"><textarea id="comment" placeholder="Комментарий к заказу"></textarea><button class="buy" onclick="createOrder('+id+')">Создать заказ</button></div>';}}
-async function createOrder(id){{try{{let o=await api('/api/orders',{{method:'POST',body:JSON.stringify({{product_id:id,uid:document.getElementById('uid').value,nickname:document.getElementById('nick').value,comment:document.getElementById('comment').value}})}});showPay(o)}}catch(e){{alert(e.message)}}}}
-function showPay(o){{document.getElementById('app').innerHTML='<div class="hero"><div class="cat">ЗАКАЗ #'+o.number+'</div><h1>Заказ создан</h1><div class="muted">Выберите способ оплаты. После оплаты статус обновится автоматически или после проверки администратором.</div></div><div class="card"><div class="price">'+rub(o.amount)+'</div><button class="buy" onclick="payStars('+o.id+')">Оплатить '+o.stars_amount+' ⭐</button><div style="height:8px"></div><button class="secondary" style="width:100%" onclick="manual('+o.id+')">Ручная оплата</button><p class="muted">'+esc(o.manual_payment)+'</p></div>'}}
-async function payStars(id){{try{{let d=await api('/api/orders/'+id+'/stars',{{method:'POST'}});tg?.openInvoice?tg.openInvoice(d.url,()=>{{tab='orders';render()}}):location.href=d.url}}catch(e){{alert(e.message)}}}}
-async function manual(id){{try{{let d=await api('/api/orders/'+id+'/manual',{{method:'POST'}});alert('Заявка на проверку оплаты отправлена.\n\n'+d.details);tab='orders';render()}}catch(e){{alert(e.message)}}}}
-async function orders(){{let a=await api('/api/orders');return a.length?a.map(o=>'<div class="order"><div class="cat">ЗАКАЗ #'+o.number+'</div><div class="name">'+esc(o.product_name)+'</div><div class="row"><div class="price">'+rub(o.amount)+'</div><div style="text-align:right"><span class="status">'+esc(o.status)+'</span></div></div><div class="muted">'+esc(o.created_at)+'</div></div>').join(''):'<div class="empty">У вас пока нет заказов.</div>'}}
-function support(){{return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Создайте обращение — владелец получит уведомление в Telegram.</div></div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" onclick="ticket()">Отправить</button></div>'}}
-async function ticket(){{try{{let d=await api('/api/support',{{method:'POST',body:JSON.stringify({{category:document.getElementById('tc').value,message:document.getElementById('tm').value}})}});alert('Обращение #'+d.id+' создано');document.getElementById('tm').value=''}}catch(e){{alert(e.message)}}}}
-async function adminPage(){{let a=await api('/api/admin/orders');let t=await api('/api/admin/tickets');return '<section class="hero"><div class="cat">OWNER PANEL</div><h1>Админ-панель</h1><div class="muted">Заказы: '+a.length+' • Обращения: '+t.length+'</div></section><h3>Заказы</h3>'+a.map(o=>'<div class="order"><div class="cat">#'+o.number+' • Telegram '+o.telegram_id+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+rub(o.amount)+' • UID '+esc(o.uid)+'</div><div class="adminline"><select id="s'+o.id+'">'+['Ожидает оплаты','Ожидает проверки оплаты','Оплачен','Принят','В работе','Ожидает клиента','Выполнен','Отменён','Возврат'].map(s=>'<option '+(s===o.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" onclick="setStatus('+o.id+')">Сохранить</button></div></div>').join('')+'<h3>Поддержка</h3>'+t.map(x=>'<div class="order"><div class="cat">#'+x.id+' • '+esc(x.category)+'</div><div>'+esc(x.message)+'</div><div class="muted">Telegram '+x.telegram_id+'</div></div>').join('')}}
-async function setStatus(id){{try{{await api('/api/admin/orders/'+id,{{method:'PATCH',body:JSON.stringify({{status:document.getElementById('s'+id).value}})}});alert('Статус обновлён')}}catch(e){{alert(e.message)}}}}
-async function render(){{nav();let el=document.getElementById('app');el.innerHTML='<div class="empty">Загрузка…</div>';try{{if(ADMIN)el.innerHTML=await adminPage();else if(tab==='home')el.innerHTML=home();else if(tab==='catalog')el.innerHTML='<h2>Каталог</h2>'+cards(products);else if(tab==='orders')el.innerHTML=await orders();else if(tab==='support')el.innerHTML=support();}}catch(e){{el.innerHTML='<div class="empty">'+esc(e.message)+'</div>'}}}}
-document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{{tab=b.dataset.tab;render()}});boot();
-</script></body></html>"""
+(function(){
+'use strict';
+
+const ADMIN = __ADMIN__;
+const app = document.getElementById('app');
+const navEl = document.getElementById('nav');
+const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+
+function showFatal(message){
+  app.innerHTML = '<div class="empty">' + esc(message) + '</div>';
+}
+window.addEventListener('error', function(e){ showFatal('Ошибка интерфейса: ' + (e.message || 'неизвестная ошибка')); });
+window.addEventListener('unhandledrejection', function(e){ showFatal('Ошибка загрузки: ' + ((e.reason && e.reason.message) || String(e.reason || 'неизвестная ошибка'))); });
+
+document.addEventListener('gesturestart', function(e){ e.preventDefault(); }, {passive:false});
+document.addEventListener('gesturechange', function(e){ e.preventDefault(); }, {passive:false});
+document.addEventListener('gestureend', function(e){ e.preventDefault(); }, {passive:false});
+document.addEventListener('touchmove', function(e){ if(e.touches && e.touches.length > 1) e.preventDefault(); }, {passive:false});
+let lastTouchEnd = 0;
+document.addEventListener('touchend', function(e){
+  const now = Date.now();
+  if(now - lastTouchEnd <= 300) e.preventDefault();
+  lastTouchEnd = now;
+}, {passive:false});
+
+if(tg){
+  try{ tg.ready(); tg.expand(); }catch(_){}
+  try{ tg.setHeaderColor('#090b0d'); tg.setBackgroundColor('#090b0d'); }catch(_){}
+}
+
+const initData = tg ? (tg.initData || '') : '';
+const headers = {'Content-Type':'application/json','X-Telegram-Init-Data':initData};
+let products = [];
+let me = null;
+let tab = new URLSearchParams(location.search).get('tab') || (ADMIN ? 'admin' : 'home');
+
+function esc(v){
+  return String(v == null ? '' : v).replace(/[&<>"']/g,function(m){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+  });
+}
+function rub(n){ return Number(n).toLocaleString('ru-RU') + ' ₽'; }
+
+async function api(path, options){
+  options = options || {};
+  const controller = new AbortController();
+  const timer = setTimeout(function(){ controller.abort(); }, 12000);
+  try{
+    const response = await fetch(path, Object.assign({}, options, {
+      headers:Object.assign({}, headers, options.headers || {}),
+      signal:controller.signal
+    }));
+    let data = {};
+    try{ data = await response.json(); }catch(_){}
+    if(!response.ok) throw new Error(data.detail || ('HTTP ' + response.status));
+    return data;
+  }catch(e){
+    if(e && e.name === 'AbortError') throw new Error('Сервер не ответил за 12 секунд');
+    throw e;
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
+function updateNav(){
+  document.querySelectorAll('#nav button').forEach(function(b){
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  if(ADMIN) navEl.classList.add('hide');
+}
+
+function cards(list){
+  return '<div class="grid">' + list.map(function(p){
+    return '<div class="card"><div class="cat">'+esc(p.category)+'</div><div class="name">'+esc(p.name)+'</div><div class="desc">'+esc(p.description)+'</div><div class="price">'+rub(p.price)+'</div><button class="buy" data-buy="'+p.id+'">Купить</button></div>';
+  }).join('') + '</div>';
+}
+
+function home(){
+  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары • Буст • Квесты • Фарм<br>Быстрое оформление и отслеживание заказа прямо в Telegram.</div></section><h3>Популярное</h3>' + cards(products.slice(0,4));
+}
+
+function bindBuyButtons(){
+  document.querySelectorAll('[data-buy]').forEach(function(btn){
+    btn.addEventListener('click', function(){ orderForm(Number(btn.dataset.buy)); });
+  });
+}
+
+function orderForm(id){
+  const p = products.find(function(x){ return Number(x.id) === Number(id); });
+  if(!p) return;
+  app.innerHTML = '<div class="hero"><div class="cat">'+esc(p.category)+'</div><h1>'+esc(p.name)+'</h1><div class="muted">'+esc(p.description)+'</div><div class="price">'+rub(p.price)+'</div></div><div class="card"><b>Данные заказа</b><input id="uid" placeholder="UID PUBG Mobile"><input id="nick" placeholder="Игровой ник"><textarea id="comment" placeholder="Комментарий к заказу"></textarea><button class="buy" id="createOrderBtn">Создать заказ</button></div>';
+  document.getElementById('createOrderBtn').addEventListener('click', function(){ createOrder(id); });
+}
+
+async function createOrder(id){
+  try{
+    const o = await api('/api/orders',{
+      method:'POST',
+      body:JSON.stringify({
+        product_id:id,
+        uid:document.getElementById('uid').value,
+        nickname:document.getElementById('nick').value,
+        comment:document.getElementById('comment').value
+      })
+    });
+    showPay(o);
+  }catch(e){ alert(e.message); }
+}
+
+function showPay(o){
+  app.innerHTML = '<div class="hero"><div class="cat">ЗАКАЗ #'+o.number+'</div><h1>Заказ создан</h1><div class="muted">Выберите способ оплаты.</div></div><div class="card"><div class="price">'+rub(o.amount)+'</div><button class="buy" id="starsBtn">Оплатить '+o.stars_amount+' ⭐</button><div style="height:8px"></div><button class="secondary" style="width:100%" id="manualBtn">Ручная оплата</button><p class="muted">'+esc(o.manual_payment)+'</p></div>';
+  document.getElementById('starsBtn').addEventListener('click', function(){ payStars(o.id); });
+  document.getElementById('manualBtn').addEventListener('click', function(){ manualPay(o.id); });
+}
+
+async function payStars(id){
+  try{
+    const d = await api('/api/orders/'+id+'/stars',{method:'POST'});
+    if(tg && tg.openInvoice) tg.openInvoice(d.url,function(){ tab='orders'; render(); });
+    else location.href=d.url;
+  }catch(e){ alert(e.message); }
+}
+async function manualPay(id){
+  try{
+    const d = await api('/api/orders/'+id+'/manual',{method:'POST'});
+    alert('Заявка на проверку оплаты отправлена.\\n\\n'+d.details);
+    tab='orders'; render();
+  }catch(e){ alert(e.message); }
+}
+async function ordersHtml(){
+  const list = await api('/api/orders');
+  if(!list.length) return '<div class="empty">У вас пока нет заказов.</div>';
+  return list.map(function(o){
+    return '<div class="order"><div class="cat">ЗАКАЗ #'+o.number+'</div><div class="name">'+esc(o.product_name)+'</div><div class="row"><div class="price">'+rub(o.amount)+'</div><div style="text-align:right"><span class="status">'+esc(o.status)+'</span></div></div><div class="muted">'+esc(o.created_at)+'</div></div>';
+  }).join('');
+}
+function supportHtml(){
+  return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Создайте обращение — владелец получит уведомление в Telegram.</div></div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>';
+}
+async function sendTicket(){
+  try{
+    const d=await api('/api/support',{method:'POST',body:JSON.stringify({category:document.getElementById('tc').value,message:document.getElementById('tm').value})});
+    alert('Обращение #'+d.id+' создано');
+    document.getElementById('tm').value='';
+  }catch(e){ alert(e.message); }
+}
+async function adminHtml(){
+  const results = await Promise.all([api('/api/admin/orders'),api('/api/admin/tickets')]);
+  const a=results[0], t=results[1];
+  return '<section class="hero"><div class="cat">OWNER PANEL</div><h1>Админ-панель</h1><div class="muted">Заказы: '+a.length+' • Обращения: '+t.length+'</div></section><h3>Заказы</h3>' +
+    a.map(function(o){
+      const statuses=['Ожидает оплаты','Ожидает проверки оплаты','Оплачен','Принят','В работе','Ожидает клиента','Выполнен','Отменён','Возврат'];
+      return '<div class="order"><div class="cat">#'+o.number+' • Telegram '+o.telegram_id+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+rub(o.amount)+' • UID '+esc(o.uid)+'</div><div class="adminline"><select id="s'+o.id+'">'+statuses.map(function(s){return '<option '+(s===o.status?'selected':'')+'>'+s+'</option>';}).join('')+'</select><button class="secondary" data-status="'+o.id+'">Сохранить</button></div></div>';
+    }).join('') +
+    '<h3>Поддержка</h3>' +
+    t.map(function(x){return '<div class="order"><div class="cat">#'+x.id+' • '+esc(x.category)+'</div><div>'+esc(x.message)+'</div><div class="muted">Telegram '+x.telegram_id+'</div></div>';}).join('');
+}
+async function setStatus(id){
+  try{
+    await api('/api/admin/orders/'+id,{method:'PATCH',body:JSON.stringify({status:document.getElementById('s'+id).value})});
+    alert('Статус обновлён');
+  }catch(e){ alert(e.message); }
+}
+
+async function render(){
+  updateNav();
+  app.innerHTML='<div class="empty">Загрузка…</div>';
+  try{
+    if(ADMIN){
+      app.innerHTML=await adminHtml();
+      document.querySelectorAll('[data-status]').forEach(function(btn){
+        btn.addEventListener('click',function(){ setStatus(Number(btn.dataset.status)); });
+      });
+      return;
+    }
+    if(tab==='home'){ app.innerHTML=home(); bindBuyButtons(); }
+    else if(tab==='catalog'){ app.innerHTML='<h2>Каталог</h2>'+cards(products); bindBuyButtons(); }
+    else if(tab==='orders'){ app.innerHTML=await ordersHtml(); }
+    else if(tab==='support'){ app.innerHTML=supportHtml(); document.getElementById('ticketBtn').addEventListener('click',sendTicket); }
+  }catch(e){ showFatal(e.message); }
+}
+
+document.querySelectorAll('#nav button').forEach(function(b){
+  b.addEventListener('click',function(){ tab=b.dataset.tab; render(); });
+});
+
+async function boot(){
+  try{
+    app.innerHTML='<div class="empty">Загрузка каталога…</div>';
+    products=await api('/api/catalog');
+    app.innerHTML='<div class="empty">Проверка Telegram…</div>';
+    me=await api('/api/me');
+    if(ADMIN && !me.owner) throw new Error('Нет доступа');
+    render();
+  }catch(e){
+    showFatal(e.message + '<br><br>Откройте приложение кнопкой из Telegram-бота.');
+  }
+}
+boot();
+})();
+</script>
+</body>
+</html>"""
+    return tpl.replace("__ADMIN__", mode).replace("__APP_NAME__", html.escape(APP_NAME))
 
 
 @app.get("/", response_class=HTMLResponse)
