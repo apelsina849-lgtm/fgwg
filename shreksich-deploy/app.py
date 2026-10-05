@@ -5,6 +5,8 @@ import html
 import json
 import os
 import random
+import secrets
+import string
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -81,6 +83,40 @@ TOP_DROP_MESSAGES = [
 ]
 
 
+TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+def make_user_token():
+    return "SHX-" + "".join(secrets.choice(TOKEN_ALPHABET) for _ in range(8))
+
+
+async def ensure_user_token(conn, telegram_id: int):
+    row = await (await conn.execute("SELECT token FROM users WHERE telegram_id=?", (telegram_id,))).fetchone()
+    if row and row["token"]:
+        return row["token"]
+    for _ in range(20):
+        token = make_user_token()
+        exists = await (await conn.execute("SELECT 1 FROM users WHERE token=?", (token,))).fetchone()
+        if exists:
+            continue
+        await conn.execute(
+            "UPDATE users SET token=? WHERE telegram_id=? AND (token IS NULL OR token='')",
+            (token, telegram_id)
+        )
+        return token
+    raise RuntimeError("Не удалось создать уникальный жетон")
+
+
+async def telegram_id_by_token(conn, token: str):
+    normalized = (token or "").strip().upper()
+    if not normalized:
+        return None
+    row = await (await conn.execute(
+        "SELECT telegram_id,token,username,first_name FROM users WHERE upper(token)=?",
+        (normalized,)
+    )).fetchone()
+    return row
+
+
 async def db():
     conn = await aiosqlite.connect(DB_PATH, timeout=15)
     conn.row_factory = aiosqlite.Row
@@ -95,7 +131,7 @@ async def init_db():
     await conn.execute("PRAGMA synchronous=NORMAL")
     await conn.executescript("""
     CREATE TABLE IF NOT EXISTS users(
-      telegram_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT,
+      telegram_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, token TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS products(
@@ -166,6 +202,15 @@ async def init_db():
     );
     """)
     # Lightweight SQLite migrations for the persistent Railway volume.
+    user_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(users)")).fetchall()}
+    if "token" not in user_cols:
+        await conn.execute("ALTER TABLE users ADD COLUMN token TEXT")
+    users_without_token = await (await conn.execute(
+        "SELECT telegram_id FROM users WHERE token IS NULL OR token=''"
+    )).fetchall()
+    for user_row in users_without_token:
+        await ensure_user_token(conn, int(user_row["telegram_id"]))
+    await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_token ON users(token)")
     order_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(orders)")).fetchall()}
     if "promo_code" not in order_cols:
         await conn.execute("ALTER TABLE orders ADD COLUMN promo_code TEXT NOT NULL DEFAULT ''")
@@ -229,7 +274,7 @@ def verify_init_data(init_data: str) -> dict:
     except json.JSONDecodeError:
         raise HTTPException(401, "Некорректные данные пользователя")
     if not user.get("id"):
-        raise HTTPException(401, "Telegram ID не найден")
+        raise HTTPException(401, "Не удалось определить пользователя Telegram")
     return user
 
 
@@ -243,9 +288,11 @@ async def current_user(init_data: str | None):
               "ON CONFLICT(telegram_id) DO UPDATE SET username=excluded.username, first_name=excluded.first_name",
               (int(user["id"]), user.get("username"), user.get("first_name"))
             )
+            token = await ensure_user_token(conn, int(user["id"]))
             await conn.commit()
         finally:
             await conn.close()
+    user["token"] = token
     return user
 
 
@@ -263,7 +310,7 @@ async def announce_top_drop(user_id: int, reward: dict):
         conn = await db()
         try:
             row = await (await conn.execute(
-                "SELECT username,first_name FROM users WHERE telegram_id=?",
+                "SELECT username,first_name,token FROM users WHERE telegram_id=?",
                 (user_id,)
             )).fetchone()
         finally:
@@ -273,7 +320,7 @@ async def announce_top_drop(user_id: int, reward: dict):
         elif row and row["first_name"]:
             nick = row["first_name"]
         else:
-            nick = f"Игрок {user_id}"
+            nick = row["token"] if row and row["token"] else "Игрок Шрексича"
         stamp = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
         base = random.choice(TOP_DROP_MESSAGES).format(
             nick=nick, item=reward["name"], rarity=reward["tier"]
@@ -315,22 +362,23 @@ async def register_bot_user(user: dict):
                 "ON CONFLICT(telegram_id) DO UPDATE SET username=excluded.username, first_name=excluded.first_name",
                 (int(user["id"]), user.get("username"), user.get("first_name"))
             )
+            await ensure_user_token(conn, int(user["id"]))
             await conn.commit()
         finally:
             await conn.close()
 
 
-async def register_referral(referred_id: int, referrer_id: int):
-    if not referred_id or not referrer_id or referred_id == referrer_id:
+async def register_referral(referred_id: int, referrer_token: str):
+    if not referred_id or not referrer_token:
         return
     async with db_write_lock:
         conn = await db()
         try:
-            exists = await (await conn.execute("SELECT 1 FROM users WHERE telegram_id=?", (referrer_id,))).fetchone()
-            if exists:
+            referrer = await telegram_id_by_token(conn, referrer_token)
+            if referrer and int(referrer["telegram_id"]) != int(referred_id):
                 await conn.execute(
                     "INSERT OR IGNORE INTO referrals(referrer_id,referred_id) VALUES(?,?)",
-                    (referrer_id, referred_id)
+                    (int(referrer["telegram_id"]), int(referred_id))
                 )
                 await conn.commit()
         finally:
@@ -339,13 +387,33 @@ async def register_referral(referred_id: int, referrer_id: int):
 
 async def referral_link(user_id: int):
     global bot_username
+    conn = await db()
+    try:
+        token = await ensure_user_token(conn, int(user_id))
+        await conn.commit()
+    finally:
+        await conn.close()
     if not bot_username:
         try:
             info = await tg("getMe")
             bot_username = info.get("username", "")
         except Exception:
             bot_username = ""
-    return f"https://t.me/{bot_username}?start=ref_{user_id}" if bot_username else BASE_URL
+    return f"https://t.me/{bot_username}?start=ref_{token}" if bot_username else BASE_URL
+
+
+async def send_token(chat_id: int, user_id: int):
+    conn = await db()
+    try:
+        token = await ensure_user_token(conn, int(user_id))
+        await conn.commit()
+    finally:
+        await conn.close()
+    await tg("sendMessage", {
+        "chat_id":chat_id,
+        "parse_mode":"HTML",
+        "text":f"🎫 <b>Ваш жетон Шрексича</b>\n\n<code>{html.escape(token)}</code>\n\nПо этому жетону поддержка может найти ваш аккаунт. Telegram ID сообщать не нужно."
+    })
 
 
 async def send_faq(chat_id: int):
@@ -402,7 +470,7 @@ async def process_update(update: dict):
         parts = text.split(maxsplit=1)
         if len(parts) > 1 and parts[1].startswith("ref_"):
             try:
-                await register_referral(int(user.get("id", 0)), int(parts[1][4:]))
+                await register_referral(int(user.get("id", 0)), parts[1][4:])
             except Exception:
                 pass
         await send_start(int(msg["chat"]["id"]), int(user.get("id", 0)))
@@ -415,6 +483,9 @@ async def process_update(update: dict):
         return
     if msg and text.startswith("/ref"):
         await send_referral(int(msg["chat"]["id"]), int(user.get("id", 0)))
+        return
+    if msg and text.startswith("/token"):
+        await send_token(int(msg["chat"]["id"]), int(user.get("id", 0)))
         return
 
     pq = update.get("pre_checkout_query")
@@ -533,6 +604,7 @@ async def polling():
           {"command":"shop","description":"Открыть магазин"},
           {"command":"faq","description":"Ответы на вопросы"},
           {"command":"ref","description":"Реферальная ссылка"},
+          {"command":"token","description":"Мой жетон"},
           {"command":"help","description":"Помощь"}
         ]})
     except Exception as e:
@@ -590,7 +662,7 @@ class AdminGrantIn(BaseModel):
 
 
 class AdminRewardIn(BaseModel):
-    telegram_id: int
+    token: str = Field(min_length=4, max_length=32)
     tickets: int = Field(default=0, ge=0, le=100)
     upgrade_points: int = Field(default=0, ge=0, le=10000)
 
@@ -630,7 +702,7 @@ class AdminReplyIn(BaseModel):
 
 
 class AdminMessageIn(BaseModel):
-    telegram_id: int
+    token: str = Field(min_length=4, max_length=32)
     message: str = Field(min_length=1, max_length=3000)
 
 
@@ -650,7 +722,7 @@ async def catalog():
 @app.get("/api/me")
 async def me(x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
-    return {"id":u["id"],"first_name":u.get("first_name"),"username":u.get("username"),"owner":int(u["id"])==OWNER_ID}
+    return {"token":u["token"],"first_name":u.get("first_name"),"username":u.get("username"),"owner":int(u["id"])==OWNER_ID}
 
 
 @app.post("/api/orders")
