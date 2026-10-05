@@ -27,17 +27,36 @@ TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 poll_offset = 0
 db_write_lock = asyncio.Lock()
 
+MAX_FREE_SPINS_24H = 3
+
 SPIN_REWARDS = [
-    {"name":"500K Metro Cash","tier":"COMMON","weight":45,"points":1},
-    {"name":"Набор расходников","tier":"RARE","weight":28,"points":2},
-    {"name":"Metro Starter Kit","tier":"EPIC","weight":18,"points":3},
-    {"name":"Буст 3 квестов","tier":"LEGENDARY","weight":7,"points":5},
-    {"name":"Премиум Metro Pack","tier":"MYTHIC","weight":2,"points":8},
+    {"name":"250K Metro Cash","tier":"COMMON","weight":8,"points":1},
+    {"name":"500K Metro Cash","tier":"COMMON","weight":8,"points":1},
+    {"name":"Набор патронов","tier":"COMMON","weight":8,"points":1},
+    {"name":"Набор аптечек","tier":"COMMON","weight":7,"points":1},
+    {"name":"Набор ремонта","tier":"COMMON","weight":7,"points":1},
+    {"name":"Ящик базовых ресурсов","tier":"COMMON","weight":7,"points":1},
+
+    {"name":"1M Metro Cash","tier":"RARE","weight":7,"points":2},
+    {"name":"Усиленный набор патронов","tier":"RARE","weight":7,"points":2},
+    {"name":"Набор брони","tier":"RARE","weight":7,"points":2},
+    {"name":"Набор модулей оружия","tier":"RARE","weight":7,"points":2},
+
+    {"name":"3M Metro Cash","tier":"EPIC","weight":6,"points":3},
+    {"name":"Metro Starter Kit+","tier":"EPIC","weight":6,"points":3},
+    {"name":"Elite Supply Pack","tier":"EPIC","weight":6,"points":3},
+
+    {"name":"Premium Metro Pack","tier":"LEGENDARY","weight":4,"points":6},
+    {"name":"Буст 3 квестов","tier":"LEGENDARY","weight":3,"points":6},
+
+    {"name":"Black Market Pack","tier":"MYTHIC","weight":1,"points":10},
+    {"name":"Ultimate Metro Bundle","tier":"MYTHIC","weight":1,"points":10},
 ]
 UPGRADE_REWARDS = [
     {"points":5,"name":"Набор расходников"},
     {"points":10,"name":"Metro Starter Kit"},
-    {"points":18,"name":"Премиум Metro Pack"},
+    {"points":18,"name":"Premium Metro Pack"},
+    {"points":30,"name":"Ultimate Metro Bundle"},
 ]
 
 
@@ -219,7 +238,7 @@ async def process_update(update: dict):
                     await conn.commit()
                 finally:
                     await conn.close()
-            await tg("sendMessage", {"chat_id":msg["chat"]["id"],"text":f"✅ Оплата получена. Заказ #{row['number']} отмечен как оплаченный."})
+            pass
         except Exception:
             pass
 
@@ -319,10 +338,6 @@ async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(
             await conn.commit()
         finally:
             await conn.close()
-    try:
-        await tg("sendMessage", {"chat_id":OWNER_ID,"text":f"🆕 Новый заказ #{number}\n{p['name']}\nКлиент: {u.get('first_name','')} ({u['id']})\nЦена: {p['stars_price']} ⭐"})
-    except Exception:
-        pass
     return {"id":oid,"number":number,"status":"Ожидает оплаты","stars_amount":p["stars_price"]}
 
 
@@ -367,14 +382,23 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
             await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id) VALUES(?)",(uid,))
             await conn.commit()
             state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
-            history = await (await conn.execute("SELECT reward_name,reward_tier,points,created_at FROM spin_history WHERE telegram_id=? ORDER BY id DESC LIMIT 8",(uid,))).fetchall()
+            history = await (await conn.execute("SELECT reward_name,reward_tier,points,created_at FROM spin_history WHERE telegram_id=? ORDER BY id DESC LIMIT 12",(uid,))).fetchall()
+            used_row = await (await conn.execute(
+                "SELECT COUNT(*) c, MIN(strftime('%s', created_at)) first_ts FROM spin_history WHERE telegram_id=? AND created_at >= datetime('now','-24 hours')",
+                (uid,)
+            )).fetchone()
         finally:
             await conn.close()
-    now = int(time.time())
+    used = int(used_row["c"] or 0)
+    remaining = max(0, MAX_FREE_SPINS_24H - used)
+    next_reset = 0
+    if remaining == 0 and used_row["first_ts"]:
+        next_reset = max(0, int(used_row["first_ts"]) + 86400 - int(time.time()))
     return {
-      "tickets":int(state["tickets"]),
+      "remaining_spins":remaining,
+      "max_spins":MAX_FREE_SPINS_24H,
       "upgrade_points":int(state["upgrade_points"]),
-      "daily_available": now - int(state["last_free_spin"] or 0) >= 86400,
+      "next_reset_seconds":next_reset,
       "history":[dict(x) for x in history],
       "upgrade_rewards":UPGRADE_REWARDS,
       "rewards":[{"name":x["name"],"tier":x["tier"]} for x in SPIN_REWARDS]
@@ -385,22 +409,19 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
 async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
     uid = int(u["id"])
-    now = int(time.time())
     async with db_write_lock:
         conn = await db()
         try:
             await conn.execute("BEGIN IMMEDIATE")
             await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id) VALUES(?)",(uid,))
-            state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
-            daily_available = now - int(state["last_free_spin"] or 0) >= 86400
-            tickets = int(state["tickets"])
-            if not daily_available and tickets <= 0:
+            used_row = await (await conn.execute(
+                "SELECT COUNT(*) c FROM spin_history WHERE telegram_id=? AND created_at >= datetime('now','-24 hours')",
+                (uid,)
+            )).fetchone()
+            used = int(used_row["c"] or 0)
+            if used >= MAX_FREE_SPINS_24H:
                 await conn.rollback()
-                raise HTTPException(429,"Бесплатные спины закончились. Следующий ежедневный спин будет доступен позже.")
-            if daily_available:
-                await conn.execute("UPDATE spin_state SET last_free_spin=? WHERE telegram_id=?",(now,uid))
-            else:
-                await conn.execute("UPDATE spin_state SET tickets=tickets-1 WHERE telegram_id=?",(uid,))
+                raise HTTPException(429,"Лимит исчерпан: максимум 3 бесплатных SPIN за 24 часа.")
             reward = random.choices(SPIN_REWARDS, weights=[x["weight"] for x in SPIN_REWARDS], k=1)[0]
             await conn.execute("UPDATE spin_state SET upgrade_points=upgrade_points+? WHERE telegram_id=?",(reward["points"],uid))
             await conn.execute("INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points) VALUES(?,?,?,?)",(uid,reward["name"],reward["tier"],reward["points"]))
@@ -408,11 +429,8 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
             state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
         finally:
             await conn.close()
-    try:
-        await tg("sendMessage",{"chat_id":OWNER_ID,"text":f"🎰 HYPE SPIN\nИгрок: {uid}\nВыпало: {reward['name']} ({reward['tier']})\nВыдача производится вручную в игре."})
-    except Exception:
-        pass
-    return {"reward":reward,"tickets":int(state["tickets"]),"upgrade_points":int(state["upgrade_points"])}
+    remaining = max(0, MAX_FREE_SPINS_24H - used - 1)
+    return {"reward":reward,"remaining_spins":remaining,"max_spins":MAX_FREE_SPINS_24H,"upgrade_points":int(state["upgrade_points"])}
 
 
 class UpgradeClaimIn(BaseModel):
@@ -440,10 +458,6 @@ async def upgrade_claim(body: UpgradeClaimIn, x_telegram_init_data: str | None =
             await conn.commit()
         finally:
             await conn.close()
-    try:
-        await tg("sendMessage",{"chat_id":OWNER_ID,"text":f"⚡ UPGRADE CLAIM\nИгрок: {uid}\nНаграда: {reward['name']}\nСписано очков: {reward['points']}\nВыдайте награду в игре."})
-    except Exception:
-        pass
     return {"ok":True,"reward":reward}
 
 
@@ -458,8 +472,6 @@ async def support(body: TicketIn, x_telegram_init_data: str | None = Header(defa
             tid = cur.lastrowid
         finally:
             await conn.close()
-    try: await tg("sendMessage",{"chat_id":OWNER_ID,"text":f"💬 Новое обращение #{tid}\n{body.category}\n{body.message}\nTelegram ID: {u['id']}"})
-    except Exception: pass
     return {"id":tid,"status":"Открыт"}
 
 
@@ -491,9 +503,25 @@ async def admin_status(order_id:int, body:StatusIn, x_telegram_init_data: str | 
             await conn.commit()
         finally:
             await conn.close()
-    try: await tg("sendMessage",{"chat_id":row["telegram_id"],"text":f"📦 Статус заказа #{row['number']} изменён: {body.status}"})
-    except Exception: pass
     return {"ok":True,"status":body.status}
+
+
+@app.get("/api/admin/spins")
+async def admin_spins(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    rows=await (await conn.execute("SELECT id,telegram_id,reward_name,reward_tier,points,created_at FROM spin_history ORDER BY id DESC LIMIT 200")).fetchall()
+    await conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/admin/upgrades")
+async def admin_upgrades(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    rows=await (await conn.execute("SELECT id,telegram_id,reward_name,points_spent,created_at FROM upgrade_claims ORDER BY id DESC LIMIT 200")).fetchall()
+    await conn.close()
+    return [dict(r) for r in rows]
 
 
 @app.get("/api/admin/tickets")
