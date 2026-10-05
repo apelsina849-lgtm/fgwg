@@ -4,6 +4,7 @@ import hmac
 import html
 import json
 import os
+import random
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -24,18 +25,34 @@ DB_PATH = os.getenv("DB_PATH", "/data/shreksich.db")
 MANUAL_PAYMENT = os.getenv("MANUAL_PAYMENT_DETAILS", "Реквизиты пока не настроены. Напишите в поддержку.")
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 poll_offset = 0
+db_write_lock = asyncio.Lock()
+
+SPIN_REWARDS = [
+    {"name":"500K Metro Cash","tier":"COMMON","weight":45,"points":1},
+    {"name":"Набор расходников","tier":"RARE","weight":28,"points":2},
+    {"name":"Metro Starter Kit","tier":"EPIC","weight":18,"points":3},
+    {"name":"Буст 3 квестов","tier":"LEGENDARY","weight":7,"points":5},
+    {"name":"Премиум Metro Pack","tier":"MYTHIC","weight":2,"points":8},
+]
+UPGRADE_REWARDS = [
+    {"points":5,"name":"Набор расходников"},
+    {"points":10,"name":"Metro Starter Kit"},
+    {"points":18,"name":"Премиум Metro Pack"},
+]
 
 
 async def db():
-    conn = await aiosqlite.connect(DB_PATH)
+    conn = await aiosqlite.connect(DB_PATH, timeout=15)
     conn.row_factory = aiosqlite.Row
-    await conn.execute("PRAGMA journal_mode=WAL")
+    await conn.execute("PRAGMA busy_timeout=15000")
     await conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
 async def init_db():
     conn = await db()
+    await conn.execute("PRAGMA journal_mode=WAL")
+    await conn.execute("PRAGMA synchronous=NORMAL")
     await conn.executescript("""
     CREATE TABLE IF NOT EXISTS users(
       telegram_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT,
@@ -60,6 +77,27 @@ async def init_db():
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS spin_state(
+      telegram_id INTEGER PRIMARY KEY,
+      tickets INTEGER NOT NULL DEFAULT 3,
+      last_free_spin INTEGER NOT NULL DEFAULT 0,
+      upgrade_points INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS spin_history(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id INTEGER NOT NULL,
+      reward_name TEXT NOT NULL,
+      reward_tier TEXT NOT NULL,
+      points INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS upgrade_claims(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id INTEGER NOT NULL,
+      reward_name TEXT NOT NULL,
+      points_spent INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     """)
     row = await (await conn.execute("SELECT COUNT(*) c FROM products")).fetchone()
     if row["c"] == 0:
@@ -101,14 +139,17 @@ def verify_init_data(init_data: str) -> dict:
 
 async def current_user(init_data: str | None):
     user = verify_init_data(init_data or "")
-    conn = await db()
-    await conn.execute(
-      "INSERT INTO users(telegram_id,username,first_name) VALUES(?,?,?) "
-      "ON CONFLICT(telegram_id) DO UPDATE SET username=excluded.username, first_name=excluded.first_name",
-      (int(user["id"]), user.get("username"), user.get("first_name"))
-    )
-    await conn.commit()
-    await conn.close()
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute(
+              "INSERT INTO users(telegram_id,username,first_name) VALUES(?,?,?) "
+              "ON CONFLICT(telegram_id) DO UPDATE SET username=excluded.username, first_name=excluded.first_name",
+              (int(user["id"]), user.get("username"), user.get("first_name"))
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
     return user
 
 
@@ -170,10 +211,14 @@ async def process_update(update: dict):
         payload = sp.get("invoice_payload", "")
         try:
             _, oid, uid = payload.split(":")
-            conn = await db()
-            await conn.execute("UPDATE orders SET status='Оплачен',payment_method='Telegram Stars',updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?", (int(oid), int(uid)))
-            row = await (await conn.execute("SELECT number FROM orders WHERE id=?", (int(oid),))).fetchone()
-            await conn.commit(); await conn.close()
+            async with db_write_lock:
+                conn = await db()
+                try:
+                    await conn.execute("UPDATE orders SET status='Оплачен',payment_method='Telegram Stars',updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?", (int(oid), int(uid)))
+                    row = await (await conn.execute("SELECT number FROM orders WHERE id=?", (int(oid),))).fetchone()
+                    await conn.commit()
+                finally:
+                    await conn.close()
             await tg("sendMessage", {"chat_id":msg["chat"]["id"],"text":f"✅ Оплата получена. Заказ #{row['number']} отмечен как оплаченный."})
         except Exception:
             pass
@@ -256,23 +301,29 @@ async def me(x_telegram_init_data: str | None = Header(default=None)):
 @app.post("/api/orders")
 async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
-    conn = await db()
-    p = await (await conn.execute("SELECT * FROM products WHERE id=? AND active=1",(body.product_id,))).fetchone()
-    if not p:
-        await conn.close(); raise HTTPException(404,"Товар не найден")
-    last = await (await conn.execute("SELECT COALESCE(MAX(number),10499) n FROM orders")).fetchone()
-    number = int(last["n"]) + 1
-    cur = await conn.execute(
-      "INSERT INTO orders(number,telegram_id,product_id,product_name,amount,stars_amount,uid,nickname,comment) VALUES(?,?,?,?,?,?,?,?,?)",
-      (number,int(u["id"]),p["id"],p["name"],p["price"],p["stars_price"],body.uid,body.nickname,body.comment)
-    )
-    oid = cur.lastrowid
-    await conn.commit(); await conn.close()
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            p = await (await conn.execute("SELECT * FROM products WHERE id=? AND active=1",(body.product_id,))).fetchone()
+            if not p:
+                await conn.rollback()
+                raise HTTPException(404,"Товар не найден")
+            last = await (await conn.execute("SELECT COALESCE(MAX(number),10499) n FROM orders")).fetchone()
+            number = int(last["n"]) + 1
+            cur = await conn.execute(
+              "INSERT INTO orders(number,telegram_id,product_id,product_name,amount,stars_amount,uid,nickname,comment) VALUES(?,?,?,?,?,?,?,?,?)",
+              (number,int(u["id"]),p["id"],p["name"],p["price"],p["stars_price"],body.uid,body.nickname,body.comment)
+            )
+            oid = cur.lastrowid
+            await conn.commit()
+        finally:
+            await conn.close()
     try:
-        await tg("sendMessage", {"chat_id":OWNER_ID,"text":f"🆕 Новый заказ #{number}\n{p['name']}\nКлиент: {u.get('first_name','')} ({u['id']})\nСумма: {p['price']} ₽"})
+        await tg("sendMessage", {"chat_id":OWNER_ID,"text":f"🆕 Новый заказ #{number}\n{p['name']}\nКлиент: {u.get('first_name','')} ({u['id']})\nЦена: {p['stars_price']} ⭐"})
     except Exception:
         pass
-    return {"id":oid,"number":number,"status":"Ожидает оплаты","amount":p["price"],"stars_amount":p["stars_price"],"manual_payment":MANUAL_PAYMENT}
+    return {"id":oid,"number":number,"status":"Ожидает оплаты","stars_amount":p["stars_price"]}
 
 
 @app.get("/api/orders")
@@ -303,25 +354,110 @@ async def stars(order_id: int, x_telegram_init_data: str | None = Header(default
 
 @app.post("/api/orders/{order_id}/manual")
 async def manual(order_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    raise HTTPException(410,"Ручная оплата отключена. Используйте Telegram Stars.")
+
+
+@app.get("/api/spin/state")
+async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
-    conn = await db()
-    row = await (await conn.execute("SELECT * FROM orders WHERE id=? AND telegram_id=?",(order_id,int(u["id"])))).fetchone()
-    if not row:
-        await conn.close(); raise HTTPException(404,"Заказ не найден")
-    await conn.execute("UPDATE orders SET payment_method='Ручная оплата',status='Ожидает проверки оплаты',updated_at=CURRENT_TIMESTAMP WHERE id=?",(order_id,))
-    await conn.commit(); await conn.close()
+    uid = int(u["id"])
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id) VALUES(?)",(uid,))
+            await conn.commit()
+            state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+            history = await (await conn.execute("SELECT reward_name,reward_tier,points,created_at FROM spin_history WHERE telegram_id=? ORDER BY id DESC LIMIT 8",(uid,))).fetchall()
+        finally:
+            await conn.close()
+    now = int(time.time())
+    return {
+      "tickets":int(state["tickets"]),
+      "upgrade_points":int(state["upgrade_points"]),
+      "daily_available": now - int(state["last_free_spin"] or 0) >= 86400,
+      "history":[dict(x) for x in history],
+      "upgrade_rewards":UPGRADE_REWARDS,
+      "rewards":[{"name":x["name"],"tier":x["tier"]} for x in SPIN_REWARDS]
+    }
+
+
+@app.post("/api/spin/free")
+async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    now = int(time.time())
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id) VALUES(?)",(uid,))
+            state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+            daily_available = now - int(state["last_free_spin"] or 0) >= 86400
+            tickets = int(state["tickets"])
+            if not daily_available and tickets <= 0:
+                await conn.rollback()
+                raise HTTPException(429,"Бесплатные спины закончились. Следующий ежедневный спин будет доступен позже.")
+            if daily_available:
+                await conn.execute("UPDATE spin_state SET last_free_spin=? WHERE telegram_id=?",(now,uid))
+            else:
+                await conn.execute("UPDATE spin_state SET tickets=tickets-1 WHERE telegram_id=?",(uid,))
+            reward = random.choices(SPIN_REWARDS, weights=[x["weight"] for x in SPIN_REWARDS], k=1)[0]
+            await conn.execute("UPDATE spin_state SET upgrade_points=upgrade_points+? WHERE telegram_id=?",(reward["points"],uid))
+            await conn.execute("INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points) VALUES(?,?,?,?)",(uid,reward["name"],reward["tier"],reward["points"]))
+            await conn.commit()
+            state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+        finally:
+            await conn.close()
     try:
-        await tg("sendMessage", {"chat_id":OWNER_ID,"text":f"💳 Клиент отметил ручную оплату заказа #{row['number']}. Проверьте оплату в админке."})
-    except Exception: pass
-    return {"ok":True,"details":MANUAL_PAYMENT}
+        await tg("sendMessage",{"chat_id":OWNER_ID,"text":f"🎰 HYPE SPIN\nИгрок: {uid}\nВыпало: {reward['name']} ({reward['tier']})\nВыдача производится вручную в игре."})
+    except Exception:
+        pass
+    return {"reward":reward,"tickets":int(state["tickets"]),"upgrade_points":int(state["upgrade_points"])}
+
+
+class UpgradeClaimIn(BaseModel):
+    points: int
+
+
+@app.post("/api/upgrade/claim")
+async def upgrade_claim(body: UpgradeClaimIn, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    reward = next((x for x in UPGRADE_REWARDS if int(x["points"]) == int(body.points)), None)
+    if not reward:
+        raise HTTPException(400,"Некорректный уровень апгрейда")
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id) VALUES(?)",(uid,))
+            state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+            if int(state["upgrade_points"]) < int(reward["points"]):
+                await conn.rollback()
+                raise HTTPException(409,"Недостаточно очков апгрейда")
+            await conn.execute("UPDATE spin_state SET upgrade_points=upgrade_points-? WHERE telegram_id=?",(reward["points"],uid))
+            await conn.execute("INSERT INTO upgrade_claims(telegram_id,reward_name,points_spent) VALUES(?,?,?)",(uid,reward["name"],reward["points"]))
+            await conn.commit()
+        finally:
+            await conn.close()
+    try:
+        await tg("sendMessage",{"chat_id":OWNER_ID,"text":f"⚡ UPGRADE CLAIM\nИгрок: {uid}\nНаграда: {reward['name']}\nСписано очков: {reward['points']}\nВыдайте награду в игре."})
+    except Exception:
+        pass
+    return {"ok":True,"reward":reward}
 
 
 @app.post("/api/support")
 async def support(body: TicketIn, x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
-    conn = await db()
-    cur = await conn.execute("INSERT INTO tickets(telegram_id,category,message) VALUES(?,?,?)",(int(u["id"]),body.category,body.message))
-    await conn.commit(); tid=cur.lastrowid; await conn.close()
+    async with db_write_lock:
+        conn = await db()
+        try:
+            cur = await conn.execute("INSERT INTO tickets(telegram_id,category,message) VALUES(?,?,?)",(int(u["id"]),body.category,body.message))
+            await conn.commit()
+            tid = cur.lastrowid
+        finally:
+            await conn.close()
     try: await tg("sendMessage",{"chat_id":OWNER_ID,"text":f"💬 Новое обращение #{tid}\n{body.category}\n{body.message}\nTelegram ID: {u['id']}"})
     except Exception: pass
     return {"id":tid,"status":"Открыт"}
@@ -345,9 +481,16 @@ async def admin_status(order_id:int, body:StatusIn, x_telegram_init_data: str | 
     await owner(x_telegram_init_data)
     allowed={"Ожидает оплаты","Ожидает проверки оплаты","Оплачен","Принят","В работе","Ожидает клиента","Выполнен","Отменён","Возврат"}
     if body.status not in allowed: raise HTTPException(400,"Некорректный статус")
-    conn=await db(); row=await (await conn.execute("SELECT * FROM orders WHERE id=?",(order_id,))).fetchone()
-    if not row: await conn.close(); raise HTTPException(404,"Заказ не найден")
-    await conn.execute("UPDATE orders SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(body.status,order_id)); await conn.commit(); await conn.close()
+    async with db_write_lock:
+        conn=await db()
+        try:
+            row=await (await conn.execute("SELECT * FROM orders WHERE id=?",(order_id,))).fetchone()
+            if not row:
+                raise HTTPException(404,"Заказ не найден")
+            await conn.execute("UPDATE orders SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(body.status,order_id))
+            await conn.commit()
+        finally:
+            await conn.close()
     try: await tg("sendMessage",{"chat_id":row["telegram_id"],"text":f"📦 Статус заказа #{row['number']} изменён: {body.status}"})
     except Exception: pass
     return {"ok":True,"status":body.status}
