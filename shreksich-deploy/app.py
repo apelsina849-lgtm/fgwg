@@ -820,7 +820,7 @@ async function boot(){
     if(ADMIN && !me.owner) throw new Error('Нет доступа');
     render();
   }catch(e){
-    showFatal(e.message + '\n\nОткройте приложение кнопкой из Telegram-бота.');
+    showFatal(e.message + '\\n\\nОткройте приложение кнопкой из Telegram-бота.');
   }
 }
 boot();
