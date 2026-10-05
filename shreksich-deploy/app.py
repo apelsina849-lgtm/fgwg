@@ -33,28 +33,54 @@ db_write_lock = asyncio.Lock()
 MAX_FREE_SPINS_24H = 1
 
 SPIN_REWARDS = [
-    {"name":"250K Metro Cash","tier":"COMMON","weight":13,"points":1},
-    {"name":"500K Metro Cash","tier":"COMMON","weight":13,"points":1},
-    {"name":"Набор патронов","tier":"COMMON","weight":13,"points":1},
-    {"name":"Набор аптечек","tier":"COMMON","weight":12,"points":1},
-    {"name":"Набор ремонта","tier":"COMMON","weight":12,"points":1},
-    {"name":"Ящик базовых ресурсов","tier":"COMMON","weight":12,"points":1},
+    # COMMON — total 97.5%
+    {"name":"250K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"500K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Набор патронов","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Набор аптечек","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Набор ремонта","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Ящик базовых ресурсов","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Тактический ремкомплект","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Полевой медпак","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Комплект дымовых гранат","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Комплект осколочных гранат","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Набор пластин брони","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Ящик стандартных модулей","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"750K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"Набор энергетиков","tier":"COMMON","weight":6.9642857143,"points":1},
 
-    {"name":"1M Metro Cash","tier":"RARE","weight":5,"points":2},
-    {"name":"Усиленный набор патронов","tier":"RARE","weight":5,"points":2},
-    {"name":"Набор брони","tier":"RARE","weight":4,"points":2},
-    {"name":"Набор модулей оружия","tier":"RARE","weight":4,"points":2},
+    # RARE — total 1.8%
+    {"name":"1M Metro Cash","tier":"RARE","weight":0.2,"points":2},
+    {"name":"Усиленный набор патронов","tier":"RARE","weight":0.2,"points":2},
+    {"name":"Набор брони","tier":"RARE","weight":0.2,"points":2},
+    {"name":"Набор модулей оружия","tier":"RARE","weight":0.2,"points":2},
+    {"name":"Тактический Supply Case","tier":"RARE","weight":0.2,"points":2},
+    {"name":"2M Metro Cash","tier":"RARE","weight":0.2,"points":2},
+    {"name":"Набор улучшенной брони","tier":"RARE","weight":0.2,"points":2},
+    {"name":"Rare Weapon Parts Pack","tier":"RARE","weight":0.2,"points":2},
+    {"name":"Metro Utility Pack","tier":"RARE","weight":0.2,"points":2},
 
-    {"name":"3M Metro Cash","tier":"EPIC","weight":2,"points":3},
-    {"name":"Metro Starter Kit+","tier":"EPIC","weight":2,"points":3},
-    {"name":"Elite Supply Pack","tier":"EPIC","weight":1,"points":3},
+    # EPIC — total 0.5%
+    {"name":"3M Metro Cash","tier":"EPIC","weight":0.0714285714,"points":3},
+    {"name":"Metro Starter Kit+","tier":"EPIC","weight":0.0714285714,"points":3},
+    {"name":"Elite Supply Pack","tier":"EPIC","weight":0.0714285714,"points":3},
+    {"name":"5M Metro Cash","tier":"EPIC","weight":0.0714285714,"points":3},
+    {"name":"Elite Armor Pack","tier":"EPIC","weight":0.0714285714,"points":3},
+    {"name":"Black Zone Supply Case","tier":"EPIC","weight":0.0714285714,"points":3},
+    {"name":"Advanced Weapon Kit","tier":"EPIC","weight":0.0714285714,"points":3},
 
-    {"name":"Premium Metro Pack","tier":"LEGENDARY","weight":0.75,"points":6},
-    {"name":"Буст 3 квестов","tier":"LEGENDARY","weight":0.75,"points":6},
+    # LEGENDARY — total 0.15%
+    {"name":"Premium Metro Pack","tier":"LEGENDARY","weight":0.0375,"points":6},
+    {"name":"Буст 3 квестов","tier":"LEGENDARY","weight":0.0375,"points":6},
+    {"name":"Legendary Supply Vault","tier":"LEGENDARY","weight":0.0375,"points":6},
+    {"name":"10M Metro Cash","tier":"LEGENDARY","weight":0.0375,"points":6},
 
-    {"name":"Black Market Pack","tier":"MYTHIC","weight":0.25,"points":10},
-    {"name":"Ultimate Metro Bundle","tier":"MYTHIC","weight":0.25,"points":10},
+    # MYTHIC — total 0.05%
+    {"name":"Black Market Pack","tier":"MYTHIC","weight":0.0166666667,"points":10},
+    {"name":"Ultimate Metro Bundle","tier":"MYTHIC","weight":0.0166666667,"points":10},
+    {"name":"Mythic Contraband Vault","tier":"MYTHIC","weight":0.0166666666,"points":10},
 ]
+
 UPGRADE_REWARDS = [
     {"points":5,"name":"Набор расходников"},
     {"points":10,"name":"Metro Starter Kit"},
@@ -1745,7 +1771,7 @@ async function spinHtml(){
  const buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">UPGRADE</div><div class="price">'+spinState.upgrade_points+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button><div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div><div class="mini" style="margin-top:8px">Common 75% • Rare 18% • Epic 5% • Legendary 1.5% • Mythic 0.5%</div></div>'+
+ '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button><div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div><div class="mini" style="margin-top:8px">Common 97.5% • Rare 1.8% • Epic 0.5% • Legendary 0.15% • Mythic 0.05%</div></div>'+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<h3>Upgrade Lab</h3><div class="card"><div class="muted">Upgrade pts обмениваются на гарантированную награду — без случайной ставки.</div>'+claims+'</div><h3>История</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
