@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl
 import aiosqlite
 import httpx
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -1168,7 +1168,8 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .sticker-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0 18px}
 .sticker{position:relative;min-height:132px;border-radius:22px;overflow:hidden;border:1px solid #30363d;background:linear-gradient(145deg,#171b20,#0d0f12);padding:14px;cursor:pointer;box-shadow:inset 0 1px #ffffff0a,0 14px 28px #0005;transition:.18s transform}
 .sticker:active{transform:scale(.975)}.sticker:after{content:"";position:absolute;inset:auto -30px -45px auto;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,currentColor,transparent 67%);opacity:.11}
-.sticker-icon{font-size:46px;line-height:1;filter:drop-shadow(0 10px 12px #0008);text-shadow:0 2px 0 #fff2,0 0 20px currentColor;display:block;margin-bottom:10px}
+.sticker-icon{width:88px;height:104px;display:block;margin:-6px auto 4px;background-image:url('/assets/stickers.webp');background-size:352px 208px;background-repeat:no-repeat;filter:drop-shadow(0 10px 12px #0008);border-radius:14px}
+.ico-shop{background-position:0 0}.ico-spin{background-position:-88px 0}.ico-orders{background-position:-176px 0}.ico-referral{background-position:-264px 0}.ico-promo{background-position:0 -104px}.ico-news{background-position:-88px -104px}.ico-chat{background-position:-176px -104px}.ico-support{background-position:-264px -104px}
 .sticker-title{font-size:15px;font-weight:950;line-height:1.05;text-transform:uppercase;text-shadow:0 2px 6px #000}
 .sticker-sub{font-size:10px;color:#b4bac1;margin-top:5px}.st-gold{color:#ffc229;border-color:#5a4516}.st-purple{color:#d766ff;border-color:#5a276a}.st-blue{color:#55b9ff;border-color:#1d5276}.st-red{color:#ff6674;border-color:#6a2731}.st-cyan{color:#4cebe0;border-color:#1d605c}
 
@@ -1276,16 +1277,16 @@ function cards(list){
 }
 function bindProductButtons(){document.querySelectorAll('[data-buy]').forEach(b=>b.addEventListener('click',()=>orderForm(Number(b.dataset.buy))))}
 
-function sticker(title,sub,icon,cls,attrs){return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon">'+icon+'</span><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div>'}
+function sticker(title,sub,icon,cls,attrs){return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon ico-'+icon+'"></span><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div>'}
 function home(){
  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары, буст, квесты и Metro-награды. Оплата покупок — через ⭐ Telegram Stars.</div></section>'+
  '<div class="sticker-grid">'+
- sticker('Каталог','Товары и услуги','📦','st-gold','data-go="catalog"')+
- sticker('HYPE SPIN','1 free / 24h','🎰','st-purple','data-go="spin"')+
- sticker('Мои заказы','Статусы покупок','🛒','st-blue','data-go="orders"')+
- sticker('Рефералы','Билеты и бонусы','👥','st-red','data-go="referral"')+
- sticker('Новости','@shreksi4PubgNEWS','📣','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+
- sticker('Наш чат','@chatshreksi4','💬','st-cyan','data-tg="https://t.me/chatshreksi4"')+
+ sticker('Каталог','Товары и услуги','shop','st-gold','data-go="catalog"')+
+ sticker('HYPE SPIN','1 free / 24h','spin','st-purple','data-go="spin"')+
+ sticker('Мои заказы','Статусы покупок','orders','st-blue','data-go="orders"')+
+ sticker('Рефералы','Билеты и бонусы','referral','st-red','data-go="referral"')+
+ sticker('Новости','@shreksi4PubgNEWS','news','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+
+ sticker('Наш чат','@chatshreksi4','chat','st-cyan','data-tg="https://t.me/chatshreksi4"')+
  '</div><h3>Популярное</h3>'+cards(products.slice(0,4))
 }
 function bindHome(){bindProductButtons();document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));bindSocials()}
@@ -1375,7 +1376,7 @@ async function referralHtml(){
 }
 function bindReferral(){const b=document.getElementById('copyRef');if(b)b.addEventListener('click',async()=>{const v=document.getElementById('refLink').value;try{await navigator.clipboard.writeText(v);alert('Ссылка скопирована')}catch(_){document.getElementById('refLink').select()}})}
 
-function supportHtml(){return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Обращения попадают в Owner Panel. Бот не спамит автоматическими сообщениями.</div></div><div class="sticker-grid">'+sticker('Новости','@shreksi4PubgNEWS','📣','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+sticker('Наш чат','@chatshreksi4','💬','st-cyan','data-tg="https://t.me/chatshreksi4"')+'</div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>'}
+function supportHtml(){return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Обращения попадают в Owner Panel. Бот не спамит автоматическими сообщениями.</div></div><div class="sticker-grid">'+sticker('Новости','@shreksi4PubgNEWS','news','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+sticker('Наш чат','@chatshreksi4','chat','st-cyan','data-tg="https://t.me/chatshreksi4"')+'</div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>'}
 async function sendTicket(){try{const d=await api('/api/support',{method:'POST',body:JSON.stringify({category:document.getElementById('tc').value,message:document.getElementById('tm').value})});alert('Обращение #'+d.id+' создано');document.getElementById('tm').value=''}catch(e){alert(e.message)}}
 function bindSupport(){document.getElementById('ticketBtn').addEventListener('click',sendTicket);bindSocials()}
 
@@ -1472,6 +1473,11 @@ boot();
 </body>
 </html>"""
     return tpl.replace("__ADMIN__", mode).replace("__APP_NAME__", html.escape(APP_NAME))
+
+
+@app.get("/assets/stickers.webp")
+async def sticker_asset():
+    return FileResponse("stickers.webp", media_type="image/webp", headers={"Cache-Control":"public, max-age=86400"})
 
 
 @app.get("/", response_class=HTMLResponse)
