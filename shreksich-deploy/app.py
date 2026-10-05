@@ -25,6 +25,7 @@ DB_PATH = os.getenv("DB_PATH", "/data/shreksich.db")
 MANUAL_PAYMENT = os.getenv("MANUAL_PAYMENT_DETAILS", "Реквизиты пока не настроены. Напишите в поддержку.")
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 poll_offset = 0
+bot_username = ""
 db_write_lock = asyncio.Lock()
 
 MAX_FREE_SPINS_24H = 3
@@ -230,18 +231,119 @@ async def send_start(chat_id: int, user_id: int):
     })
 
 
+async def register_bot_user(user: dict):
+    if not user.get("id"):
+        return
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute(
+                "INSERT INTO users(telegram_id,username,first_name) VALUES(?,?,?) "
+                "ON CONFLICT(telegram_id) DO UPDATE SET username=excluded.username, first_name=excluded.first_name",
+                (int(user["id"]), user.get("username"), user.get("first_name"))
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+
+
+async def register_referral(referred_id: int, referrer_id: int):
+    if not referred_id or not referrer_id or referred_id == referrer_id:
+        return
+    async with db_write_lock:
+        conn = await db()
+        try:
+            exists = await (await conn.execute("SELECT 1 FROM users WHERE telegram_id=?", (referrer_id,))).fetchone()
+            if exists:
+                await conn.execute(
+                    "INSERT OR IGNORE INTO referrals(referrer_id,referred_id) VALUES(?,?)",
+                    (referrer_id, referred_id)
+                )
+                await conn.commit()
+        finally:
+            await conn.close()
+
+
+async def referral_link(user_id: int):
+    global bot_username
+    if not bot_username:
+        try:
+            info = await tg("getMe")
+            bot_username = info.get("username", "")
+        except Exception:
+            bot_username = ""
+    return f"https://t.me/{bot_username}?start=ref_{user_id}" if bot_username else BASE_URL
+
+
+async def send_faq(chat_id: int):
+    text = (
+        "<b>Частые вопросы</b>\n\n"
+        "⭐ <b>Оплата:</b> покупки оплачиваются Telegram Stars прямо внутри Mini App.\n"
+        "📦 <b>Заказы:</b> статус смотрите в разделе «Заказы».\n"
+        "🎰 <b>SPIN:</b> 3 бесплатных прокрутки за 24 часа + бонусные билеты от админа и рефералов.\n"
+        "🎟 <b>Промокоды:</b> вводятся при оформлении заказа и уменьшают цену в Stars.\n"
+        "👥 <b>Рефералы:</b> после первой оплаченной покупки приглашённого вы получаете 1 бонусный SPIN-билет и 3 Upgrade pts.\n"
+        "💬 <b>Поддержка:</b> создайте обращение в Mini App или напишите в нашем чате."
+    )
+    await tg("sendMessage", {"chat_id":chat_id,"parse_mode":"HTML","text":text,"reply_markup":keyboard(chat_id)})
+
+
+async def send_referral(chat_id: int, user_id: int):
+    link = await referral_link(user_id)
+    await tg("sendMessage", {
+        "chat_id":chat_id,
+        "parse_mode":"HTML",
+        "text":f"<b>Ваша реферальная ссылка</b>\n\n<code>{html.escape(link)}</code>\n\nЗа первую оплаченную покупку друга: <b>+1 SPIN-билет и +3 Upgrade pts</b>."
+    })
+
+
+async def answer_question(chat_id: int, text: str):
+    q = text.lower()
+    if any(x in q for x in ("оплат", "stars", "звезд", "звёзд")):
+        answer = "⭐ Оплата проходит Telegram Stars внутри Mini App. Откройте товар → создайте заказ → нажмите «Оплатить ⭐»."
+    elif any(x in q for x in ("заказ", "статус", "где мой")):
+        answer = "📦 Все ваши заказы и их статусы находятся в Mini App → «Заказы»."
+    elif any(x in q for x in ("спин", "рулет", "билет")):
+        answer = "🎰 Доступно 3 бесплатных SPIN за 24 часа. Дополнительные бонусные билеты можно получить от администратора или за рефералов."
+    elif any(x in q for x in ("промо", "скидк", "купон")):
+        answer = "🎟 Промокод вводится перед созданием заказа. Если он активен, цена в Stars пересчитается автоматически."
+    elif any(x in q for x in ("рефер", "приглас", "друг")):
+        link = await referral_link(chat_id)
+        answer = f"👥 Ваша ссылка: {link}\nЗа первую оплаченную покупку приглашённого: +1 SPIN-билет и +3 Upgrade pts."
+    else:
+        answer = "Я могу подсказать по оплате, заказам, SPIN, промокодам и реферальной системе. Для полного списка отправьте /faq."
+    await tg("sendMessage", {"chat_id":chat_id,"text":answer})
+
+
 async def process_update(update: dict):
     global poll_offset
     poll_offset = max(poll_offset, int(update.get("update_id", 0)) + 1)
     msg = update.get("message") or {}
     user = msg.get("from") or {}
-    text = msg.get("text") or ""
+    text = (msg.get("text") or "").strip()
+
+    if msg:
+        await register_bot_user(user)
+
     if msg and text.startswith("/start"):
+        parts = text.split(maxsplit=1)
+        if len(parts) > 1 and parts[1].startswith("ref_"):
+            try:
+                await register_referral(int(user.get("id", 0)), int(parts[1][4:]))
+            except Exception:
+                pass
         await send_start(int(msg["chat"]["id"]), int(user.get("id", 0)))
         return
     if msg and text.startswith("/shop"):
         await send_start(int(msg["chat"]["id"]), int(user.get("id", 0)))
         return
+    if msg and (text.startswith("/faq") or text.startswith("/help")):
+        await send_faq(int(msg["chat"]["id"]))
+        return
+    if msg and text.startswith("/ref"):
+        await send_referral(int(msg["chat"]["id"]), int(user.get("id", 0)))
+        return
+
     pq = update.get("pre_checkout_query")
     if pq:
         ok = False
@@ -256,31 +358,70 @@ async def process_update(update: dict):
             ok = False
         await tg("answerPreCheckoutQuery", {"pre_checkout_query_id":pq["id"],"ok":ok,"error_message":None if ok else "Платёж не соответствует заказу"})
         return
+
     sp = msg.get("successful_payment")
     if sp:
         payload = sp.get("invoice_payload", "")
         try:
             _, oid, uid = payload.split(":")
+            charge_id = sp.get("telegram_payment_charge_id", "")
             async with db_write_lock:
                 conn = await db()
                 try:
-                    await conn.execute("UPDATE orders SET status='Оплачен',payment_method='Telegram Stars',updated_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?", (int(oid), int(uid)))
-                    row = await (await conn.execute("SELECT number FROM orders WHERE id=?", (int(oid),))).fetchone()
+                    await conn.execute("BEGIN IMMEDIATE")
+                    row = await (await conn.execute("SELECT * FROM orders WHERE id=? AND telegram_id=?", (int(oid), int(uid)))).fetchone()
+                    if not row:
+                        await conn.rollback()
+                        return
+                    if row["telegram_charge_id"]:
+                        await conn.rollback()
+                        return
+                    await conn.execute(
+                        "UPDATE orders SET status='Оплачен',payment_method='Telegram Stars',telegram_charge_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                        (charge_id, int(oid))
+                    )
+                    if row["promo_code"]:
+                        await conn.execute("UPDATE promos SET uses=uses+1 WHERE code=?", (row["promo_code"],))
+                    ref = await (await conn.execute(
+                        "SELECT * FROM referrals WHERE referred_id=? AND rewarded=0",
+                        (int(uid),)
+                    )).fetchone()
+                    if ref:
+                        await conn.execute("UPDATE referrals SET rewarded=1 WHERE id=?", (ref["id"],))
+                        await conn.execute(
+                            "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
+                            (ref["referrer_id"],)
+                        )
+                        await conn.execute(
+                            "UPDATE spin_state SET tickets=tickets+1,upgrade_points=upgrade_points+3 WHERE telegram_id=?",
+                            (ref["referrer_id"],)
+                        )
                     await conn.commit()
                 finally:
                     await conn.close()
-            pass
-        except Exception:
-            pass
+        except Exception as e:
+            print("payment processing error:", repr(e), flush=True)
+        return
+
+    if msg and text and not text.startswith("/"):
+        await answer_question(int(msg["chat"]["id"]), text)
 
 
 async def polling():
-    global poll_offset
+    global poll_offset, bot_username
     try:
         await tg("deleteWebhook", {"drop_pending_updates":False})
+        info = await tg("getMe")
+        bot_username = info.get("username", "")
         if BASE_URL:
             await tg("setChatMenuButton", {"menu_button":{"type":"web_app","text":"Открыть магазин","web_app":{"url":BASE_URL}}})
-        await tg("setMyCommands", {"commands":[{"command":"start","description":"Главное меню"},{"command":"shop","description":"Открыть магазин"}]})
+        await tg("setMyCommands", {"commands":[
+          {"command":"start","description":"Главное меню"},
+          {"command":"shop","description":"Открыть магазин"},
+          {"command":"faq","description":"Ответы на вопросы"},
+          {"command":"ref","description":"Реферальная ссылка"},
+          {"command":"help","description":"Помощь"}
+        ]})
     except Exception as e:
         print("telegram init:", repr(e), flush=True)
     while True:
