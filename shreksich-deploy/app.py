@@ -1382,16 +1382,23 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .win-item{font-size:12px;font-weight:800}.win-item.legendary{color:#ffc15a;text-shadow:0 0 12px #ff970055}.win-item.mythic{color:#ff7ee5;text-shadow:0 0 14px #ff40da77}
 @keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 
-/* Pure CSS 3D stickers: no raster images, so they stay sharp at any scale */
+/* Bright vector 3D tiles — no raster images, no gray cards */
 .sticker-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0 18px}
-.sticker{position:relative;min-height:104px;border-radius:22px;overflow:hidden;border:1px solid #30363d;background:linear-gradient(145deg,#171b20,#0d0f12);padding:14px;cursor:pointer;box-shadow:inset 0 1px #ffffff0c,0 14px 28px #0005;transition:.18s transform,.18s border-color;display:flex;align-items:center;gap:13px;text-align:left}
-.sticker:active{transform:scale(.975)}.sticker:after{content:"";position:absolute;inset:auto -35px -52px auto;width:125px;height:125px;border-radius:50%;background:radial-gradient(circle,currentColor,transparent 68%);opacity:.10;pointer-events:none}
-.sticker-icon{width:62px;height:62px;flex:0 0 62px;display:grid;place-items:center;border-radius:18px;position:relative;font-size:29px;font-weight:1000;line-height:1;color:#fff;background:linear-gradient(145deg,color-mix(in srgb,currentColor 48%,#fff 8%),color-mix(in srgb,currentColor 28%,#050607 72%));border:1px solid color-mix(in srgb,currentColor 48%,#fff 7%);box-shadow:inset 0 2px 1px #ffffff35,inset 0 -9px 18px #0008,0 10px 18px #0008,0 0 20px color-mix(in srgb,currentColor 24%,transparent);transform:perspective(120px) rotateX(4deg) rotateY(-5deg)}
-.sticker-icon:before{content:attr(data-glyph);filter:drop-shadow(0 3px 1px #0008);transform:translateY(-1px)}
-.sticker-icon:after{content:"";position:absolute;left:10px;right:10px;top:7px;height:12px;border-radius:50%;background:linear-gradient(180deg,#fff4,transparent);pointer-events:none}
-.sticker-copy{min-width:0;position:relative;z-index:2}.sticker-title{font-size:15px;font-weight:950;line-height:1.05;text-transform:uppercase;text-shadow:0 2px 6px #000;overflow-wrap:anywhere}
-.sticker-sub{font-size:11px;color:#b4bac1;margin-top:7px;line-height:1.25;overflow-wrap:anywhere}
-.st-gold{color:#ffc229;border-color:#5a4516}.st-purple{color:#d766ff;border-color:#5a276a}.st-blue{color:#55b9ff;border-color:#1d5276}.st-red{color:#ff6674;border-color:#6a2731}.st-cyan{color:#4cebe0;border-color:#1d605c}
+.sticker{position:relative;min-height:108px;border-radius:22px;overflow:hidden;padding:14px;cursor:pointer;display:flex;align-items:center;gap:13px;text-align:left;border:1px solid currentColor;box-shadow:inset 0 1px #ffffff22,0 14px 30px #0007,0 0 22px color-mix(in srgb,currentColor 12%,transparent);transition:.18s transform,.18s box-shadow}
+.sticker:active{transform:scale(.975)}.sticker:before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,#ffffff12 0%,transparent 34%,transparent 68%,#ffffff08 100%);pointer-events:none}
+.sticker:after{content:"";position:absolute;right:-24px;bottom:-42px;width:125px;height:125px;border-radius:50%;background:radial-gradient(circle,currentColor 0%,transparent 68%);opacity:.17;filter:blur(2px);pointer-events:none}
+.st-gold{color:#ffc928;background:linear-gradient(145deg,#3a2a00 0%,#1b1200 58%,#0b0905 100%);border-color:#bb8e13}
+.st-purple{color:#d869ff;background:linear-gradient(145deg,#351044 0%,#1b0925 58%,#0c0710 100%);border-color:#8b3bae}
+.st-blue{color:#4fb9ff;background:linear-gradient(145deg,#0c3150 0%,#091a2c 58%,#060b10 100%);border-color:#2479b2}
+.st-red{color:#ff667b;background:linear-gradient(145deg,#43101a 0%,#230911 58%,#0e0608 100%);border-color:#9f2d41}
+.st-cyan{color:#49e6dc;background:linear-gradient(145deg,#0b3b38 0%,#092321 58%,#050d0c 100%);border-color:#248f88}
+.sticker-icon{width:64px;height:64px;flex:0 0 64px;display:grid;place-items:center;border-radius:19px;position:relative;color:#fff;background:linear-gradient(145deg,color-mix(in srgb,currentColor 82%,#fff 16%),color-mix(in srgb,currentColor 48%,#080a0c 52%));border:1px solid #ffffff55;box-shadow:inset 0 2px 1px #ffffff66,inset 0 -12px 18px #0007,0 11px 18px #0008,0 0 24px color-mix(in srgb,currentColor 48%,transparent);transform:perspective(160px) rotateX(7deg) rotateY(-8deg);animation:stickerFloat 3.2s ease-in-out infinite}
+.sticker-icon:after{content:"";position:absolute;left:9px;right:9px;top:7px;height:15px;border-radius:50%;background:linear-gradient(180deg,#fff7,transparent);pointer-events:none}
+.sticker-icon svg{width:34px;height:34px;stroke:currentColor;fill:none;stroke-width:2.35;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 3px 1px #0008)}
+.sticker-copy{min-width:0;position:relative;z-index:2}
+.sticker-title{font-size:15px;font-weight:950;line-height:1.05;text-transform:uppercase;color:currentColor;text-shadow:0 0 12px color-mix(in srgb,currentColor 40%,transparent),0 2px 6px #000;overflow-wrap:anywhere}
+.sticker-sub{font-size:11px;color:#f4f7fb;margin-top:7px;line-height:1.25;opacity:.92;overflow-wrap:anywhere}
+@keyframes stickerFloat{0%,100%{transform:perspective(160px) rotateX(7deg) rotateY(-8deg) translateY(0)}50%{transform:perspective(160px) rotateX(5deg) rotateY(-5deg) translateY(-3px)}}
 .nav{transition:transform .22s ease,opacity .18s ease}
 .nav.keyboard-hidden{transform:translate(-50%,calc(100% + 32px));opacity:0;pointer-events:none}
 body.keyboard-open .wrap{padding-bottom:30px}
@@ -1533,8 +1540,17 @@ function cards(list){
 function bindProductButtons(){document.querySelectorAll('[data-buy]').forEach(b=>b.addEventListener('click',()=>orderForm(Number(b.dataset.buy))))}
 
 function sticker(title,sub,icon,cls,attrs){
- const glyphs={shop:'▦',spin:'↻',orders:'✓',referral:'∞',promo:'%',news:'!',chat:'•••',support:'?'};
- return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon" data-glyph="'+(glyphs[icon]||'◆')+'"></span><div class="sticker-copy"><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div></div>'
+ const icons={
+  shop:'<svg viewBox="0 0 24 24"><path d="M4 8h16l-1.4 11H5.4L4 8Z"/><path d="M8 8a4 4 0 0 1 8 0"/></svg>',
+  spin:'<svg viewBox="0 0 24 24"><path d="M20 7V3l-2 2a8 8 0 1 0 1.5 10"/><path d="M20 3h-4"/><path d="M12 8v4l3 2"/></svg>',
+  orders:'<svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7"/><path d="m9 15 2 2 4-4"/></svg>',
+  referral:'<svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c.5-4 2.5-6 5-6s4.5 2 5 6"/><path d="M14 15c1-.8 2-1 3-1 2.2 0 3.7 1.5 4 4"/></svg>',
+  news:'<svg viewBox="0 0 24 24"><path d="m4 13 12-6v10L4 13Z"/><path d="M16 10c2 0 4-1 4-3v10c0-2-2-3-4-3"/><path d="m6 14 1 5h4l-2-4"/></svg>',
+  chat:'<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg>',
+  promo:'<svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="m6 18 12-12"/></svg>',
+  support:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M4 12v5h4v-6H4M20 12v5h-4v-6h4"/><path d="M16 19c-1 1-2 2-4 2"/></svg>'
+ };
+ return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon">'+(icons[icon]||icons.shop)+'</span><div class="sticker-copy"><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div></div>'
 }
 function home(){
  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары, буст, квесты и Metro-награды. Оплата покупок — через ⭐ Telegram Stars.</div></section>'+
