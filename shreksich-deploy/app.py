@@ -141,12 +141,21 @@ async def init_db():
     CREATE TABLE IF NOT EXISTS promos(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT UNIQUE NOT NULL,
-      discount_percent INTEGER NOT NULL,
+      promo_type TEXT NOT NULL DEFAULT 'discount',
+      discount_percent INTEGER NOT NULL DEFAULT 0,
+      spin_tickets INTEGER NOT NULL DEFAULT 0,
       max_uses INTEGER NOT NULL DEFAULT 0,
       uses INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
       expires_at TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS promo_redemptions(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      promo_id INTEGER NOT NULL,
+      telegram_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(promo_id, telegram_id)
     );
     CREATE TABLE IF NOT EXISTS referrals(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,6 +173,19 @@ async def init_db():
         await conn.execute("ALTER TABLE orders ADD COLUMN discount_percent INTEGER NOT NULL DEFAULT 0")
     if "telegram_charge_id" not in order_cols:
         await conn.execute("ALTER TABLE orders ADD COLUMN telegram_charge_id TEXT NOT NULL DEFAULT ''")
+    promo_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(promos)")).fetchall()}
+    if "promo_type" not in promo_cols:
+        await conn.execute("ALTER TABLE promos ADD COLUMN promo_type TEXT NOT NULL DEFAULT 'discount'")
+    if "spin_tickets" not in promo_cols:
+        await conn.execute("ALTER TABLE promos ADD COLUMN spin_tickets INTEGER NOT NULL DEFAULT 0")
+    await conn.execute(
+        "CREATE TABLE IF NOT EXISTS promo_redemptions("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "promo_id INTEGER NOT NULL,"
+        "telegram_id INTEGER NOT NULL,"
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "UNIQUE(promo_id, telegram_id))"
+    )
     spin_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(spin_history)")).fetchall()}
     if "source" not in spin_cols:
         await conn.execute("ALTER TABLE spin_history ADD COLUMN source TEXT NOT NULL DEFAULT 'free'")
