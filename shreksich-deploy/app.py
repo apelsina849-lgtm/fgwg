@@ -185,6 +185,8 @@ def keyboard(user_id: int):
     rows = [[{"text":"🛒 Открыть магазин","web_app":{"url":BASE_URL}}]]
     rows.append([{"text":"📦 Мои заказы","web_app":{"url":BASE_URL + "/?tab=orders"}},
                  {"text":"💬 Поддержка","web_app":{"url":BASE_URL + "/?tab=support"}}])
+    rows.append([{"text":"📢 Новости","url":"https://t.me/shreksi4PubgNEWS"},
+                 {"text":"💬 Наш чат","url":"https://t.me/chatshreksi4"}])
     if user_id == OWNER_ID:
         rows.append([{"text":"⚙️ Админ-панель","web_app":{"url":ADMIN_URL}}])
     return {"inline_keyboard": rows}
@@ -570,9 +572,32 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .reel-item{font-size:20px;font-weight:950;text-align:center;padding:0 28px;transition:transform .15s,opacity .15s}
 .reel-item.spinning{animation:spinPulse .12s linear infinite}
 @keyframes spinPulse{0%{transform:translateY(-5px);opacity:.45}50%{transform:translateY(5px);opacity:1}100%{transform:translateY(-5px);opacity:.45}}
-.tier{display:inline-block;padding:5px 8px;border-radius:9px;background:#211a08;color:#ffd45b;font-size:11px;font-weight:900;letter-spacing:.6px}
+.tier{display:inline-block;padding:5px 8px;border-radius:9px;font-size:11px;font-weight:900;letter-spacing:.7px;border:1px solid transparent}
+.tier-common{color:#d2d7dd;background:#20242a;border-color:#555d66}
+.tier-rare{color:#67b7ff;background:#0b2136;border-color:#1e72b8;box-shadow:0 0 14px #1e72b833}
+.tier-epic{color:#c985ff;background:#261034;border-color:#8b3fc7;box-shadow:0 0 16px #8b3fc744}
+.tier-legendary{color:#ffbd4a;background:#362109;border-color:#ff9900;box-shadow:0 0 22px #ff990055}
+.tier-mythic{color:#ff79df;background:linear-gradient(135deg,#3b0b34,#21113d);border-color:#ff4bd8;box-shadow:0 0 26px #ff4bd866}
+.reel-item.tier-common{color:#d1d6dc}
+.reel-item.tier-rare{color:#67b7ff;text-shadow:0 0 18px #249cff}
+.reel-item.tier-epic{color:#c985ff;text-shadow:0 0 20px #a84cff}
+.reel-item.tier-legendary{color:#ffc250;text-shadow:0 0 24px #ff9800}
+.reel-item.tier-mythic{color:#ff79df;text-shadow:0 0 26px #ff37d2,0 0 44px #7d45ff}
 .spin-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:12px}
 .claim{width:100%;margin-top:8px;background:#20252b;color:#fff}.claim:disabled{opacity:.4}
+.socials{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.social-btn{width:100%;background:#171b20;color:#fff;border:1px solid #303640}.social-btn b{color:#ffc21c}
+.drop-fx{position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:24px;background:#000c;backdrop-filter:blur(7px);animation:fxFade .25s ease-out}
+.drop-card{width:min(520px,100%);border-radius:28px;padding:34px 22px;text-align:center;background:#101318;border:1px solid #343941;transform:scale(.72);animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards;position:relative;overflow:hidden}
+.drop-card h2{font-size:32px;margin:10px 0}.drop-card .drop-name{font-size:23px;font-weight:950;margin:15px 0}
+.drop-fx.legendary .drop-card{border-color:#ff9d00;box-shadow:0 0 60px #ff9d0088,0 0 120px #ff6a0033;animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards,legendaryPulse .85s ease-in-out 2}
+.drop-fx.mythic{background:radial-gradient(circle at 50% 40%,#5c175c99,#000e 58%)}
+.drop-fx.mythic .drop-card{border-color:#ff4bd8;box-shadow:0 0 80px #ff4bd899,0 0 140px #7547ff66;animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards,mythicPulse .7s ease-in-out 3}
+.drop-fx.mythic .drop-card:before{content:"";position:absolute;inset:-70%;background:conic-gradient(from 0deg,transparent,#ff4bd844,transparent,#7d45ff55,transparent);animation:mythicSpin 2s linear infinite}
+.drop-content{position:relative;z-index:2}.spark{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 14px currentColor;animation:sparkFly 1.2s ease-out forwards}
+@keyframes fxFade{from{opacity:0}to{opacity:1}}@keyframes dropPop{to{transform:scale(1)}}
+@keyframes legendaryPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
+@keyframes mythicPulse{0%,100%{filter:brightness(1);transform:scale(1)}50%{filter:brightness(1.55);transform:scale(1.06)}}
+@keyframes mythicSpin{to{transform:rotate(360deg)}}@keyframes sparkFly{from{transform:translate(0,0) scale(1);opacity:1}to{transform:translate(var(--x),var(--y)) scale(0);opacity:0}}
 @media(max-width:390px){.grid{grid-template-columns:1fr}h1{font-size:25px}}
 </style>
 </head>
@@ -629,6 +654,48 @@ function esc(v){
   });
 }
 function stars(n){ return Number(n).toLocaleString('ru-RU') + ' ⭐'; }
+function tierClass(t){ return 'tier-' + String(t||'COMMON').toLowerCase(); }
+function formatReset(sec){
+  sec=Math.max(0,Number(sec||0));
+  if(!sec) return '';
+  const h=Math.floor(sec/3600), m=Math.ceil((sec%3600)/60);
+  return (h?h+' ч ':'')+m+' мин';
+}
+function openTelegram(url){
+  try{
+    if(tg && tg.openTelegramLink) tg.openTelegramLink(url);
+    else window.open(url,'_blank');
+  }catch(_){ window.open(url,'_blank'); }
+}
+function bindSocials(){
+  document.querySelectorAll('[data-tg]').forEach(function(btn){
+    btn.addEventListener('click',function(){openTelegram(btn.dataset.tg);});
+  });
+}
+function showDropFx(reward){
+  if(!reward || (reward.tier!=='LEGENDARY' && reward.tier!=='MYTHIC')) return;
+  try{
+    if(tg && tg.HapticFeedback){
+      tg.HapticFeedback.notificationOccurred('success');
+      if(reward.tier==='MYTHIC') tg.HapticFeedback.impactOccurred('heavy');
+    }
+  }catch(_){}
+  const fx=document.createElement('div');
+  fx.className='drop-fx '+reward.tier.toLowerCase();
+  fx.innerHTML='<div class="drop-card"><div class="drop-content"><span class="tier '+tierClass(reward.tier)+'">'+esc(reward.tier)+'</span><h2>'+(reward.tier==='MYTHIC'?'MYTHIC DROP!':'LEGENDARY DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div><div class="muted">+'+reward.points+' upgrade pts</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
+  document.body.appendChild(fx);
+  const card=fx.querySelector('.drop-card');
+  const total=reward.tier==='MYTHIC'?30:20;
+  for(let i=0;i<total;i++){
+    const s=document.createElement('i'); s.className='spark';
+    const a=(Math.PI*2*i)/total, d=90+Math.random()*170;
+    s.style.left=(45+Math.random()*10)+'%'; s.style.top=(45+Math.random()*10)+'%';
+    s.style.setProperty('--x',(Math.cos(a)*d)+'px'); s.style.setProperty('--y',(Math.sin(a)*d)+'px');
+    s.style.color=reward.tier==='MYTHIC'?(i%2?'#ff4bd8':'#8b62ff'):'#ffad25';
+    card.appendChild(s);
+  }
+  fx.querySelector('#closeDrop').addEventListener('click',function(){fx.remove();});
+}
 
 async function api(path, options){
   options = options || {};
@@ -665,7 +732,7 @@ function cards(list){
 }
 
 function home(){
-  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары • Буст • Квесты • Фарм<br>Оплата внутри Telegram через ⭐ Stars.</div></section><div class="spin-shell"><div class="cat">HYPE MODE</div><h2>HYPE SPIN</h2><div class="muted">Бесплатные спины с Metro-наградами и очками для гарантированного апгрейда.</div><button class="buy" id="homeSpinBtn" style="margin-top:12px">Открыть SPIN</button></div><h3>Популярное</h3>' + cards(products.slice(0,4));
+  return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары • Буст • Квесты • Фарм<br>Оплата внутри Telegram через ⭐ Stars.</div></section><div class="socials"><button class="social-btn" data-tg="https://t.me/shreksi4PubgNEWS">📢 <b>Новости</b></button><button class="social-btn" data-tg="https://t.me/chatshreksi4">💬 <b>Наш чат</b></button></div><div class="spin-shell"><div class="cat">HYPE MODE</div><h2>HYPE SPIN</h2><div class="muted">3 бесплатных SPIN за 24 часа, Metro-награды и гарантированный Upgrade Lab.</div><button class="buy" id="homeSpinBtn" style="margin-top:12px">Открыть SPIN</button></div><h3>Популярное</h3>' + cards(products.slice(0,4));
 }
 
 function bindBuyButtons(){
@@ -674,6 +741,7 @@ function bindBuyButtons(){
   });
   const hs=document.getElementById('homeSpinBtn');
   if(hs) hs.addEventListener('click',function(){tab='spin';render();});
+  bindSocials();
 }
 
 function orderForm(id){
@@ -732,22 +800,24 @@ async function ordersHtml(){
 async function spinHtml(){
   spinState=await api('/api/spin/state');
   const history=(spinState.history||[]).map(function(x){
-    return '<div class="order"><span class="tier">'+esc(x.reward_tier)+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="muted">+'+x.points+' upgrade pts • '+esc(x.created_at)+'</div></div>';
+    return '<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+esc(x.reward_tier)+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="muted">+'+x.points+' upgrade pts • '+esc(x.created_at)+'</div></div>';
   }).join('');
   const claims=(spinState.upgrade_rewards||[]).map(function(x){
     const ok=Number(spinState.upgrade_points)>=Number(x.points);
     return '<button class="claim" data-claim="'+x.points+'" '+(ok?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' pts</button>';
   }).join('');
-  const last=lastSpinReward?'<div class="order"><div class="cat">ВЫИГРЫШ</div><span class="tier">'+esc(lastSpinReward.tier)+'</span><div class="name">'+esc(lastSpinReward.name)+'</div><div class="muted">+'+lastSpinReward.points+' upgrade pts</div></div>':'';
-  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">Бесплатная рулетка Metro Royale. Награды выдаёт администратор в игре.</div></section>'+
-    '<div class="spin-stats"><div class="spin-stat"><div class="muted">Билеты</div><div class="price" id="ticketsCount">'+spinState.tickets+'</div></div><div class="spin-stat"><div class="muted">Upgrade pts</div><div class="price" id="pointsCount">'+spinState.upgrade_points+'</div></div></div>'+
-    '<div class="spin-shell"><div class="reel-window"><div class="reel-item" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px">'+(spinState.daily_available?'Ежедневный бесплатный SPIN':'SPIN за билет')+'</button><div class="muted" style="margin-top:10px">Шансы: Common 45% • Rare 28% • Epic 18% • Legendary 7% • Mythic 2%</div></div>'+
-    last+'<h3>Upgrade Lab</h3><div class="card"><div class="muted">Очки из спинов можно обменять на гарантированную награду — без риска потерять предмет.</div>'+claims+'</div>'+
+  const last=lastSpinReward?'<div class="order"><div class="cat">ПОСЛЕДНИЙ ДРОП</div><span class="tier '+tierClass(lastSpinReward.tier)+'">'+esc(lastSpinReward.tier)+'</span><div class="name">'+esc(lastSpinReward.name)+'</div><div class="muted">+'+lastSpinReward.points+' upgrade pts</div></div>':'';
+  const remaining=Number(spinState.remaining_spins||0);
+  const resetText=remaining>0?'Доступно сейчас: '+remaining+' из '+spinState.max_spins:'Лимит исчерпан • следующий SPIN через '+formatReset(spinState.next_reset_seconds);
+  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">3 бесплатных прокрутки за 24 часа. Награды выдаются администратором в игре.</div></section>'+
+    '<div class="spin-stats"><div class="spin-stat"><div class="muted">SPIN осталось</div><div class="price" id="ticketsCount">'+remaining+' / '+spinState.max_spins+'</div></div><div class="spin-stat"><div class="muted">Upgrade pts</div><div class="price" id="pointsCount">'+spinState.upgrade_points+'</div></div></div>'+
+    '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(remaining<=0?'disabled':'')+'>'+(remaining>0?'КРУТИТЬ SPIN':'ЛИМИТ ИСЧЕРПАН')+'</button><div class="muted" style="margin-top:10px">'+resetText+'</div><div class="muted" style="margin-top:7px">Common 45% • Rare 28% • Epic 18% • Legendary 7% • Mythic 2%</div></div>'+
+    last+'<h3>Upgrade Lab</h3><div class="card"><div class="muted">Очки из бесплатных спинов можно обменять на гарантированную награду.</div>'+claims+'</div>'+
     '<h3>Последние спины</h3>'+(history||'<div class="empty">История пока пустая.</div>');
 }
 function bindSpin(){
   const b=document.getElementById('spinBtn');
-  if(b) b.addEventListener('click',spinOnce);
+  if(b && !b.disabled) b.addEventListener('click',spinOnce);
   document.querySelectorAll('[data-claim]').forEach(function(btn){
     btn.addEventListener('click',function(){claimUpgrade(Number(btn.dataset.claim));});
   });
@@ -755,28 +825,37 @@ function bindSpin(){
 async function spinOnce(){
   const btn=document.getElementById('spinBtn');
   if(btn && btn.disabled) return;
-  if(btn){btn.disabled=true;btn.textContent='Крутим…';}
+  if(btn){btn.disabled=true;btn.textContent='КРУТИМ…';}
   const reel=document.getElementById('reelItem');
-  const names=(spinState.rewards||[]).map(function(x){return x.name;});
+  const pool=(spinState.rewards||[]);
   let i=0;
   if(reel) reel.classList.add('spinning');
   const timer=setInterval(function(){
-    if(reel && names.length){reel.textContent=names[i%names.length];i++;}
-  },90);
+    if(reel && pool.length){
+      const x=pool[i%pool.length]; i++;
+      reel.textContent=x.name;
+      reel.className='reel-item spinning '+tierClass(x.tier);
+    }
+  },80);
   try{
     const d=await api('/api/spin/free',{method:'POST'});
     setTimeout(async function(){
       clearInterval(timer);
       lastSpinReward=d.reward;
-      if(reel){reel.classList.remove('spinning');reel.textContent=d.reward.name;}
-      await new Promise(function(r){setTimeout(r,450);});
+      if(reel){
+        reel.className='reel-item '+tierClass(d.reward.tier);
+        reel.textContent=d.reward.name;
+      }
+      try{ if(tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred(d.reward.tier==='MYTHIC'?'heavy':'medium'); }catch(_){}
+      await new Promise(function(r){setTimeout(r,650);});
+      showDropFx(d.reward);
       app.innerHTML=await spinHtml();
       bindSpin();
-    },1500);
+    },1800);
   }catch(e){
     clearInterval(timer);
     if(reel) reel.classList.remove('spinning');
-    if(btn){btn.disabled=false;btn.textContent='SPIN';}
+    if(btn){btn.disabled=false;btn.textContent='КРУТИТЬ SPIN';}
     alert(e.message);
   }
 }
@@ -789,7 +868,7 @@ async function claimUpgrade(points){
 }
 
 function supportHtml(){
-  return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Создайте обращение — владелец получит уведомление в Telegram.</div></div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>';
+  return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Создайте обращение — оно появится в админ-панели без лишних сообщений в чате бота.</div></div><div class="socials"><button class="social-btn" data-tg="https://t.me/shreksi4PubgNEWS">📢 <b>Новости</b></button><button class="social-btn" data-tg="https://t.me/chatshreksi4">💬 <b>Наш чат</b></button></div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>';
 }
 async function sendTicket(){
   try{
@@ -799,15 +878,19 @@ async function sendTicket(){
   }catch(e){ alert(e.message); }
 }
 async function adminHtml(){
-  const results = await Promise.all([api('/api/admin/orders'),api('/api/admin/tickets')]);
-  const a=results[0], t=results[1];
-  return '<section class="hero"><div class="cat">OWNER PANEL</div><h1>Админ-панель</h1><div class="muted">Заказы: '+a.length+' • Обращения: '+t.length+'</div></section><h3>Заказы</h3>' +
+  const results = await Promise.all([api('/api/admin/orders'),api('/api/admin/tickets'),api('/api/admin/spins'),api('/api/admin/upgrades')]);
+  const a=results[0], t=results[1], spins=results[2], upgrades=results[3];
+  return '<section class="hero"><div class="cat">OWNER PANEL</div><h1>Админ-панель</h1><div class="muted">Заказы: '+a.length+' • Обращения: '+t.length+' • SPIN: '+spins.length+' • Upgrade: '+upgrades.length+'</div></section><h3>Заказы</h3>' +
     a.map(function(o){
       const statuses=['Ожидает оплаты','Ожидает проверки оплаты','Оплачен','Принят','В работе','Ожидает клиента','Выполнен','Отменён','Возврат'];
       return '<div class="order"><div class="cat">#'+o.number+' • Telegram '+o.telegram_id+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+stars(o.stars_amount)+' • UID '+esc(o.uid)+'</div><div class="adminline"><select id="s'+o.id+'">'+statuses.map(function(s){return '<option '+(s===o.status?'selected':'')+'>'+s+'</option>';}).join('')+'</select><button class="secondary" data-status="'+o.id+'">Сохранить</button></div></div>';
     }).join('') +
+    '<h3>Выигрыши HYPE SPIN</h3>' +
+    (spins.map(function(x){return '<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+esc(x.reward_tier)+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="muted">Telegram '+x.telegram_id+' • +'+x.points+' pts • '+esc(x.created_at)+'</div></div>';}).join('') || '<div class="empty">Пока нет выигрышей.</div>') +
+    '<h3>Заявки Upgrade Lab</h3>' +
+    (upgrades.map(function(x){return '<div class="order"><div class="name">'+esc(x.reward_name)+'</div><div class="muted">Telegram '+x.telegram_id+' • списано '+x.points_spent+' pts • '+esc(x.created_at)+'</div></div>';}).join('') || '<div class="empty">Пока нет заявок.</div>') +
     '<h3>Поддержка</h3>' +
-    t.map(function(x){return '<div class="order"><div class="cat">#'+x.id+' • '+esc(x.category)+'</div><div>'+esc(x.message)+'</div><div class="muted">Telegram '+x.telegram_id+'</div></div>';}).join('');
+    (t.map(function(x){return '<div class="order"><div class="cat">#'+x.id+' • '+esc(x.category)+'</div><div>'+esc(x.message)+'</div><div class="muted">Telegram '+x.telegram_id+'</div></div>';}).join('') || '<div class="empty">Обращений нет.</div>');
 }
 async function setStatus(id){
   try{
@@ -831,7 +914,7 @@ async function render(){
     else if(tab==='catalog'){ app.innerHTML='<h2>Каталог</h2>'+cards(products); bindBuyButtons(); }
     else if(tab==='spin'){ app.innerHTML=await spinHtml(); bindSpin(); }
     else if(tab==='orders'){ app.innerHTML=await ordersHtml(); }
-    else if(tab==='support'){ app.innerHTML=supportHtml(); document.getElementById('ticketBtn').addEventListener('click',sendTicket); }
+    else if(tab==='support'){ app.innerHTML=supportHtml(); document.getElementById('ticketBtn').addEventListener('click',sendTicket); bindSocials(); }
   }catch(e){ showFatal(e.message); }
 }
 
