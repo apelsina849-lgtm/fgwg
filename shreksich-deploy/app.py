@@ -452,7 +452,17 @@ async def process_update(update: dict):
                         (charge_id, int(oid))
                     )
                     if row["promo_code"]:
-                        await conn.execute("UPDATE promos SET uses=uses+1 WHERE code=?", (row["promo_code"],))
+                        promo = await (await conn.execute(
+                            "SELECT id FROM promos WHERE code=? AND promo_type='discount'",
+                            (row["promo_code"],)
+                        )).fetchone()
+                        if promo:
+                            cur = await conn.execute(
+                                "INSERT OR IGNORE INTO promo_redemptions(promo_id,telegram_id) VALUES(?,?)",
+                                (promo["id"],int(uid))
+                            )
+                            if cur.rowcount:
+                                await conn.execute("UPDATE promos SET uses=uses+1 WHERE id=?", (promo["id"],))
                     ref = await (await conn.execute(
                         "SELECT * FROM referrals WHERE referred_id=? AND rewarded=0",
                         (int(uid),)
@@ -627,13 +637,21 @@ async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(
             discount = 0
             if promo_code:
                 promo = await (await conn.execute(
-                    "SELECT * FROM promos WHERE code=? AND active=1 AND (max_uses=0 OR uses<max_uses) "
+                    "SELECT * FROM promos WHERE code=? AND promo_type='discount' AND active=1 "
+                    "AND (max_uses=0 OR uses<max_uses) "
                     "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
                     (promo_code,)
                 )).fetchone()
                 if not promo:
                     await conn.rollback()
-                    raise HTTPException(400,"Промокод недействителен или закончился")
+                    raise HTTPException(400,"Промокод на скидку недействителен, закончился или истёк")
+                redeemed = await (await conn.execute(
+                    "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
+                    (promo["id"],int(u["id"]))
+                )).fetchone()
+                if redeemed:
+                    await conn.rollback()
+                    raise HTTPException(409,"Вы уже использовали этот промокод")
                 discount = int(promo["discount_percent"])
 
             stars_amount = max(1, (int(p["stars_price"]) * (100 - discount) + 99) // 100)
@@ -657,7 +675,7 @@ async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(
 
 @app.post("/api/promo/check")
 async def promo_check(body: OrderIn, x_telegram_init_data: str | None = Header(default=None)):
-    await current_user(x_telegram_init_data)
+    u = await current_user(x_telegram_init_data)
     code = body.promo_code.strip().upper()
     if not code:
         raise HTTPException(400,"Введите промокод")
@@ -665,16 +683,25 @@ async def promo_check(body: OrderIn, x_telegram_init_data: str | None = Header(d
     try:
         p = await (await conn.execute("SELECT * FROM products WHERE id=? AND active=1",(body.product_id,))).fetchone()
         promo = await (await conn.execute(
-            "SELECT * FROM promos WHERE code=? AND active=1 AND (max_uses=0 OR uses<max_uses) "
+            "SELECT * FROM promos WHERE code=? AND promo_type='discount' AND active=1 "
+            "AND (max_uses=0 OR uses<max_uses) "
             "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
             (code,)
         )).fetchone()
+        redeemed = None
+        if promo:
+            redeemed = await (await conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
+                (promo["id"],int(u["id"]))
+            )).fetchone()
     finally:
         await conn.close()
     if not p:
         raise HTTPException(404,"Товар не найден")
     if not promo:
-        raise HTTPException(400,"Промокод недействителен или закончился")
+        raise HTTPException(400,"Промокод на скидку недействителен, закончился или истёк")
+    if redeemed:
+        raise HTTPException(409,"Вы уже использовали этот промокод")
     discount = int(promo["discount_percent"])
     final_stars = max(1, (int(p["stars_price"]) * (100-discount) + 99)//100)
     return {"code":code,"discount_percent":discount,"original_stars":int(p["stars_price"]),"final_stars":final_stars}
