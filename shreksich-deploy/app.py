@@ -256,6 +256,32 @@ async def tg(method: str, payload: dict | None = None):
         return data.get("result")
 
 
+async def announce_top_drop(user_id: int, reward: dict):
+    try:
+        conn = await db()
+        try:
+            row = await (await conn.execute(
+                "SELECT username,first_name FROM users WHERE telegram_id=?",
+                (user_id,)
+            )).fetchone()
+        finally:
+            await conn.close()
+        if row and row["username"]:
+            nick = "@" + row["username"]
+        elif row and row["first_name"]:
+            nick = row["first_name"]
+        else:
+            nick = f"Игрок {user_id}"
+        stamp = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+        base = random.choice(TOP_DROP_MESSAGES).format(
+            nick=nick, item=reward["name"], rarity=reward["tier"]
+        )
+        text = f"{base}\n\n🕒 {stamp}"
+        await tg("sendMessage", {"chat_id":TOP_DROP_CHAT,"text":text})
+    except Exception as e:
+        print("top drop announce error:", repr(e), flush=True)
+
+
 def keyboard(user_id: int):
     rows = [[{"text":"🛒 Открыть магазин","web_app":{"url":BASE_URL}}]]
     rows.append([{"text":"📦 Мои заказы","web_app":{"url":BASE_URL + "/?tab=orders"}},
