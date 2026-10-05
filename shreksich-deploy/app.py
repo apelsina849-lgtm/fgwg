@@ -1111,8 +1111,19 @@ async def owner(init_data: str | None):
 @app.get("/api/admin/orders")
 async def admin_orders(x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
-    conn=await db(); rows=await (await conn.execute("SELECT * FROM orders ORDER BY id DESC LIMIT 300")).fetchall(); await conn.close()
-    return [dict(r) for r in rows]
+    conn=await db()
+    try:
+        rows=await (await conn.execute(
+            "SELECT o.*,u.token user_token FROM orders o "
+            "LEFT JOIN users u ON u.telegram_id=o.telegram_id "
+            "ORDER BY o.id DESC LIMIT 300"
+        )).fetchall()
+    finally:
+        await conn.close()
+    result=[]
+    for r in rows:
+        d=dict(r); d.pop("telegram_id",None); result.append(d)
+    return result
 
 
 @app.patch("/api/admin/orders/{order_id}")
@@ -1137,8 +1148,14 @@ async def admin_status(order_id:int, body:StatusIn, x_telegram_init_data: str | 
 async def admin_spins(x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
     conn=await db()
-    rows=await (await conn.execute("SELECT id,telegram_id,reward_name,reward_tier,points,created_at FROM spin_history ORDER BY id DESC LIMIT 200")).fetchall()
-    await conn.close()
+    try:
+        rows=await (await conn.execute(
+            "SELECT h.id,u.token user_token,h.reward_name,h.reward_tier,h.points,h.created_at "
+            "FROM spin_history h LEFT JOIN users u ON u.telegram_id=h.telegram_id "
+            "ORDER BY h.id DESC LIMIT 200"
+        )).fetchall()
+    finally:
+        await conn.close()
     return [dict(r) for r in rows]
 
 
@@ -1146,15 +1163,29 @@ async def admin_spins(x_telegram_init_data: str | None = Header(default=None)):
 async def admin_upgrades(x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
     conn=await db()
-    rows=await (await conn.execute("SELECT id,telegram_id,reward_name,points_spent,created_at FROM upgrade_claims ORDER BY id DESC LIMIT 200")).fetchall()
-    await conn.close()
+    try:
+        rows=await (await conn.execute(
+            "SELECT a.id,u.token user_token,a.reward_name,a.points_spent,a.created_at "
+            "FROM upgrade_claims a LEFT JOIN users u ON u.telegram_id=a.telegram_id "
+            "ORDER BY a.id DESC LIMIT 200"
+        )).fetchall()
+    finally:
+        await conn.close()
     return [dict(r) for r in rows]
 
 
 @app.get("/api/admin/tickets")
 async def admin_tickets(x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
-    conn=await db(); rows=await (await conn.execute("SELECT * FROM tickets ORDER BY id DESC LIMIT 200")).fetchall(); await conn.close()
+    conn=await db()
+    try:
+        rows=await (await conn.execute(
+            "SELECT t.id,u.token user_token,t.category,t.message,t.status,t.created_at "
+            "FROM tickets t LEFT JOIN users u ON u.telegram_id=t.telegram_id "
+            "ORDER BY t.id DESC LIMIT 200"
+        )).fetchall()
+    finally:
+        await conn.close()
     return [dict(r) for r in rows]
 
 
@@ -1191,7 +1222,7 @@ async def admin_users(x_telegram_init_data: str | None = Header(default=None)):
     conn = await db()
     try:
         rows = await (await conn.execute(
-            "SELECT u.telegram_id,u.username,u.first_name,u.created_at,"
+            "SELECT u.token,u.username,u.first_name,u.created_at,"
             "COALESCE(s.tickets,0) tickets,COALESCE(s.upgrade_points,0) upgrade_points,"
             "(SELECT COUNT(*) FROM orders o WHERE o.telegram_id=u.telegram_id) orders_count,"
             "(SELECT COUNT(*) FROM referrals r WHERE r.referrer_id=u.telegram_id) referrals_count "
@@ -1211,21 +1242,22 @@ async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | N
     async with db_write_lock:
         conn = await db()
         try:
-            user = await (await conn.execute("SELECT telegram_id FROM users WHERE telegram_id=?",(body.telegram_id,))).fetchone()
+            user = await telegram_id_by_token(conn, body.token)
             if not user:
-                raise HTTPException(404,"Пользователь не найден")
+                raise HTTPException(404,"Пользователь с таким жетоном не найден")
+            uid = int(user["telegram_id"])
             await conn.execute(
                 "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
-                (body.telegram_id,)
+                (uid,)
             )
             await conn.execute(
                 "UPDATE spin_state SET tickets=tickets+?,upgrade_points=upgrade_points+? WHERE telegram_id=?",
-                (body.tickets,body.upgrade_points,body.telegram_id)
+                (body.tickets,body.upgrade_points,uid)
             )
             await conn.commit()
         finally:
             await conn.close()
-    return {"ok":True,"telegram_id":body.telegram_id,"tickets_added":body.tickets,"upgrade_points_added":body.upgrade_points}
+    return {"ok":True,"token":body.token.strip().upper(),"tickets_added":body.tickets,"upgrade_points_added":body.upgrade_points}
 
 
 @app.get("/api/admin/promos")
@@ -1351,8 +1383,9 @@ async def admin_referrals(x_telegram_init_data: str | None = Header(default=None
     conn=await db()
     try:
         rows=await (await conn.execute(
-            "SELECT r.*,u1.username referrer_username,u1.first_name referrer_name,"
-            "u2.username referred_username,u2.first_name referred_name "
+            "SELECT r.id,r.rewarded,r.created_at,"
+            "u1.token referrer_token,u1.username referrer_username,u1.first_name referrer_name,"
+            "u2.token referred_token,u2.username referred_username,u2.first_name referred_name "
             "FROM referrals r LEFT JOIN users u1 ON u1.telegram_id=r.referrer_id "
             "LEFT JOIN users u2 ON u2.telegram_id=r.referred_id ORDER BY r.id DESC LIMIT 1000"
         )).fetchall()
@@ -1398,8 +1431,15 @@ async def admin_close_ticket(ticket_id:int, x_telegram_init_data: str | None = H
 @app.post("/api/admin/message")
 async def admin_message(body:AdminMessageIn, x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
-    await tg("sendMessage",{"chat_id":body.telegram_id,"text":body.message})
-    return {"ok":True}
+    conn=await db()
+    try:
+        user=await telegram_id_by_token(conn,body.token)
+    finally:
+        await conn.close()
+    if not user:
+        raise HTTPException(404,"Пользователь с таким жетоном не найден")
+    await tg("sendMessage",{"chat_id":int(user["telegram_id"]),"text":body.message})
+    return {"ok":True,"token":body.token.strip().upper()}
 
 
 @app.post("/api/admin/broadcast")
