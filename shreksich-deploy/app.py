@@ -479,6 +479,16 @@ class AdminGrantIn(BaseModel):
     amount: int = Field(ge=1, le=100)
 
 
+class AdminRewardIn(BaseModel):
+    telegram_id: int
+    tickets: int = Field(default=0, ge=0, le=100)
+    upgrade_points: int = Field(default=0, ge=0, le=10000)
+
+
+class BroadcastIn(BaseModel):
+    message: str = Field(min_length=1, max_length=3000)
+
+
 class PromoCreateIn(BaseModel):
     code: str = Field(min_length=3, max_length=32)
     discount_percent: int = Field(ge=1, le=90)
@@ -793,6 +803,24 @@ async def support(body: TicketIn, x_telegram_init_data: str | None = Header(defa
     return {"id":tid,"status":"Открыт"}
 
 
+async def run_broadcast(message: str):
+    conn = await db()
+    try:
+        rows = await (await conn.execute("SELECT telegram_id FROM users ORDER BY created_at DESC LIMIT 5000")).fetchall()
+    finally:
+        await conn.close()
+    sent = 0
+    failed = 0
+    for row in rows:
+        try:
+            await tg("sendMessage", {"chat_id":int(row["telegram_id"]),"text":message})
+            sent += 1
+        except Exception:
+            failed += 1
+        await asyncio.sleep(0.04)
+    print(f"broadcast done sent={sent} failed={failed}", flush=True)
+
+
 async def owner(init_data: str | None):
     u = await current_user(init_data)
     if int(u["id"]) != OWNER_ID: raise HTTPException(403,"Нет доступа")
@@ -847,6 +875,248 @@ async def admin_tickets(x_telegram_init_data: str | None = Header(default=None))
     await owner(x_telegram_init_data)
     conn=await db(); rows=await (await conn.execute("SELECT * FROM tickets ORDER BY id DESC LIMIT 200")).fetchall(); await conn.close()
     return [dict(r) for r in rows]
+
+
+@app.get("/api/admin/stats")
+async def admin_stats(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn = await db()
+    try:
+        users = await (await conn.execute("SELECT COUNT(*) c FROM users")).fetchone()
+        orders = await (await conn.execute("SELECT COUNT(*) c FROM orders")).fetchone()
+        paid = await (await conn.execute("SELECT COUNT(*) c,COALESCE(SUM(stars_amount),0) stars FROM orders WHERE telegram_charge_id<>''")).fetchone()
+        open_tickets = await (await conn.execute("SELECT COUNT(*) c FROM tickets WHERE status NOT IN ('Закрыт','Закрыто')")).fetchone()
+        promos = await (await conn.execute("SELECT COUNT(*) c FROM promos WHERE active=1")).fetchone()
+        refs = await (await conn.execute("SELECT COUNT(*) c,SUM(CASE WHEN rewarded=1 THEN 1 ELSE 0 END) rewarded FROM referrals")).fetchone()
+        today = await (await conn.execute("SELECT COUNT(*) c FROM orders WHERE created_at>=date('now')")).fetchone()
+        top = await (await conn.execute(
+            "SELECT product_name,COUNT(*) c FROM orders WHERE telegram_charge_id<>'' GROUP BY product_name ORDER BY c DESC LIMIT 1"
+        )).fetchone()
+    finally:
+        await conn.close()
+    return {
+      "users":int(users["c"] or 0),"orders":int(orders["c"] or 0),
+      "paid_orders":int(paid["c"] or 0),"stars_revenue":int(paid["stars"] or 0),
+      "open_tickets":int(open_tickets["c"] or 0),"active_promos":int(promos["c"] or 0),
+      "referrals":int(refs["c"] or 0),"rewarded_referrals":int(refs["rewarded"] or 0),
+      "orders_today":int(today["c"] or 0),
+      "top_product":top["product_name"] if top else ""
+    }
+
+
+@app.get("/api/admin/users")
+async def admin_users(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn = await db()
+    try:
+        rows = await (await conn.execute(
+            "SELECT u.telegram_id,u.username,u.first_name,u.created_at,"
+            "COALESCE(s.tickets,0) tickets,COALESCE(s.upgrade_points,0) upgrade_points,"
+            "(SELECT COUNT(*) FROM orders o WHERE o.telegram_id=u.telegram_id) orders_count,"
+            "(SELECT COUNT(*) FROM referrals r WHERE r.referrer_id=u.telegram_id) referrals_count "
+            "FROM users u LEFT JOIN spin_state s ON s.telegram_id=u.telegram_id "
+            "ORDER BY u.created_at DESC LIMIT 1000"
+        )).fetchall()
+    finally:
+        await conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/admin/rewards/grant")
+async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    if body.tickets <= 0 and body.upgrade_points <= 0:
+        raise HTTPException(400,"Укажите билеты или Upgrade pts")
+    async with db_write_lock:
+        conn = await db()
+        try:
+            user = await (await conn.execute("SELECT telegram_id FROM users WHERE telegram_id=?",(body.telegram_id,))).fetchone()
+            if not user:
+                raise HTTPException(404,"Пользователь не найден")
+            await conn.execute(
+                "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
+                (body.telegram_id,)
+            )
+            await conn.execute(
+                "UPDATE spin_state SET tickets=tickets+?,upgrade_points=upgrade_points+? WHERE telegram_id=?",
+                (body.tickets,body.upgrade_points,body.telegram_id)
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"telegram_id":body.telegram_id,"tickets_added":body.tickets,"upgrade_points_added":body.upgrade_points}
+
+
+@app.get("/api/admin/promos")
+async def admin_promos(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        rows=await (await conn.execute("SELECT * FROM promos ORDER BY id DESC LIMIT 500")).fetchall()
+    finally:
+        await conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/admin/promos")
+async def admin_create_promo(body: PromoCreateIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    code=body.code.strip().upper()
+    if not code.replace("_","").replace("-","").isalnum():
+        raise HTTPException(400,"Код может содержать буквы, цифры, - и _")
+    async with db_write_lock:
+        conn=await db()
+        try:
+            try:
+                cur=await conn.execute(
+                    "INSERT INTO promos(code,discount_percent,max_uses,expires_at) VALUES(?,?,?,?)",
+                    (code,body.discount_percent,body.max_uses,body.expires_at.strip())
+                )
+                await conn.commit()
+            except Exception as e:
+                if "UNIQUE" in str(e).upper():
+                    raise HTTPException(409,"Такой промокод уже существует")
+                raise
+        finally:
+            await conn.close()
+    return {"ok":True,"id":cur.lastrowid,"code":code}
+
+
+@app.patch("/api/admin/promos/{promo_id}")
+async def admin_toggle_promo(promo_id:int, body:PromoToggleIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            cur=await conn.execute("UPDATE promos SET active=? WHERE id=?",(1 if body.active else 0,promo_id))
+            if cur.rowcount==0:
+                raise HTTPException(404,"Промокод не найден")
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"active":body.active}
+
+
+@app.delete("/api/admin/promos/{promo_id}")
+async def admin_delete_promo(promo_id:int, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("DELETE FROM promos WHERE id=?",(promo_id,))
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True}
+
+
+@app.get("/api/admin/products")
+async def admin_products(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        rows=await (await conn.execute("SELECT * FROM products ORDER BY sort_order,id")).fetchall()
+    finally:
+        await conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/admin/products")
+async def admin_create_product(body:ProductAdminIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            cur=await conn.execute(
+                "INSERT INTO products(category,name,description,price,stars_price,active,sort_order) VALUES(?,?,?,?,?,?,?)",
+                (body.category.strip(),body.name.strip(),body.description.strip(),body.stars_price,body.stars_price,1 if body.active else 0,body.sort_order)
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"id":cur.lastrowid}
+
+
+@app.patch("/api/admin/products/{product_id}")
+async def admin_update_product(product_id:int, body:ProductAdminIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            cur=await conn.execute(
+                "UPDATE products SET category=?,name=?,description=?,price=?,stars_price=?,active=?,sort_order=? WHERE id=?",
+                (body.category.strip(),body.name.strip(),body.description.strip(),body.stars_price,body.stars_price,1 if body.active else 0,body.sort_order,product_id)
+            )
+            if cur.rowcount==0:
+                raise HTTPException(404,"Товар не найден")
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True}
+
+
+@app.get("/api/admin/referrals")
+async def admin_referrals(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        rows=await (await conn.execute(
+            "SELECT r.*,u1.username referrer_username,u1.first_name referrer_name,"
+            "u2.username referred_username,u2.first_name referred_name "
+            "FROM referrals r LEFT JOIN users u1 ON u1.telegram_id=r.referrer_id "
+            "LEFT JOIN users u2 ON u2.telegram_id=r.referred_id ORDER BY r.id DESC LIMIT 1000"
+        )).fetchall()
+    finally:
+        await conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/admin/tickets/{ticket_id}/reply")
+async def admin_reply_ticket(ticket_id:int, body:AdminReplyIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        row=await (await conn.execute("SELECT * FROM tickets WHERE id=?",(ticket_id,))).fetchone()
+    finally:
+        await conn.close()
+    if not row:
+        raise HTTPException(404,"Обращение не найдено")
+    await tg("sendMessage",{"chat_id":int(row["telegram_id"]),"text":f"💬 Ответ поддержки по обращению #{ticket_id}:\n\n{body.message}"})
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("UPDATE tickets SET status='Ответ дан' WHERE id=?",(ticket_id,))
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True}
+
+
+@app.post("/api/admin/tickets/{ticket_id}/close")
+async def admin_close_ticket(ticket_id:int, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("UPDATE tickets SET status='Закрыт' WHERE id=?",(ticket_id,))
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True}
+
+
+@app.post("/api/admin/message")
+async def admin_message(body:AdminMessageIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    await tg("sendMessage",{"chat_id":body.telegram_id,"text":body.message})
+    return {"ok":True}
+
+
+@app.post("/api/admin/broadcast")
+async def admin_broadcast(body:BroadcastIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    asyncio.create_task(run_broadcast(body.message))
+    return {"ok":True,"queued":True}
 
 
 def page(admin=False):
