@@ -383,12 +383,12 @@ input,textarea,select{{width:100%;background:#0e1013;color:#fff;border:1px solid
 <div class="nav" id="nav"><button data-tab="home">Главная</button><button data-tab="catalog">Каталог</button><button data-tab="orders">Заказы</button><button data-tab="support">Поддержка</button></div>
 <script>
 const ADMIN={mode}; const tg=window.Telegram?.WebApp;
-document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
-document.addEventListener('gesturechange',e=>e.preventDefault(),{passive:false});
-document.addEventListener('gestureend',e=>e.preventDefault(),{passive:false});
-document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault()},{passive:false});
+document.addEventListener('gesturestart',e=>e.preventDefault(),{{passive:false}});
+document.addEventListener('gesturechange',e=>e.preventDefault(),{{passive:false}});
+document.addEventListener('gestureend',e=>e.preventDefault(),{{passive:false}});
+document.addEventListener('touchmove',e=>{{if(e.touches&&e.touches.length>1)e.preventDefault()}},{{passive:false}});
 let __lastTouchEnd=0;
-document.addEventListener('touchend',e=>{const now=Date.now();if(now-__lastTouchEnd<=300)e.preventDefault();__lastTouchEnd=now},{passive:false}); tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#090b0d'); tg?.setBackgroundColor?.('#090b0d');
+document.addEventListener('touchend',e=>{{const now=Date.now();if(now-__lastTouchEnd<=300)e.preventDefault();__lastTouchEnd=now}},{{passive:false}}); tg?.ready(); tg?.expand(); tg?.setHeaderColor?.('#090b0d'); tg?.setBackgroundColor?.('#090b0d');
 const init=tg?.initData||''; const H={{'Content-Type':'application/json','X-Telegram-Init-Data':init}}; let products=[],me=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
 async function api(p,o={{}}){{let r=await fetch(p,{{...o,headers:{{...H,...(o.headers||{{}})}}}});let d;try{{d=await r.json()}}catch{{d={{detail:'Ошибка сервера'}}}}if(!r.ok)throw Error(d.detail||'Ошибка');return d}}
 const rub=n=>Number(n).toLocaleString('ru-RU')+' ₽'; const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[m]));
