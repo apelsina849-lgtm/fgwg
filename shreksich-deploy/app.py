@@ -178,6 +178,8 @@ async def init_db():
         await conn.execute("ALTER TABLE promos ADD COLUMN promo_type TEXT NOT NULL DEFAULT 'discount'")
     if "spin_tickets" not in promo_cols:
         await conn.execute("ALTER TABLE promos ADD COLUMN spin_tickets INTEGER NOT NULL DEFAULT 0")
+    # Rescue legacy SPIN promos created before spin_tickets was stored reliably.
+    await conn.execute("UPDATE promos SET spin_tickets=1 WHERE lower(promo_type)='spin' AND COALESCE(spin_tickets,0)<=0")
     await conn.execute(
         "CREATE TABLE IF NOT EXISTS promo_redemptions("
         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -435,7 +437,7 @@ async def process_update(update: dict):
                 )
                 if ok and row["promo_code"]:
                     promo = await (await conn.execute(
-                        "SELECT * FROM promos WHERE code=? AND promo_type='discount' AND active=1 "
+                        "SELECT * FROM promos WHERE code=? AND active=1 AND COALESCE(discount_percent,0)>0 "
                         "AND (max_uses=0 OR uses<max_uses) "
                         "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
                         (row["promo_code"],)
@@ -483,7 +485,7 @@ async def process_update(update: dict):
                     )
                     if row["promo_code"]:
                         promo = await (await conn.execute(
-                            "SELECT id FROM promos WHERE code=? AND promo_type='discount'",
+                            "SELECT id FROM promos WHERE code=? AND COALESCE(discount_percent,0)>0",
                             (row["promo_code"],)
                         )).fetchone()
                         if promo:
@@ -667,7 +669,7 @@ async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(
             discount = 0
             if promo_code:
                 promo = await (await conn.execute(
-                    "SELECT * FROM promos WHERE code=? AND promo_type='discount' AND active=1 "
+                    "SELECT * FROM promos WHERE code=? AND active=1 AND COALESCE(discount_percent,0)>0 "
                     "AND (max_uses=0 OR uses<max_uses) "
                     "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
                     (promo_code,)
@@ -713,7 +715,7 @@ async def promo_check(body: OrderIn, x_telegram_init_data: str | None = Header(d
     try:
         p = await (await conn.execute("SELECT * FROM products WHERE id=? AND active=1",(body.product_id,))).fetchone()
         promo = await (await conn.execute(
-            "SELECT * FROM promos WHERE code=? AND promo_type='discount' AND active=1 "
+            "SELECT * FROM promos WHERE code=? AND active=1 AND COALESCE(discount_percent,0)>0 "
             "AND (max_uses=0 OR uses<max_uses) "
             "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
             (code,)
@@ -755,6 +757,27 @@ async def stars(order_id: int, x_telegram_init_data: str | None = Header(default
     if not row: raise HTTPException(404,"Заказ не найден")
     if row["status"] != "Ожидает оплаты": raise HTTPException(409,"Заказ уже обработан")
     if int(row["stars_amount"]) <= 0: raise HTTPException(400,"Оплата Stars для этого товара недоступна")
+    if row["promo_code"]:
+        conn = await db()
+        try:
+            promo = await (await conn.execute(
+                "SELECT * FROM promos WHERE code=? AND active=1 AND COALESCE(discount_percent,0)>0 "
+                "AND (max_uses=0 OR uses<max_uses) "
+                "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
+                (row["promo_code"],)
+            )).fetchone()
+            redeemed = None
+            if promo:
+                redeemed = await (await conn.execute(
+                    "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
+                    (promo["id"],int(u["id"]))
+                )).fetchone()
+        finally:
+            await conn.close()
+        if not promo:
+            raise HTTPException(409,"Промокод истёк или его лимит закончился. Создайте новый заказ.")
+        if redeemed:
+            raise HTTPException(409,"Этот промокод уже был использован. Создайте новый заказ.")
     link = await tg("createInvoiceLink", {
       "title":f"Заказ #{row['number']}","description":row["product_name"],
       "payload":f"order:{row['id']}:{u['id']}","provider_token":"","currency":"XTR",
@@ -864,7 +887,8 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
         try:
             await conn.execute("BEGIN IMMEDIATE")
             promo = await (await conn.execute(
-                "SELECT * FROM promos WHERE code=? AND promo_type='spin' AND active=1 "
+                "SELECT * FROM promos WHERE code=? AND active=1 "
+                "AND (lower(COALESCE(promo_type,''))='spin' OR COALESCE(spin_tickets,0)>0) "
                 "AND (max_uses=0 OR uses<max_uses) "
                 "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
                 (code,)
@@ -880,9 +904,12 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
                 await conn.rollback()
                 raise HTTPException(409,"Вы уже активировали этот промокод")
             tickets = int(promo["spin_tickets"] or 0)
+            if tickets <= 0 and str(promo["promo_type"] or "").lower()=="spin":
+                tickets = 1
+                await conn.execute("UPDATE promos SET spin_tickets=1 WHERE id=?",(promo["id"],))
             if tickets <= 0:
                 await conn.rollback()
-                raise HTTPException(400,"В этом промокоде нет SPIN-билетов")
+                raise HTTPException(400,"Этот промокод не выдаёт SPIN-билеты")
             await conn.execute(
                 "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
                 (uid,)
@@ -1655,7 +1682,7 @@ function adminProducts(){
 }
 function adminPromos(){
  return '<h2>Промокоды</h2><div class="card"><select id="promoTypeNew"><option value="discount">Скидка на покупку</option><option value="spin">SPIN-билеты</option></select><input id="promoCodeNew" placeholder="Код"><div class="row"><input id="promoDiscountNew" type="number" min="0" max="90" placeholder="Скидка %"><input id="promoSpinNew" type="number" min="0" max="100" placeholder="SPIN-билетов"></div><div class="row"><input id="promoUsesNew" type="number" value="0" placeholder="Участников (0=∞)"><input id="promoExpiryNew" placeholder="Срок: 2026-12-31 23:59:59"></div><div class="mini">Можно оставить только срок, только лимит участников или задать оба ограничения сразу.</div><button class="buy" id="promoCreateBtn" style="margin-top:10px">Создать промокод</button></div>'+
- adminData.promos.map(p=>{const reward=p.promo_type==='spin'?('🎟 +'+p.spin_tickets+' SPIN'):('-'+p.discount_percent+'% ⭐');return '<div class="admin-card"><div class="name">'+esc(p.code)+' • '+reward+'</div><div class="mini">'+(p.promo_type==='spin'?'SPIN-промокод':'Скидочный промокод')+' • участников '+p.uses+(p.max_uses?' / '+p.max_uses:' / ∞')+(p.expires_at?' • до '+esc(p.expires_at):' • без срока')+'</div><div class="row" style="margin-top:8px"><button class="secondary" data-promo-toggle="'+p.id+'" data-active="'+p.active+'">'+(p.active?'Отключить':'Включить')+'</button><button class="danger" data-promo-del="'+p.id+'">Удалить</button></div></div>'}).join('')
+ adminData.promos.map(p=>{const isSpin=Number(p.spin_tickets||0)>0||String(p.promo_type||'').toLowerCase()==='spin';const reward=isSpin?('🎟 +'+Math.max(1,Number(p.spin_tickets||0))+' SPIN'):('-'+p.discount_percent+'% ⭐');return '<div class="admin-card"><div class="name">'+esc(p.code)+' • '+reward+'</div><div class="mini">'+(isSpin?'SPIN-промокод':'Скидочный промокод')+' • участников '+p.uses+(p.max_uses?' / '+p.max_uses:' / ∞')+(p.expires_at?' • до '+esc(p.expires_at):' • без срока')+'</div><div class="row" style="margin-top:8px"><button class="secondary" data-promo-toggle="'+p.id+'" data-active="'+p.active+'">'+(p.active?'Отключить':'Включить')+'</button><button class="danger" data-promo-del="'+p.id+'">Удалить</button></div></div>'}).join('')
 }
 function adminRewards(){
  const spin=adminData.spins.slice(0,80).map(x=>'<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+x.reward_tier+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="mini">TG '+x.telegram_id+' • '+esc(x.created_at)+'</div></div>').join('');
