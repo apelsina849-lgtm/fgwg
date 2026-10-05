@@ -786,6 +786,8 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
             await conn.close()
 
     free_remaining = max(0, MAX_FREE_SPINS_24H - used - (1 if source=="free" else 0))
+    if reward["tier"] in ("LEGENDARY","MYTHIC"):
+        asyncio.create_task(announce_top_drop(uid, reward))
     return {
       "reward":reward,"source":source,
       "free_remaining":free_remaining,
@@ -793,6 +795,55 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
       "remaining_spins":free_remaining + int(state["tickets"] or 0),
       "upgrade_points":int(state["upgrade_points"])
     }
+
+
+@app.post("/api/spin/promo")
+async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    code = body.code.strip().upper()
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            promo = await (await conn.execute(
+                "SELECT * FROM promos WHERE code=? AND promo_type='spin' AND active=1 "
+                "AND (max_uses=0 OR uses<max_uses) "
+                "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
+                (code,)
+            )).fetchone()
+            if not promo:
+                await conn.rollback()
+                raise HTTPException(400,"SPIN-промокод недействителен, закончился или истёк")
+            redeemed = await (await conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
+                (promo["id"],uid)
+            )).fetchone()
+            if redeemed:
+                await conn.rollback()
+                raise HTTPException(409,"Вы уже активировали этот промокод")
+            tickets = int(promo["spin_tickets"] or 0)
+            if tickets <= 0:
+                await conn.rollback()
+                raise HTTPException(400,"В этом промокоде нет SPIN-билетов")
+            await conn.execute(
+                "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
+                (uid,)
+            )
+            await conn.execute(
+                "UPDATE spin_state SET tickets=tickets+? WHERE telegram_id=?",
+                (tickets,uid)
+            )
+            await conn.execute(
+                "INSERT INTO promo_redemptions(promo_id,telegram_id) VALUES(?,?)",
+                (promo["id"],uid)
+            )
+            await conn.execute("UPDATE promos SET uses=uses+1 WHERE id=?",(promo["id"],))
+            await conn.commit()
+            state = await (await conn.execute("SELECT tickets FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+        finally:
+            await conn.close()
+    return {"ok":True,"code":code,"tickets_added":tickets,"bonus_tickets":int(state["tickets"] or 0)}
 
 
 @app.get("/api/wins-feed")
