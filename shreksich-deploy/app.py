@@ -1534,8 +1534,8 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .sticker-icon:after{content:"";position:absolute;left:9px;right:9px;top:7px;height:15px;border-radius:50%;background:linear-gradient(180deg,#fff8,transparent);pointer-events:none}
 .sticker-icon svg{width:34px;height:34px;stroke:#fff;fill:none;stroke-width:2.35;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 3px 1px #0008) drop-shadow(0 0 6px color-mix(in srgb,var(--accent) 60%,transparent))}
 .sticker-copy{min-width:0;position:relative;z-index:2}
-.sticker-title{font-size:15px;font-weight:950;line-height:1.05;text-transform:uppercase;color:currentColor;text-shadow:0 0 12px color-mix(in srgb,currentColor 40%,transparent),0 2px 6px #000;overflow-wrap:anywhere}
-.sticker-sub{font-size:11px;color:#f4f7fb;margin-top:7px;line-height:1.25;opacity:.92;overflow-wrap:anywhere}
+.sticker-title{font-size:15px;font-weight:950;line-height:1.05;text-transform:uppercase;color:currentColor;text-shadow:0 0 12px color-mix(in srgb,currentColor 40%,transparent),0 2px 6px #000;overflow-wrap:normal;word-break:normal;hyphens:none}
+.sticker-sub{font-size:11px;color:#f4f7fb;margin-top:7px;line-height:1.25;opacity:.92;overflow-wrap:normal;word-break:normal;hyphens:none}
 .token-chip{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border-radius:15px;background:linear-gradient(135deg,#16130a,#0d1013);border:1px solid #5c4817;margin:-6px 0 14px;box-shadow:inset 0 1px #ffffff0a}
 .token-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;font-weight:900;letter-spacing:.8px;color:#ffd155}
 .token-copy{background:#28220f;color:#ffd45c;padding:8px 10px;border:1px solid #544515}
@@ -1563,9 +1563,13 @@ body.keyboard-open .wrap{padding-bottom:30px}
 
 /* spin */
 .spin-shell{background:linear-gradient(145deg,#12151a,#090b0d);border:1px solid #3a2c0a;border-radius:22px;padding:16px;margin:14px 0;overflow:hidden}
-.reel-window{position:relative;height:118px;border:1px solid #2b3036;background:#0b0d10;border-radius:18px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.reel-window:after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:#ffc21c;box-shadow:0 0 18px #ffc21c;transform:translateX(-50%)}
-.reel-item{display:grid;place-items:center;min-width:96px;min-height:96px;will-change:transform,opacity}
+.reel-window{position:relative;height:118px;border:1px solid #2b3036;background:#0b0d10;border-radius:18px;overflow:hidden}
+.reel-window:before,.reel-window:after{content:"";position:absolute;top:0;bottom:0;width:46px;z-index:4;pointer-events:none}
+.reel-window:before{left:0;background:linear-gradient(90deg,#0b0d10 15%,transparent)}
+.reel-window:after{right:0;background:linear-gradient(270deg,#0b0d10 15%,transparent)}
+.reel-marker{position:absolute;left:50%;top:0;bottom:0;width:3px;background:#ffc21c;box-shadow:0 0 18px #ffc21c,0 0 34px #ffc21c55;transform:translateX(-50%);z-index:6;pointer-events:none}
+.reel-track{position:absolute;left:0;top:50%;display:flex;align-items:center;gap:12px;width:max-content;transform:translate3d(-520px,-50%,0);will-change:transform}
+.reel-item{display:grid;place-items:center;width:90px;height:96px;flex:0 0 90px}
 .loot-cube{width:78px;height:78px;border-radius:18px;display:grid;place-items:center;font-size:38px;font-weight:1000;color:#fff;position:relative;transform:perspective(180px) rotateX(7deg) rotateY(-8deg);border:2px solid transparent;box-shadow:inset 0 3px 2px #ffffff30,inset 0 -16px 24px #0008,0 16px 22px #0008}
 .loot-cube:before{content:"";position:absolute;left:10px;right:10px;top:8px;height:17px;border-radius:50%;background:linear-gradient(180deg,#fff7,transparent);pointer-events:none}
 .loot-cube span{position:relative;z-index:2;text-shadow:0 4px 4px #0009}
@@ -1784,7 +1788,7 @@ async function spinHtml(){
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">UPGRADE</div><div class="price">'+spinState.upgrade_points+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window"><div class="reel-item" id="reelItem"><div class="loot-cube cube-common"><span>?</span></div></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
+ '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
  '<label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию и сразу показать награду</span></label>'+
  '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div><div class="mini" style="margin-top:8px">Common 97.5% • Rare 1.8% • Epic 0.5% • Legendary 0.15% • Mythic 0.05%</div></div>'+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
@@ -1808,49 +1812,80 @@ async function applySpinPromo(){
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
 function cubeClass(tier){return 'cube-'+String(tier||'COMMON').toLowerCase()}
-function setMysteryCube(reel,tier){
- reel.className='reel-item';
- reel.innerHTML='<div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div>';
+function cubeHtml(tier,extra=''){
+ return '<div class="reel-item '+extra+'"><div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div></div>'
 }
-function showMysteryCube(reel,item,duration){
- setMysteryCube(reel,item.tier);
- const old=reel.getAnimations?reel.getAnimations():[];
- old.forEach(a=>a.cancel());
- if(reel.animate){
-  reel.animate([
-   {transform:'translateX(-135px) scale(.9)',opacity:0},
-   {transform:'translateX(0) scale(1)',opacity:1,offset:.5},
-   {transform:'translateX(135px) scale(.92)',opacity:.08}
-  ],{duration:Math.max(170,duration),easing:'cubic-bezier(.22,.72,.28,1)'});
+function visualTier(){
+ const r=Math.random()*100;
+ if(r<68)return 'COMMON';
+ if(r<84)return 'RARE';
+ if(r<94)return 'EPIC';
+ if(r<98.5)return 'LEGENDARY';
+ return 'MYTHIC'
+}
+function idleCubeStrip(){
+ const tiers=['COMMON','RARE','COMMON','EPIC','COMMON','RARE','COMMON','LEGENDARY','COMMON'];
+ return tiers.map(t=>cubeHtml(t)).join('')
+}
+function buildSpinStrip(reward){
+ const count=34;
+ const targetIndex=28;
+ const tiers=[];
+ for(let i=0;i<count;i++)tiers.push(i===targetIndex?reward.tier:visualTier());
+ return {html:tiers.map((t,i)=>cubeHtml(t,i===targetIndex?'target-cube':'')).join(''),targetIndex}
+}
+function centerTrackOnTarget(track,windowEl,targetIndex,animate){
+ const itemWidth=90,gap=12,pitch=itemWidth+gap;
+ const targetCenter=targetIndex*pitch+itemWidth/2;
+ const finalX=windowEl.clientWidth/2-targetCenter;
+ if(!animate){
+  track.style.transform='translate3d('+finalX+'px,-50%,0)';
+  return Promise.resolve()
  }
-}
-function visualMysteryItem(pool){
- if(!pool.length)return {tier:'COMMON'};
- return pool[Math.floor(Math.random()*pool.length)];
-}
-async function animateSpinRight(reel,pool,reward){
- const steps=34;
- for(let i=0;i<steps;i++){
-  const p=i/(steps-1);
-  const eased=p*p*p;
-  const delay=Math.round(85 + eased*360);
-  const item=i===steps-1?reward:visualMysteryItem(pool);
-  showMysteryCube(reel,item,Math.min(440,delay+90));
-  await sleep(delay);
+ const travel=Math.max(760,windowEl.clientWidth*2.2);
+ const startX=finalX-travel;
+ track.style.transform='translate3d('+startX+'px,-50%,0)';
+ void track.offsetWidth;
+ if(track.animate){
+  const anim=track.animate([
+   {transform:'translate3d('+startX+'px,-50%,0)'},
+   {transform:'translate3d('+(finalX-240)+'px,-50%,0)',offset:.66},
+   {transform:'translate3d('+(finalX-72)+'px,-50%,0)',offset:.88},
+   {transform:'translate3d('+finalX+'px,-50%,0)'}
+  ],{
+   duration:6800,
+   easing:'cubic-bezier(.08,.72,.16,1)',
+   fill:'forwards'
+  });
+  return anim.finished.catch(()=>{}).then(()=>{
+   track.style.transform='translate3d('+finalX+'px,-50%,0)';
+   anim.cancel()
+  })
  }
- if(reel.getAnimations)reel.getAnimations().forEach(a=>a.cancel());
- setMysteryCube(reel,reward.tier);
- reel.style.transform='translateX(0)';
- reel.style.opacity='1';
- await sleep(650);
+ track.style.transition='transform 6.8s cubic-bezier(.08,.72,.16,1)';
+ track.style.transform='translate3d('+finalX+'px,-50%,0)';
+ return sleep(6900).then(()=>{track.style.transition=''})
+}
+async function animateSpinRight(track,windowEl,reward){
+ const strip=buildSpinStrip(reward);
+ track.innerHTML=strip.html;
+ await centerTrackOnTarget(track,windowEl,strip.targetIndex,true);
+ await sleep(650)
+}
+function showFinalCube(track,windowEl,reward){
+ const strip={html:cubeHtml(reward.tier,'target-cube'),targetIndex:0};
+ track.innerHTML=strip.html;
+ const itemWidth=90;
+ const finalX=windowEl.clientWidth/2-itemWidth/2;
+ track.style.transform='translate3d('+finalX+'px,-50%,0)'
 }
 function revealReward(result,reward){
  if(!result)return;
- result.innerHTML='<div class="reveal-name '+tierClass(reward.tier)+'">'+esc(reward.name)+'</div><div class="mini">+'+reward.points+' Upgrade pts</div>';
+ result.innerHTML='<div class="reveal-name '+tierClass(reward.tier)+'">'+esc(reward.name)+'</div><div class="mini">+'+reward.points+' Upgrade pts</div>'
 }
 async function spinOnce(){
  const b=document.getElementById('spinBtn');if(!b||b.disabled)return;
- const reel=document.getElementById('reelItem'),pool=spinState.rewards||[],result=document.getElementById('spinResult');
+ const track=document.getElementById('reelTrack'),windowEl=document.getElementById('reelWindow'),result=document.getElementById('spinResult');
  const skip=!!document.getElementById('skipSpinAnimation')?.checked;
  b.disabled=true;b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
  if(result)result.textContent='';
@@ -1858,18 +1893,18 @@ async function spinOnce(){
   const d=await api('/api/spin/free',{method:'POST'});
   lastSpinReward=d.reward;
   if(skip){
-   setMysteryCube(reel,d.reward.tier);
+   showFinalCube(track,windowEl,d.reward);
    revealReward(result,d.reward);
    try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
    showDropFx(d.reward);
-   await sleep(950);
+   await sleep(950)
   }else{
-   await animateSpinRight(reel,pool,d.reward);
+   await animateSpinRight(track,windowEl,d.reward);
    revealReward(result,d.reward);
    try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
-   await sleep(850);
+   await sleep(900);
    showDropFx(d.reward);
-   await sleep(d.reward.tier==='LEGENDARY'||d.reward.tier==='MYTHIC'?450:300);
+   await sleep(d.reward.tier==='LEGENDARY'||d.reward.tier==='MYTHIC'?450:300)
   }
   app.innerHTML=await spinHtml();bindSpin();loadWinsFeed()
  }catch(e){
