@@ -89,7 +89,7 @@ SPIN_REWARDS = [
     {"name":"Mythic Contraband Vault","tier":"MYTHIC","weight":0.0166666666,"points":10,"value_stars":199},
 ]
 
-UPGRADE_REWARDS = [
+SHR_REWARDS = [
     {"points":5,"name":"Набор расходников"},
     {"points":10,"name":"Metro Starter Kit"},
     {"points":18,"name":"Premium Metro Pack"},
@@ -208,6 +208,18 @@ async def init_db():
       points_spent INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS inventory_items(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id INTEGER NOT NULL,
+      reward_name TEXT NOT NULL,
+      reward_tier TEXT NOT NULL,
+      sell_shr INTEGER NOT NULL DEFAULT 0,
+      value_stars INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending',
+      source TEXT NOT NULL DEFAULT 'spin',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TEXT NOT NULL DEFAULT ''
+    );
     CREATE TABLE IF NOT EXISTS promos(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT UNIQUE NOT NULL,
@@ -266,6 +278,19 @@ async def init_db():
         "telegram_id INTEGER NOT NULL,"
         "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
         "UNIQUE(promo_id, telegram_id))"
+    )
+    await conn.execute(
+        "CREATE TABLE IF NOT EXISTS inventory_items("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "telegram_id INTEGER NOT NULL,"
+        "reward_name TEXT NOT NULL,"
+        "reward_tier TEXT NOT NULL,"
+        "sell_shr INTEGER NOT NULL DEFAULT 0,"
+        "value_stars INTEGER NOT NULL DEFAULT 0,"
+        "status TEXT NOT NULL DEFAULT 'pending',"
+        "source TEXT NOT NULL DEFAULT 'spin',"
+        "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "resolved_at TEXT NOT NULL DEFAULT '')"
     )
     spin_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(spin_history)")).fetchall()}
     if "source" not in spin_cols:
@@ -457,7 +482,7 @@ async def send_faq(chat_id: int):
         "📦 <b>Заказы:</b> статус смотрите в разделе «Заказы».\n"
         "🎰 <b>SPIN:</b> 1 бесплатное вращение за 24 часа + бонусные билеты от админа и рефералов.\n"
         "🎟 <b>Промокоды:</b> вводятся при оформлении заказа и уменьшают цену в Stars.\n"
-        "👥 <b>Рефералы:</b> после первой оплаченной покупки приглашённого вы получаете 1 бонусный SPIN-билет и 3 Upgrade pts.\n"
+        "👥 <b>Рефералы:</b> после первой оплаченной покупки приглашённого вы получаете 1 бонусный SPIN-билет и 3 SHR.\n"
         "💬 <b>Поддержка:</b> создайте обращение в Mini App или напишите в нашем чате."
     )
     await tg("sendMessage", {"chat_id":chat_id,"parse_mode":"HTML","text":text,"reply_markup":keyboard(chat_id)})
@@ -468,7 +493,7 @@ async def send_referral(chat_id: int, user_id: int):
     await tg("sendMessage", {
         "chat_id":chat_id,
         "parse_mode":"HTML",
-        "text":f"<b>Ваша реферальная ссылка</b>\n\n<code>{html.escape(link)}</code>\n\nЗа первую оплаченную покупку друга: <b>+1 SPIN-билет и +3 Upgrade pts</b>."
+        "text":f"<b>Ваша реферальная ссылка</b>\n\n<code>{html.escape(link)}</code>\n\nЗа первую оплаченную покупку друга: <b>+1 SPIN-билет и +3 SHR</b>."
     })
 
 
@@ -484,7 +509,7 @@ async def answer_question(chat_id: int, text: str):
         answer = "🎟 Промокод вводится перед созданием заказа. Если он активен, цена в Stars пересчитается автоматически."
     elif any(x in q for x in ("рефер", "приглас", "друг")):
         link = await referral_link(chat_id)
-        answer = f"👥 Ваша ссылка: {link}\nЗа первую оплаченную покупку приглашённого: +1 SPIN-билет и +3 Upgrade pts."
+        answer = f"👥 Ваша ссылка: {link}\nЗа первую оплаченную покупку приглашённого: +1 SPIN-билет и +3 SHR."
     else:
         answer = "Я могу подсказать по оплате, заказам, SPIN, промокодам и реферальной системе. Для полного списка отправьте /faq."
     await tg("sendMessage", {"chat_id":chat_id,"text":answer})
@@ -929,10 +954,11 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "max_free_spins":MAX_FREE_SPINS_24H,
       "bonus_tickets":bonus_tickets,
       "remaining_spins":free_remaining + bonus_tickets,
+      "shr":int(state["upgrade_points"]),
       "upgrade_points":int(state["upgrade_points"]),
       "next_reset_seconds":next_reset,
       "history":[dict(x) for x in history],
-      "upgrade_rewards":UPGRADE_REWARDS,
+      "upgrade_rewards":SHR_REWARDS,
       "tier_chances":SPIN_TIER_CHANCES,
       "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS]
     }
@@ -962,11 +988,16 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
                 await conn.execute("UPDATE spin_state SET tickets=tickets-1 WHERE telegram_id=?",(uid,))
 
             reward = random.choices(SPIN_REWARDS, weights=[x["weight"] for x in SPIN_REWARDS], k=1)[0]
-            await conn.execute("UPDATE spin_state SET upgrade_points=upgrade_points+? WHERE telegram_id=?",(reward["points"],uid))
             await conn.execute(
                 "INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points,source) VALUES(?,?,?,?,?)",
                 (uid,reward["name"],reward["tier"],reward["points"],source)
             )
+            inv = await conn.execute(
+                "INSERT INTO inventory_items(telegram_id,reward_name,reward_tier,sell_shr,value_stars,status,source) "
+                "VALUES(?,?,?,?,?,'pending','spin')",
+                (uid,reward["name"],reward["tier"],int(reward["points"]),int(reward["value_stars"]))
+            )
+            inventory_item_id = inv.lastrowid
             await conn.commit()
             state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
         finally:
@@ -977,9 +1008,12 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
         asyncio.create_task(announce_top_drop(uid, reward))
     return {
       "reward":reward,"source":source,
+      "inventory_item_id":inventory_item_id,
+      "sell_shr":int(reward["points"]),
       "free_remaining":free_remaining,
       "bonus_tickets":int(state["tickets"] or 0),
       "remaining_spins":free_remaining + int(state["tickets"] or 0),
+      "shr":int(state["upgrade_points"]),
       "upgrade_points":int(state["upgrade_points"])
     }
 
@@ -1037,6 +1071,80 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
     return {"ok":True,"code":code,"tickets_added":tickets,"bonus_tickets":int(state["tickets"] or 0)}
 
 
+@app.get("/api/inventory")
+async def inventory(x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    conn = await db()
+    try:
+        rows = await (await conn.execute(
+            "SELECT id,reward_name,reward_tier,sell_shr,value_stars,status,source,created_at "
+            "FROM inventory_items WHERE telegram_id=? AND status IN ('pending','saved') "
+            "ORDER BY id DESC",
+            (uid,)
+        )).fetchall()
+        state = await (await conn.execute(
+            "SELECT upgrade_points FROM spin_state WHERE telegram_id=?",
+            (uid,)
+        )).fetchone()
+    finally:
+        await conn.close()
+    return {
+        "items":[dict(r) for r in rows],
+        "shr":int(state["upgrade_points"] or 0) if state else 0
+    }
+
+
+@app.post("/api/inventory/{item_id}/resolve")
+async def inventory_resolve(item_id: int, body: InventoryResolveIn, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    action = body.action.strip().lower()
+    if action not in ("save","sell"):
+        raise HTTPException(400,"Действие: save или sell")
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            item = await (await conn.execute(
+                "SELECT * FROM inventory_items WHERE id=? AND telegram_id=?",
+                (item_id,uid)
+            )).fetchone()
+            if not item:
+                await conn.rollback()
+                raise HTTPException(404,"Предмет не найден")
+            if item["status"] == "sold":
+                await conn.rollback()
+                raise HTTPException(409,"Предмет уже продан")
+            if action == "save":
+                await conn.execute(
+                    "UPDATE inventory_items SET status='saved',resolved_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?",
+                    (item_id,uid)
+                )
+            else:
+                await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id) VALUES(?)",(uid,))
+                await conn.execute(
+                    "UPDATE spin_state SET upgrade_points=upgrade_points+? WHERE telegram_id=?",
+                    (int(item["sell_shr"]),uid)
+                )
+                await conn.execute(
+                    "UPDATE inventory_items SET status='sold',resolved_at=CURRENT_TIMESTAMP WHERE id=? AND telegram_id=?",
+                    (item_id,uid)
+                )
+            await conn.commit()
+            state = await (await conn.execute(
+                "SELECT upgrade_points FROM spin_state WHERE telegram_id=?",(uid,)
+            )).fetchone()
+        finally:
+            await conn.close()
+    return {
+        "ok":True,
+        "action":action,
+        "item_id":item_id,
+        "shr":int(state["upgrade_points"] or 0) if state else 0
+    }
+
+
 @app.get("/api/wins-feed")
 async def wins_feed():
     conn = await db()
@@ -1073,7 +1181,7 @@ async def referral_info(x_telegram_init_data: str | None = Header(default=None))
       "rewarded":int(row["rewarded"] or 0),
       "bonus_tickets":int(state["tickets"] or 0) if state else 0,
       "upgrade_points":int(state["upgrade_points"] or 0) if state else 0,
-      "reward_text":"+1 бонусный SPIN-билет и +3 Upgrade pts за первую оплаченную покупку друга"
+      "reward_text":"+1 бонусный SPIN-билет и +3 SHR за первую оплаченную покупку друга"
     }
 
 
@@ -1081,13 +1189,17 @@ class UpgradeClaimIn(BaseModel):
     points: int
 
 
+class InventoryResolveIn(BaseModel):
+    action: str = Field(min_length=4, max_length=8)
+
+
 @app.post("/api/upgrade/claim")
 async def upgrade_claim(body: UpgradeClaimIn, x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
     uid = int(u["id"])
-    reward = next((x for x in UPGRADE_REWARDS if int(x["points"]) == int(body.points)), None)
+    reward = next((x for x in SHR_REWARDS if int(x["points"]) == int(body.points)), None)
     if not reward:
-        raise HTTPException(400,"Некорректный уровень апгрейда")
+        raise HTTPException(400,"Некорректная награда SHR")
     async with db_write_lock:
         conn = await db()
         try:
@@ -1096,7 +1208,7 @@ async def upgrade_claim(body: UpgradeClaimIn, x_telegram_init_data: str | None =
             state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
             if int(state["upgrade_points"]) < int(reward["points"]):
                 await conn.rollback()
-                raise HTTPException(409,"Недостаточно очков апгрейда")
+                raise HTTPException(409,"Недостаточно SHR")
             await conn.execute("UPDATE spin_state SET upgrade_points=upgrade_points-? WHERE telegram_id=?",(reward["points"],uid))
             await conn.execute("INSERT INTO upgrade_claims(telegram_id,reward_name,points_spent) VALUES(?,?,?)",(uid,reward["name"],reward["points"]))
             await conn.commit()
@@ -1273,7 +1385,7 @@ async def admin_users(x_telegram_init_data: str | None = Header(default=None)):
 async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
     if body.tickets <= 0 and body.upgrade_points <= 0:
-        raise HTTPException(400,"Укажите билеты или Upgrade pts")
+        raise HTTPException(400,"Укажите билеты или SHR")
     async with db_write_lock:
         conn = await db()
         try:
@@ -1803,7 +1915,7 @@ function showDropFx(reward){
  if(!reward||(reward.tier!=='LEGENDARY'&&reward.tier!=='MYTHIC'))return;
  try{if(tg&&tg.HapticFeedback){tg.HapticFeedback.notificationOccurred('success');tg.HapticFeedback.impactOccurred(reward.tier==='MYTHIC'?'heavy':'medium')}}catch(_){}
  const fx=document.createElement('div');fx.className='drop-fx '+reward.tier.toLowerCase();
- fx.innerHTML='<div class="drop-card"><div class="drop-content"><h2>'+(reward.tier==='MYTHIC'?'MYTHIC DROP!':'LEGENDARY DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div>'+rarityBar(reward.tier)+'<div class="muted" style="margin-top:12px">+'+reward.points+' Upgrade pts</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
+ fx.innerHTML='<div class="drop-card"><div class="drop-content"><h2>'+(reward.tier==='MYTHIC'?'MYTHIC DROP!':'LEGENDARY DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div>'+rarityBar(reward.tier)+'<div class="muted" style="margin-top:12px">+'+reward.points+' SHR</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
  document.body.appendChild(fx);const card=fx.querySelector('.drop-card'),total=reward.tier==='MYTHIC'?30:20;
  for(let i=0;i<total;i++){const s=document.createElement('i');s.className='spark';const a=Math.PI*2*i/total,d=90+Math.random()*170;s.style.left=(45+Math.random()*10)+'%';s.style.top=(45+Math.random()*10)+'%';s.style.setProperty('--x',(Math.cos(a)*d)+'px');s.style.setProperty('--y',(Math.sin(a)*d)+'px');s.style.color=reward.tier==='MYTHIC'?(i%2?'#ff4bd8':'#8b62ff'):'#ffad25';card.appendChild(s)}
  fx.querySelector('#closeDrop').addEventListener('click',()=>fx.remove())
@@ -1847,13 +1959,13 @@ async function spinHtml(){
  const buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
- '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">UPGRADE</div><div class="price">'+spinState.upgrade_points+'</div></div></div>'+
+ '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.upgrade_points+'</div></div></div>'+
  '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
  '<label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию и сразу показать награду</span></label>'+
  '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
  rarityCatalogHtml()+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
- '<h3>Upgrade Lab</h3><div class="card"><div class="muted">Upgrade pts обмениваются на гарантированную награду — без случайной ставки.</div>'+claims+'</div><h3>История</h3>'+(history||'<div class="empty">История пока пустая.</div>')
+ '<h3>Upgrade Lab</h3><div class="card"><div class="muted">SHR обмениваются на гарантированную награду — без случайной ставки.</div>'+claims+'</div><h3>История</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
@@ -1961,7 +2073,7 @@ function showFinalCube(track,windowEl,reward){
 }
 function revealReward(result,reward){
  if(!result)return;
- result.innerHTML='<div class="reveal-name '+tierClass(reward.tier)+'">'+esc(reward.name)+'</div><div class="mini">+'+reward.points+' Upgrade pts</div>'
+ result.innerHTML='<div class="reveal-name '+tierClass(reward.tier)+'">'+esc(reward.name)+'</div><div class="mini">+'+reward.points+' SHR</div>'
 }
 async function spinOnce(){
  const b=document.getElementById('spinBtn');if(!b||b.disabled)return;
@@ -1997,7 +2109,7 @@ async function claimUpgrade(points){try{const d=await api('/api/upgrade/claim',{
 async function referralHtml(){
  const r=await api('/api/referral');
  return '<section class="hero"><div class="cat">REFERRAL</div><h1>Приглашай друзей</h1><div class="muted">'+esc(r.reward_text)+'</div></section>'+
- '<div class="metrics"><div class="metric"><span class="mini">ПРИГЛАШЕНО</span><b>'+r.invited+'</b></div><div class="metric"><span class="mini">НАГРАЖДЕНО</span><b>'+r.rewarded+'</b></div><div class="metric"><span class="mini">БИЛЕТЫ</span><b>🎟 '+r.bonus_tickets+'</b></div><div class="metric"><span class="mini">UPGRADE PTS</span><b>'+r.upgrade_points+'</b></div></div>'+
+ '<div class="metrics"><div class="metric"><span class="mini">ПРИГЛАШЕНО</span><b>'+r.invited+'</b></div><div class="metric"><span class="mini">НАГРАЖДЕНО</span><b>'+r.rewarded+'</b></div><div class="metric"><span class="mini">БИЛЕТЫ</span><b>🎟 '+r.bonus_tickets+'</b></div><div class="metric"><span class="mini">SHR PTS</span><b>'+r.upgrade_points+'</b></div></div>'+
  '<div class="card" style="margin-top:12px"><div class="mini">ВАША ССЫЛКА</div><input id="refLink" readonly value="'+esc(r.link)+'"><button class="buy" id="copyRef">Скопировать ссылку</button></div>'
 }
 function bindReferral(){const b=document.getElementById('copyRef');if(b)b.addEventListener('click',async()=>{const v=document.getElementById('refLink').value;try{await navigator.clipboard.writeText(v);alert('Ссылка скопирована')}catch(_){document.getElementById('refLink').select()}})}
@@ -2029,7 +2141,7 @@ function adminOrders(){
  return '<h2>Заказы</h2>'+adminData.orders.map(o=>{const st=['Ожидает оплаты','Оплачен','Принят','В работе','Ожидает клиента','Выполнен','Отменён','Возврат'];return '<div class="admin-card"><div class="cat">#'+o.number+' • '+esc(o.user_token||'Без жетона')+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+stars(o.stars_amount)+' • PUBG UID '+esc(o.uid)+(o.promo_code?' • '+esc(o.promo_code):'')+'</div><div class="adminline"><select id="os'+o.id+'">'+st.map(s=>'<option '+(s===o.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-order-save="'+o.id+'">Сохранить</button></div></div>'}).join('')
 }
 function adminUsers(){
- return '<h2>Игроки и бонусы</h2><div class="card"><input id="userSearch" placeholder="Поиск по жетону, нику или имени"><div class="adminline"><input id="grantToken" placeholder="Жетон SHX-..."><input id="grantTickets" type="number" min="0" value="1" placeholder="Билеты"><input id="grantPts" type="number" min="0" value="0" placeholder="Upgrade pts"><button class="buy" id="grantBtn">Выдать</button></div></div>'+
+ return '<h2>Игроки и бонусы</h2><div class="card"><input id="userSearch" placeholder="Поиск по жетону, нику или имени"><div class="adminline"><input id="grantToken" placeholder="Жетон SHX-..."><input id="grantTickets" type="number" min="0" value="1" placeholder="Билеты"><input id="grantPts" type="number" min="0" value="0" placeholder="SHR"><button class="buy" id="grantBtn">Выдать</button></div></div>'+
  adminData.users.map(u=>'<div class="admin-card user-row" data-search="'+esc(((u.token||'')+' '+(u.username||'')+' '+(u.first_name||'')).toLowerCase())+'"><div class="name">'+esc(u.first_name||u.username||'Игрок')+' '+(u.username?'@'+esc(u.username):'')+'</div><div class="token-code">'+esc(u.token||'Без жетона')+'</div><div class="mini">заказов '+u.orders_count+' • рефералов '+u.referrals_count+' • 🎟 '+u.tickets+' • pts '+u.upgrade_points+'</div><button class="secondary" data-message-user="'+esc(u.token||'')+'" style="margin-top:8px">Написать по жетону</button></div>').join('')
 }
 function adminProducts(){
