@@ -1855,6 +1855,10 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .nav button{flex:1;background:transparent;color:#8f969e;font-size:12px;padding:10px 3px}.nav button.active{background:#24200f;color:#ffd24b}
 .nav.spin-locked{opacity:.48;filter:saturate(.55);pointer-events:none}.nav.spin-locked:after{content:"SPIN";position:absolute;right:10px;top:-8px;font-size:9px;font-weight:1000;letter-spacing:.7px;color:#171000;background:#ffd044;border-radius:8px;padding:3px 6px;box-shadow:0 0 14px #ffc21c55}
 .spin-lock-note{display:none;margin-top:9px;font-size:11px;font-weight:850;color:#ffd45a;text-align:center}.spin-lock-note.show{display:block}
+.spin-case-picker{margin:12px 0 14px}.spin-case-picker h3{margin:0 0 9px}.spin-case-scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}.spin-case-scroll::-webkit-scrollbar{display:none}
+.spin-case-card{flex:0 0 132px;background:#111418;border:1px solid #2b3036;border-radius:18px;padding:11px 9px;color:#fff;text-align:left;position:relative;overflow:hidden;transition:.16s transform,.16s border-color,.16s box-shadow}.spin-case-card:active{transform:scale(.97)}.spin-case-card.active{border-color:#ffd044;box-shadow:0 0 22px #ffc21c44,inset 0 0 24px #ffc21c12}
+.spin-case-card:disabled{opacity:.55}.spin-case-top{display:flex;align-items:center;gap:8px}.spin-case-card .loot-cube{width:42px;height:42px;flex:0 0 42px;border-radius:12px;font-size:21px}.spin-case-title{font-size:12px;font-weight:950;line-height:1.1}.spin-case-price{font-size:11px;font-weight:950;color:#ffd45a;margin-top:3px}.spin-case-odds{display:flex;flex-wrap:wrap;gap:4px;margin-top:9px}.spin-case-odds span{font-size:8.5px;font-weight:900;padding:4px 6px;border-radius:8px;background:#1c2127;border:1px solid #2c3238}
+.spin-case-note{font-size:10px;color:#939aa2;margin-top:6px;line-height:1.3}
 .page-home{display:inline-flex;align-items:center;gap:7px;margin:0 0 12px;background:#171b20;color:#dce1e6;border:1px solid #30363d;padding:9px 12px;border-radius:13px;box-shadow:inset 0 1px #ffffff0a}
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
 .setting-card{background:#111418;border:1px solid #2a3036;border-radius:18px;padding:14px}
@@ -2085,8 +2089,9 @@ const headers={'Content-Type':'application/json','X-Telegram-Init-Data':initData
 let products=[],me=null,spinState=null,lastSpinReward=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
 let adminSection='overview',adminData=null;
 let spinNavigationLocked=false;
+let selectedCaseId=localStorage.getItem('shx_selected_case')||'FREE';
 
-let audioCtx=null,spinSoundTimer=null,spinSoundStarted=0,spinSoundStep=0,spinSoundTotalMs=30000,spinSoundActive=false;
+let audioCtx=null,spinSoundTimer=null,spinSoundStarted=0,spinSoundStep=0,spinSoundTotalMs=30000,spinSoundActive=false,spinAudioHold=null;
 function soundsEnabled(){return localStorage.getItem('shx_sound_enabled')!=='0'}
 function getAudio(){
  if(!soundsEnabled())return null;
@@ -2106,6 +2111,20 @@ function unlockAudio(){
   o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.02)
  }catch(_){}
  return ac
+}
+function beginAudioHold(){
+ const ac=unlockAudio();if(!ac||spinAudioHold)return;
+ try{
+  const o=ac.createOscillator(),g=ac.createGain();
+  o.frequency.value=55;g.gain.value=.000001;o.connect(g);g.connect(ac.destination);o.start();
+  spinAudioHold={o,g}
+ }catch(_){}
+}
+function endAudioHold(){
+ if(!spinAudioHold)return;
+ try{spinAudioHold.o.stop()}catch(_){}
+ try{spinAudioHold.o.disconnect();spinAudioHold.g.disconnect()}catch(_){}
+ spinAudioHold=null
 }
 function tone(freq,dur=.08,vol=.035,type='sine',delay=0){
  const ac=getAudio();if(!ac)return;
@@ -2153,6 +2172,7 @@ function startSpinSound(totalMs=30000){
 function stopSpinSound(){
  spinSoundActive=false;
  if(spinSoundTimer){clearTimeout(spinSoundTimer);spinSoundTimer=null}
+ endAudioHold()
 }
 function resumeSpinSoundIfNeeded(){
  if(!soundsEnabled())return;
@@ -2381,23 +2401,69 @@ function bindRarityCatalog(){
  document.querySelectorAll('[data-rarity-open]').forEach(b=>b.addEventListener('click',()=>openRarityModal(b.dataset.rarityOpen)))
 }
 
+function selectedCase(){
+ const cases=(spinState&&spinState.case_catalog)||[];
+ let cfg=cases.find(x=>x.id===selectedCaseId);
+ if(!cfg){cfg=cases.find(x=>x.id==='FREE')||cases[0]||null;selectedCaseId=cfg?cfg.id:'FREE'}
+ return cfg
+}
+function caseVisualTier(cfg){
+ if(!cfg||!cfg.tiers||!cfg.tiers.length)return 'GRAY';
+ const order=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD'];
+ return cfg.tiers.map(x=>x.tier).sort((a,b)=>order.indexOf(b)-order.indexOf(a))[0]||'GRAY'
+}
+function spinCasePickerHtml(){
+ const cases=(spinState&&spinState.case_catalog)||[];
+ if(!cases.length)return '';
+ return '<section class="spin-case-picker"><h3>Выберите кейс</h3><div class="spin-case-scroll">'+cases.map(c=>{
+  const active=c.id===selectedCaseId;
+  const visual=caseVisualTier(c);
+  const odds=(c.tiers||[]).map(t=>'<span class="'+tierClass(t.tier)+'">'+tierLabel(t.tier)+' '+Number(t.chance||0)+'%</span>').join('');
+  return '<button type="button" class="spin-case-card '+(active?'active':'')+'" data-spin-case="'+esc(c.id)+'" '+(spinState.pending_drop?'disabled':'')+'><div class="spin-case-top"><div class="loot-cube '+cubeClass(visual)+'"><span>?</span></div><div><div class="spin-case-title">'+esc(c.name)+'</div><div class="spin-case-price">'+esc(c.price_label)+'</div></div></div><div class="spin-case-odds">'+odds+'</div></button>'
+ }).join('')+'</div><div class="spin-case-note">Нажмите на кейс, чтобы выбрать его. Бесплатный кейс открывается здесь; платные случайные открытия за Stars не подключены.</div></section>'
+}
+function bindSpinCasePicker(){
+ document.querySelectorAll('[data-spin-case]').forEach(b=>b.addEventListener('click',async()=>{
+  if(spinNavigationLocked||spinState?.pending_drop)return;
+  selectedCaseId=b.dataset.spinCase||'FREE';
+  localStorage.setItem('shx_selected_case',selectedCaseId);
+  app.innerHTML=await spinHtml();bindSpin();addHomeExit()
+ }))
+}
+function selectedCaseIdleStrip(){
+ const cfg=selectedCase();
+ if(!cfg||!cfg.tiers||!cfg.tiers.length)return idleCubeStrip();
+ let arr=[];
+ for(const t of cfg.tiers){
+  const copies=Math.max(1,Math.round(Number(t.chance||0)/10));
+  for(let i=0;i<copies;i++)arr.push(t.tier)
+ }
+ if(!arr.length)arr=['GRAY'];
+ while(arr.length<9)arr=arr.concat(arr);
+ return arr.slice(0,9).map(t=>cubeHtml(t)).join('')
+}
+
 async function spinHtml(){
  spinState=await api('/api/spin/state');
  const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0);
  const pending=spinState.pending_drop||null;
- const buttonText=pending?'СНАЧАЛА РАЗБЕРИТЕ ДРОП':spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
+ const cfg=selectedCase();
+ const isFree=!cfg||cfg.id==='FREE';
+ const buttonText=pending?'СНАЧАЛА РАЗБЕРИТЕ ДРОП':!isFree?'СЛУЧАЙНОЕ ОТКРЫТИЕ ЗА STARS НЕДОСТУПНО':spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
+ spinCasePickerHtml()+
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0||pending?'disabled':'')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
+ '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0||pending||!isFree?'disabled':'')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
  '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<h3>SHR MARKET</h3><div class="card"><div class="muted">SHR можно получить за продажу выпавших предметов и обменять на гарантированные награды.</div>'+claims+'</div><h3>Последние 5 выпадений</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
+ bindSpinCasePicker();
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
@@ -2523,9 +2589,10 @@ async function spinOnce(){
  b.disabled=true;b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
  if(result)result.textContent='';
  setSpinNavigationLocked(true);
- // Unlock Web Audio directly from the user's tap so iOS/Telegram WebView
- // keeps rarity SFX working even when the reel animation is skipped.
+ // Start audio from the user's tap so Telegram/iOS cannot suspend it while the request is in flight.
  unlockAudio();
+ if(!skip){beginAudioHold();startSpinSound(30000)}
+ else{tone(523.25,.09,.018,'sine')}
  try{
   const d=await api('/api/spin/free',{method:'POST'});
   lastSpinReward=d.reward;
@@ -2537,7 +2604,6 @@ async function spinOnce(){
    showDropFx(d.reward);
    setSpinNavigationLocked(false)
   }else{
-   startSpinSound(30000);
    await animateSpinRight(track,windowEl,d.reward);
    stopSpinSound();sfxStop();
    await sleep(220);
@@ -2550,6 +2616,7 @@ async function spinOnce(){
   }
   b.textContent='НАГРАДА ВЫПАЛА';
  }catch(e){
+  stopSpinSound();
   setSpinNavigationLocked(false);
   b.disabled=false;b.textContent='КРУТИТЬ SPIN';
   alert(e.message)
