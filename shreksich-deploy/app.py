@@ -280,6 +280,61 @@ def pick_case_reward(case_cfg: dict) -> dict:
     tier = random.choices(tiers, weights=weights, k=1)[0]
     return random.choice(by_tier[tier])
 
+
+async def complete_case_opening(conn, opening) -> dict:
+    if opening["status"] == "opened":
+        if not opening["reward_name"] or int(opening["inventory_item_id"] or 0) <= 0:
+            raise HTTPException(409,"Открытие уже завершено некорректно. Обратитесь в поддержку.")
+        return {
+            "opening_id":int(opening["id"]),
+            "inventory_item_id":int(opening["inventory_item_id"]),
+            "sell_shr":int(opening["reward_value"] or 0),
+            "source":opening["payment_method"],
+            "reward":{
+                "name":opening["reward_name"],
+                "tier":opening["reward_tier"],
+                "points":int(opening["reward_value"] or 0),
+                "value_stars":int(opening["reward_value"] or 0),
+            }
+        }
+    if opening["status"] != "paid":
+        raise HTTPException(409,"Оплата кейса ещё не подтверждена")
+    try:
+        snapshot = json.loads(opening["snapshot_json"] or "{}")
+    except json.JSONDecodeError:
+        raise HTTPException(409,"Не удалось прочитать конфигурацию оплаченного кейса")
+    reward = pick_case_reward(snapshot)
+    value = int(reward["value_stars"])
+    source = "case_stars"
+    if opening["payment_method"] == "Donation Ticket":
+        source = "donation_ticket"
+    elif opening["payment_method"] == "Бесплатно":
+        source = "case_free"
+    await conn.execute(
+        "INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points,source) VALUES(?,?,?,?,?)",
+        (int(opening["telegram_id"]),reward["name"],reward["tier"],value,source)
+    )
+    inv = await conn.execute(
+        "INSERT INTO inventory_items(telegram_id,reward_name,reward_tier,sell_shr,value_stars,status,source) "
+        "VALUES(?,?,?,?,?,'pending',?)",
+        (int(opening["telegram_id"]),reward["name"],reward["tier"],value,value,f"case:{opening['case_id']}:{source}")
+    )
+    inventory_item_id = int(inv.lastrowid)
+    cur = await conn.execute(
+        "UPDATE case_openings SET status='opened',reward_name=?,reward_tier=?,reward_value=?,inventory_item_id=?,opened_at=CURRENT_TIMESTAMP "
+        "WHERE id=? AND status='paid'",
+        (reward["name"],reward["tier"],value,inventory_item_id,int(opening["id"]))
+    )
+    if cur.rowcount != 1:
+        raise HTTPException(409,"Открытие уже было обработано")
+    return {
+        "opening_id":int(opening["id"]),
+        "inventory_item_id":inventory_item_id,
+        "sell_shr":value,
+        "source":source,
+        "reward":reward
+    }
+
 SHR_REWARDS = [
     {"points":5,"name":"Набор расходников"},
     {"points":10,"name":"Metro Starter Kit"},
@@ -462,6 +517,7 @@ async def init_db():
       reward_name TEXT NOT NULL DEFAULT '',
       reward_tier TEXT NOT NULL DEFAULT '',
       reward_value INTEGER NOT NULL DEFAULT 0,
+      inventory_item_id INTEGER NOT NULL DEFAULT 0,
       telegram_charge_id TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       paid_at TEXT NOT NULL DEFAULT '',
@@ -546,6 +602,9 @@ async def init_db():
                 json.dumps(case_default_contents(case_cfg),ensure_ascii=False)
             )
         )
+    opening_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(case_openings)")).fetchall()}
+    if "inventory_item_id" not in opening_cols:
+        await conn.execute("ALTER TABLE case_openings ADD COLUMN inventory_item_id INTEGER NOT NULL DEFAULT 0")
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_case_openings_user_status ON case_openings(telegram_id,status)")
     await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_case_openings_charge ON case_openings(telegram_charge_id) WHERE telegram_charge_id<>''")
 
