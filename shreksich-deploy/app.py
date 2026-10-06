@@ -743,6 +743,10 @@ class SpinPromoIn(BaseModel):
     code: str = Field(min_length=3, max_length=32)
 
 
+class InventoryResolveIn(BaseModel):
+    action: str = Field(min_length=4, max_length=8)
+
+
 class PromoToggleIn(BaseModel):
     active: bool
 
@@ -1187,10 +1191,6 @@ async def referral_info(x_telegram_init_data: str | None = Header(default=None))
 
 class UpgradeClaimIn(BaseModel):
     points: int
-
-
-class InventoryResolveIn(BaseModel):
-    action: str = Field(min_length=4, max_length=8)
 
 
 @app.post("/api/upgrade/claim")
