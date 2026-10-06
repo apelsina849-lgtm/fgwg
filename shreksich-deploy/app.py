@@ -1453,6 +1453,253 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
     }
 
 
+async def persist_case_drop(conn, uid: int, case_cfg: dict, source: str, opening_id: int | None = None) -> dict:
+    reward = pick_case_reward(case_cfg)
+    await conn.execute(
+        "INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points,source) VALUES(?,?,?,?,?)",
+        (uid,reward["name"],reward["tier"],int(reward["value_stars"]),source)
+    )
+    inv = await conn.execute(
+        "INSERT INTO inventory_items(telegram_id,reward_name,reward_tier,sell_shr,value_stars,status,source) "
+        "VALUES(?,?,?,?,?,'pending',?)",
+        (uid,reward["name"],reward["tier"],int(reward["value_stars"]),int(reward["value_stars"]),source)
+    )
+    if opening_id is not None:
+        await conn.execute(
+            "UPDATE case_openings SET status='opened',reward_name=?,reward_tier=?,reward_value=?,opened_at=CURRENT_TIMESTAMP "
+            "WHERE id=?",
+            (reward["name"],reward["tier"],int(reward["value_stars"]),opening_id)
+        )
+    return {
+        "reward":reward,
+        "inventory_item_id":int(inv.lastrowid),
+        "sell_shr":int(reward["value_stars"]),
+        "source":source
+    }
+
+
+@app.post("/api/spin/case/start")
+async def case_start(body: CaseStartIn, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    case_id = body.case_id.strip().upper()
+    opening_id = None
+    invoice_case = None
+
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            await conn.execute(
+                "UPDATE case_openings SET status='expired' WHERE telegram_id=? AND status='awaiting_payment' "
+                "AND created_at < datetime('now','-30 minutes')",
+                (uid,)
+            )
+            pending = await (await conn.execute(
+                "SELECT id FROM inventory_items WHERE telegram_id=? AND status='pending' ORDER BY id DESC LIMIT 1",
+                (uid,)
+            )).fetchone()
+            if pending:
+                await conn.rollback()
+                raise HTTPException(409,"Сначала сохраните или продайте предыдущий выпавший предмет")
+            paid = await (await conn.execute(
+                "SELECT id,case_name FROM case_openings WHERE telegram_id=? AND status='paid' ORDER BY id ASC LIMIT 1",
+                (uid,)
+            )).fetchone()
+            if paid:
+                await conn.rollback()
+                raise HTTPException(409,f"Сначала откройте уже оплаченный кейс «{paid['case_name']}»")
+
+            row = await (await conn.execute(
+                "SELECT * FROM case_configs WHERE id=? AND active=1",
+                (case_id,)
+            )).fetchone()
+            if not row:
+                await conn.rollback()
+                raise HTTPException(404,"Кейс не найден или отключён")
+            cfg = parse_case_row(row)
+            if cfg["id"] == "FREE":
+                await conn.rollback()
+                raise HTTPException(400,"Бесплатный базовый кейс открывается обычной кнопкой SPIN")
+
+            # Validate the live case before taking a ticket or creating an invoice.
+            pick_case_reward(cfg)
+
+            if cfg["is_free"]:
+                result = await persist_case_drop(conn,uid,cfg,f"case_free:{case_id}")
+                await conn.commit()
+                if result["reward"]["tier"] in ("RED","GOLD","LEGENDARY","MYTHIC"):
+                    asyncio.create_task(announce_top_drop(uid,result["reward"]))
+                result.update({"mode":"free_case","case_id":case_id,"case_name":cfg["name"]})
+                return result
+
+            ticket_scope = None
+            exact = await (await conn.execute(
+                "SELECT tickets FROM donation_ticket_balances WHERE telegram_id=? AND case_id=?",
+                (uid,case_id)
+            )).fetchone()
+            generic = await (await conn.execute(
+                "SELECT tickets FROM donation_ticket_balances WHERE telegram_id=? AND case_id='*'",
+                (uid,)
+            )).fetchone()
+            if exact and int(exact["tickets"] or 0) > 0:
+                ticket_scope = case_id
+            elif generic and int(generic["tickets"] or 0) > 0:
+                ticket_scope = "*"
+
+            if ticket_scope:
+                await conn.execute(
+                    "UPDATE donation_ticket_balances SET tickets=tickets-1 WHERE telegram_id=? AND case_id=? AND tickets>0",
+                    (uid,ticket_scope)
+                )
+                result = await persist_case_drop(conn,uid,cfg,f"donation_ticket:{case_id}")
+                await conn.commit()
+                if result["reward"]["tier"] in ("RED","GOLD","LEGENDARY","MYTHIC"):
+                    asyncio.create_task(announce_top_drop(uid,result["reward"]))
+                result.update({"mode":"donation_ticket","case_id":case_id,"case_name":cfg["name"]})
+                return result
+
+            if int(cfg["stars_price"] or 0) <= 0:
+                await conn.rollback()
+                raise HTTPException(409,"У кейса не задана цена Stars и он не отмечен бесплатным")
+
+            # A fresh invoice invalidates older unpaid invoices for this user.
+            await conn.execute(
+                "UPDATE case_openings SET status='cancelled' WHERE telegram_id=? AND status='awaiting_payment'",
+                (uid,)
+            )
+            snapshot = {
+                "id":cfg["id"],"name":cfg["name"],"description":cfg["description"],"icon":cfg["icon"],
+                "stars_price":int(cfg["stars_price"]),"tiers":cfg["tiers"],"contents":cfg["contents"]
+            }
+            cur = await conn.execute(
+                "INSERT INTO case_openings(telegram_id,case_id,case_name,stars_amount,payment_method,status,snapshot_json) "
+                "VALUES(?,?,?,?,?,'awaiting_payment',?)",
+                (uid,case_id,cfg["name"],int(cfg["stars_price"]),"Telegram Stars",
+                 json.dumps(snapshot,ensure_ascii=False))
+            )
+            opening_id = int(cur.lastrowid)
+            invoice_case = snapshot
+            await conn.commit()
+        finally:
+            await conn.close()
+
+    try:
+        link = await tg("createInvoiceLink", {
+            "title":invoice_case["name"],
+            "description":f"Открытие кейса {invoice_case['name']} в Шрексич",
+            "payload":f"case:{opening_id}:{uid}",
+            "provider_token":"",
+            "currency":"XTR",
+            "prices":[{"label":invoice_case["name"],"amount":int(invoice_case["stars_price"])}]
+        })
+    except Exception:
+        async with db_write_lock:
+            conn = await db()
+            try:
+                await conn.execute(
+                    "UPDATE case_openings SET status='cancelled' WHERE id=? AND telegram_id=? AND status='awaiting_payment'",
+                    (opening_id,uid)
+                )
+                await conn.commit()
+            finally:
+                await conn.close()
+        raise
+
+    return {
+        "mode":"stars","case_id":case_id,"case_name":invoice_case["name"],
+        "opening_id":opening_id,"stars_price":int(invoice_case["stars_price"]),"url":link
+    }
+
+
+@app.get("/api/spin/case/opening/{opening_id}")
+async def case_opening_status(opening_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    conn = await db()
+    try:
+        row = await (await conn.execute(
+            "SELECT id,case_id,case_name,stars_amount,payment_method,status,reward_name,reward_tier,reward_value,"
+            "created_at,paid_at,opened_at FROM case_openings WHERE id=? AND telegram_id=?",
+            (opening_id,int(u["id"]))
+        )).fetchone()
+    finally:
+        await conn.close()
+    if not row:
+        raise HTTPException(404,"Открытие кейса не найдено")
+    return dict(row)
+
+
+@app.post("/api/spin/case/opening/{opening_id}/cancel")
+async def case_opening_cancel(opening_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    async with db_write_lock:
+        conn = await db()
+        try:
+            cur = await conn.execute(
+                "UPDATE case_openings SET status='cancelled' WHERE id=? AND telegram_id=? AND status='awaiting_payment'",
+                (opening_id,int(u["id"]))
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"cancelled":bool(cur.rowcount)}
+
+
+@app.post("/api/spin/case/opening/{opening_id}/resolve")
+async def case_opening_resolve(opening_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            row = await (await conn.execute(
+                "SELECT * FROM case_openings WHERE id=? AND telegram_id=?",
+                (opening_id,uid)
+            )).fetchone()
+            if not row:
+                await conn.rollback()
+                raise HTTPException(404,"Открытие кейса не найдено")
+            if row["status"] == "opened":
+                item = await (await conn.execute(
+                    "SELECT id,sell_shr FROM inventory_items WHERE telegram_id=? AND source=? ORDER BY id DESC LIMIT 1",
+                    (uid,f"case_stars:{opening_id}")
+                )).fetchone()
+                await conn.rollback()
+                return {
+                    "mode":"stars","source":f"case_stars:{row['case_id']}",
+                    "inventory_item_id":int(item["id"]) if item else 0,
+                    "sell_shr":int(item["sell_shr"]) if item else int(row["reward_value"] or 0),
+                    "reward":{
+                        "name":row["reward_name"],"tier":row["reward_tier"],
+                        "points":int(row["reward_value"] or 0),"value_stars":int(row["reward_value"] or 0)
+                    }
+                }
+            if row["status"] != "paid":
+                await conn.rollback()
+                raise HTTPException(409,"Платёж за кейс ещё не подтверждён")
+            pending = await (await conn.execute(
+                "SELECT id FROM inventory_items WHERE telegram_id=? AND status='pending' ORDER BY id DESC LIMIT 1",
+                (uid,)
+            )).fetchone()
+            if pending:
+                await conn.rollback()
+                raise HTTPException(409,"Сначала сохраните или продайте предыдущий выпавший предмет")
+            try:
+                cfg = json.loads(row["snapshot_json"] or "{}")
+            except Exception:
+                await conn.rollback()
+                raise HTTPException(500,"Не удалось восстановить снимок оплаченного кейса")
+            result = await persist_case_drop(conn,uid,cfg,f"case_stars:{opening_id}",opening_id)
+            await conn.commit()
+        finally:
+            await conn.close()
+    if result["reward"]["tier"] in ("RED","GOLD","LEGENDARY","MYTHIC"):
+        asyncio.create_task(announce_top_drop(uid,result["reward"]))
+    result.update({"mode":"stars","case_id":row["case_id"],"case_name":row["case_name"]})
+    return result
+
+
 @app.post("/api/spin/promo")
 async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
