@@ -33,61 +33,141 @@ db_write_lock = asyncio.Lock()
 MAX_FREE_SPINS_24H = 1
 
 SPIN_TIER_CHANCES = {
-    "COMMON": 97.5,
-    "RARE": 1.8,
-    "EPIC": 0.5,
-    "LEGENDARY": 0.15,
-    "MYTHIC": 0.05,
+    "GRAY": 60.0,
+    "CYAN": 30.0,
+    "BLUE": 10.0,
+    "PURPLE": 0.0,
+    "PINK": 0.0,
+    "RED": 0.0,
+    "GOLD": 0.0,
 }
 
 SPIN_REWARDS = [
-    # COMMON — total 97.5%
-    {"name":"250K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":5},
-    {"name":"500K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":7},
-    {"name":"Набор патронов","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":6},
-    {"name":"Набор аптечек","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":6},
-    {"name":"Набор ремонта","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":7},
-    {"name":"Ящик базовых ресурсов","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":8},
-    {"name":"Тактический ремкомплект","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":9},
-    {"name":"Полевой медпак","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":8},
-    {"name":"Комплект дымовых гранат","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":6},
-    {"name":"Комплект осколочных гранат","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":7},
-    {"name":"Набор пластин брони","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":9},
-    {"name":"Ящик стандартных модулей","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":10},
-    {"name":"750K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":10},
-    {"name":"Набор энергетиков","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":6},
+    # GRAY — 30 items
+    {"name":"250K Metro Cash","tier":"GRAY","weight":1.0,"points":4,"value_stars":4},
+    {"name":"350K Metro Cash","tier":"GRAY","weight":1.0,"points":5,"value_stars":5},
+    {"name":"500K Metro Cash","tier":"GRAY","weight":1.0,"points":6,"value_stars":6},
+    {"name":"600K Metro Cash","tier":"GRAY","weight":1.0,"points":7,"value_stars":7},
+    {"name":"750K Metro Cash","tier":"GRAY","weight":1.0,"points":8,"value_stars":8},
+    {"name":"Базовый набор патронов","tier":"GRAY","weight":1.0,"points":5,"value_stars":5},
+    {"name":"Набор аптечек","tier":"GRAY","weight":1.0,"points":5,"value_stars":5},
+    {"name":"Набор ремонта","tier":"GRAY","weight":1.0,"points":6,"value_stars":6},
+    {"name":"Комплект дымовых гранат","tier":"GRAY","weight":1.0,"points":5,"value_stars":5},
+    {"name":"Комплект осколочных гранат","tier":"GRAY","weight":1.0,"points":6,"value_stars":6},
+    {"name":"Набор энергетиков","tier":"GRAY","weight":1.0,"points":5,"value_stars":5},
+    {"name":"Базовые пластины брони","tier":"GRAY","weight":1.0,"points":7,"value_stars":7},
+    {"name":"Ящик стандартных модулей","tier":"GRAY","weight":1.0,"points":8,"value_stars":8},
+    {"name":"Тактическая сумка","tier":"GRAY","weight":1.0,"points":8,"value_stars":8},
+    {"name":"Полевой медпак","tier":"GRAY","weight":1.0,"points":7,"value_stars":7},
+    {"name":"Лёгкий рюкзак","tier":"GRAY","weight":1.0,"points":7,"value_stars":7},
+    {"name":"Ремкомплект шлема","tier":"GRAY","weight":1.0,"points":8,"value_stars":8},
+    {"name":"Ремкомплект жилета","tier":"GRAY","weight":1.0,"points":8,"value_stars":8},
+    {"name":"Тактические бинты","tier":"GRAY","weight":1.0,"points":5,"value_stars":5},
+    {"name":"Набор обезболивающих","tier":"GRAY","weight":1.0,"points":6,"value_stars":6},
+    {"name":"Мини-набор адреналина","tier":"GRAY","weight":1.0,"points":7,"value_stars":7},
+    {"name":"Базовые детали оружия","tier":"GRAY","weight":1.0,"points":9,"value_stars":9},
+    {"name":"Базовый Supply Case","tier":"GRAY","weight":1.0,"points":9,"value_stars":9},
+    {"name":"Metro Ration Pack","tier":"GRAY","weight":1.0,"points":6,"value_stars":6},
+    {"name":"Набор метательного снаряжения","tier":"GRAY","weight":1.0,"points":7,"value_stars":7},
+    {"name":"Базовый набор ключевых деталей","tier":"GRAY","weight":1.0,"points":10,"value_stars":10},
+    {"name":"Набор радиодеталей","tier":"GRAY","weight":1.0,"points":8,"value_stars":8},
+    {"name":"Набор металлолома","tier":"GRAY","weight":1.0,"points":6,"value_stars":6},
+    {"name":"Набор полимеров","tier":"GRAY","weight":1.0,"points":7,"value_stars":7},
+    {"name":"Стандартный набор инструментов","tier":"GRAY","weight":1.0,"points":9,"value_stars":9},
 
-    # RARE — total 1.8%
-    {"name":"1M Metro Cash","tier":"RARE","weight":0.2,"points":2,"value_stars":14},
-    {"name":"Усиленный набор патронов","tier":"RARE","weight":0.2,"points":2,"value_stars":15},
-    {"name":"Набор брони","tier":"RARE","weight":0.2,"points":2,"value_stars":16},
-    {"name":"Набор модулей оружия","tier":"RARE","weight":0.2,"points":2,"value_stars":18},
-    {"name":"Тактический Supply Case","tier":"RARE","weight":0.2,"points":2,"value_stars":20},
-    {"name":"2M Metro Cash","tier":"RARE","weight":0.2,"points":2,"value_stars":22},
-    {"name":"Набор улучшенной брони","tier":"RARE","weight":0.2,"points":2,"value_stars":24},
-    {"name":"Rare Weapon Parts Pack","tier":"RARE","weight":0.2,"points":2,"value_stars":25},
-    {"name":"Metro Utility Pack","tier":"RARE","weight":0.2,"points":2,"value_stars":26},
+    # CYAN — 22 items
+    {"name":"1M Metro Cash","tier":"CYAN","weight":1.0,"points":14,"value_stars":14},
+    {"name":"1.25M Metro Cash","tier":"CYAN","weight":1.0,"points":16,"value_stars":16},
+    {"name":"1.5M Metro Cash","tier":"CYAN","weight":1.0,"points":18,"value_stars":18},
+    {"name":"Усиленный набор патронов","tier":"CYAN","weight":1.0,"points":17,"value_stars":17},
+    {"name":"Набор брони II","tier":"CYAN","weight":1.0,"points":18,"value_stars":18},
+    {"name":"Набор модулей оружия","tier":"CYAN","weight":1.0,"points":20,"value_stars":20},
+    {"name":"Тактический Supply Case","tier":"CYAN","weight":1.0,"points":21,"value_stars":21},
+    {"name":"Metro Utility Pack","tier":"CYAN","weight":1.0,"points":22,"value_stars":22},
+    {"name":"Улучшенные детали оружия","tier":"CYAN","weight":1.0,"points":23,"value_stars":23},
+    {"name":"Усиленные пластины брони","tier":"CYAN","weight":1.0,"points":21,"value_stars":21},
+    {"name":"Расширенный медицинский набор","tier":"CYAN","weight":1.0,"points":19,"value_stars":19},
+    {"name":"Улучшенный ремкомплект","tier":"CYAN","weight":1.0,"points":20,"value_stars":20},
+    {"name":"Combat Stim Pack","tier":"CYAN","weight":1.0,"points":22,"value_stars":22},
+    {"name":"Рюкзак III уровня","tier":"CYAN","weight":1.0,"points":24,"value_stars":24},
+    {"name":"Детали шлема III уровня","tier":"CYAN","weight":1.0,"points":24,"value_stars":24},
+    {"name":"Детали жилета III уровня","tier":"CYAN","weight":1.0,"points":25,"value_stars":25},
+    {"name":"Набор модулей прицела","tier":"CYAN","weight":1.0,"points":22,"value_stars":22},
+    {"name":"Набор дульных модулей","tier":"CYAN","weight":1.0,"points":23,"value_stars":23},
+    {"name":"Набор рукоятей","tier":"CYAN","weight":1.0,"points":22,"value_stars":22},
+    {"name":"Набор магазинов","tier":"CYAN","weight":1.0,"points":23,"value_stars":23},
+    {"name":"Тактический набор ключей","tier":"CYAN","weight":1.0,"points":27,"value_stars":27},
+    {"name":"Secure Supply Box","tier":"CYAN","weight":1.0,"points":30,"value_stars":30},
 
-    # EPIC — total 0.5%
-    {"name":"3M Metro Cash","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":35},
-    {"name":"Metro Starter Kit+","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":39},
-    {"name":"Elite Supply Pack","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":42},
-    {"name":"5M Metro Cash","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":48},
-    {"name":"Elite Armor Pack","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":50},
-    {"name":"Black Zone Supply Case","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":55},
-    {"name":"Advanced Weapon Kit","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":59},
+    # BLUE — 18 items
+    {"name":"2M Metro Cash","tier":"BLUE","weight":1.0,"points":32,"value_stars":32},
+    {"name":"2.5M Metro Cash","tier":"BLUE","weight":1.0,"points":36,"value_stars":36},
+    {"name":"3M Metro Cash","tier":"BLUE","weight":1.0,"points":40,"value_stars":40},
+    {"name":"Elite Ammo Crate","tier":"BLUE","weight":1.0,"points":38,"value_stars":38},
+    {"name":"Advanced Armor Pack","tier":"BLUE","weight":1.0,"points":42,"value_stars":42},
+    {"name":"Advanced Weapon Kit","tier":"BLUE","weight":1.0,"points":45,"value_stars":45},
+    {"name":"Elite Supply Pack","tier":"BLUE","weight":1.0,"points":46,"value_stars":46},
+    {"name":"Metro Starter Kit+","tier":"BLUE","weight":1.0,"points":44,"value_stars":44},
+    {"name":"Black Zone Supply Case","tier":"BLUE","weight":1.0,"points":48,"value_stars":48},
+    {"name":"High Grade Weapon Parts","tier":"BLUE","weight":1.0,"points":49,"value_stars":49},
+    {"name":"High Grade Armor Plates","tier":"BLUE","weight":1.0,"points":47,"value_stars":47},
+    {"name":"Advanced Module Case","tier":"BLUE","weight":1.0,"points":50,"value_stars":50},
+    {"name":"Tactical Operator Pack","tier":"BLUE","weight":1.0,"points":52,"value_stars":52},
+    {"name":"Premium Repair Cache","tier":"BLUE","weight":1.0,"points":45,"value_stars":45},
+    {"name":"Medical Reserve Case","tier":"BLUE","weight":1.0,"points":43,"value_stars":43},
+    {"name":"Secure Contraband Box","tier":"BLUE","weight":1.0,"points":53,"value_stars":53},
+    {"name":"Metro Vault Key Set","tier":"BLUE","weight":1.0,"points":54,"value_stars":54},
+    {"name":"Classified Supply Crate","tier":"BLUE","weight":1.0,"points":55,"value_stars":55},
 
-    # LEGENDARY — total 0.15%
-    {"name":"Premium Metro Pack","tier":"LEGENDARY","weight":0.0375,"points":6,"value_stars":79},
-    {"name":"Буст 3 квестов","tier":"LEGENDARY","weight":0.0375,"points":6,"value_stars":89},
-    {"name":"Legendary Supply Vault","tier":"LEGENDARY","weight":0.0375,"points":6,"value_stars":99},
-    {"name":"10M Metro Cash","tier":"LEGENDARY","weight":0.0375,"points":6,"value_stars":109},
+    # PURPLE — 12 items
+    {"name":"4M Metro Cash","tier":"PURPLE","weight":1.0,"points":60,"value_stars":60},
+    {"name":"5M Metro Cash","tier":"PURPLE","weight":1.0,"points":65,"value_stars":65},
+    {"name":"6M Metro Cash","tier":"PURPLE","weight":1.0,"points":70,"value_stars":70},
+    {"name":"Elite Armor Pack","tier":"PURPLE","weight":1.0,"points":72,"value_stars":72},
+    {"name":"Elite Weapon Pack","tier":"PURPLE","weight":1.0,"points":75,"value_stars":75},
+    {"name":"Black Market Supply Case","tier":"PURPLE","weight":1.0,"points":78,"value_stars":78},
+    {"name":"Advanced Operator Bundle","tier":"PURPLE","weight":1.0,"points":80,"value_stars":80},
+    {"name":"Classified Weapon Case","tier":"PURPLE","weight":1.0,"points":82,"value_stars":82},
+    {"name":"Classified Armor Case","tier":"PURPLE","weight":1.0,"points":84,"value_stars":84},
+    {"name":"Metro Elite Bundle","tier":"PURPLE","weight":1.0,"points":86,"value_stars":86},
+    {"name":"High Value Contraband Pack","tier":"PURPLE","weight":1.0,"points":88,"value_stars":88},
+    {"name":"Tactical Master Kit","tier":"PURPLE","weight":1.0,"points":90,"value_stars":90},
 
-    # MYTHIC — total 0.05%
-    {"name":"Black Market Pack","tier":"MYTHIC","weight":0.0166666667,"points":10,"value_stars":149},
-    {"name":"Ultimate Metro Bundle","tier":"MYTHIC","weight":0.0166666667,"points":10,"value_stars":179},
-    {"name":"Mythic Contraband Vault","tier":"MYTHIC","weight":0.0166666666,"points":10,"value_stars":199},
+    # PINK — 8 items
+    {"name":"7M Metro Cash","tier":"PINK","weight":1.0,"points":100,"value_stars":100},
+    {"name":"8M Metro Cash","tier":"PINK","weight":1.0,"points":110,"value_stars":110},
+    {"name":"9M Metro Cash","tier":"PINK","weight":1.0,"points":120,"value_stars":120},
+    {"name":"Premium Metro Pack","tier":"PINK","weight":1.0,"points":125,"value_stars":125},
+    {"name":"Premium Contraband Cache","tier":"PINK","weight":1.0,"points":130,"value_stars":130},
+    {"name":"Elite Quest Booster","tier":"PINK","weight":1.0,"points":135,"value_stars":135},
+    {"name":"Black Market Pack","tier":"PINK","weight":1.0,"points":145,"value_stars":145},
+    {"name":"Special Ops Bundle","tier":"PINK","weight":1.0,"points":150,"value_stars":150},
+
+    # RED — 6 items
+    {"name":"10M Metro Cash","tier":"RED","weight":1.0,"points":170,"value_stars":170},
+    {"name":"12M Metro Cash","tier":"RED","weight":1.0,"points":190,"value_stars":190},
+    {"name":"15M Metro Cash","tier":"RED","weight":1.0,"points":220,"value_stars":220},
+    {"name":"Legendary Supply Vault","tier":"RED","weight":1.0,"points":230,"value_stars":230},
+    {"name":"Ultimate Metro Bundle","tier":"RED","weight":1.0,"points":245,"value_stars":245},
+    {"name":"Mythic Contraband Vault","tier":"RED","weight":1.0,"points":260,"value_stars":260},
+
+    # GOLD — 4 items
+    {"name":"20M Metro Cash","tier":"GOLD","weight":1.0,"points":320,"value_stars":320},
+    {"name":"Golden Contraband Vault","tier":"GOLD","weight":1.0,"points":380,"value_stars":380},
+    {"name":"Apex Metro Bundle","tier":"GOLD","weight":1.0,"points":440,"value_stars":440},
+    {"name":"Ultimate Golden Supply","tier":"GOLD","weight":1.0,"points":500,"value_stars":500},
 ]
+
+FREE_SPIN_TIERS = ("GRAY","CYAN","BLUE")
+
+def pick_free_spin_reward():
+    tier = random.choices(
+        ["GRAY","CYAN","BLUE"],
+        weights=[SPIN_TIER_CHANCES["GRAY"],SPIN_TIER_CHANCES["CYAN"],SPIN_TIER_CHANCES["BLUE"]],
+        k=1
+    )[0]
+    pool = [x for x in SPIN_REWARDS if x["tier"] == tier]
+    return random.choice(pool)
 
 SHR_REWARDS = [
     {"points":5,"name":"Набор расходников"},
@@ -987,7 +1067,7 @@ async def spin_history_full(
     period = (period or "all").strip().lower()
     tier = (tier or "ALL").strip().upper()
     allowed_periods = {"all","24h","7d","30d","90d","custom"}
-    allowed_tiers = {"ALL","COMMON","RARE","EPIC","LEGENDARY","MYTHIC"}
+    allowed_tiers = {"ALL","GRAY","CYAN","BLUE","PURPLE","PINK","RED","GOLD","COMMON","RARE","EPIC","LEGENDARY","MYTHIC"}
     if period not in allowed_periods:
         raise HTTPException(400,"Некорректный период")
     if tier not in allowed_tiers:
@@ -1060,7 +1140,7 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
                 source = "ticket"
                 await conn.execute("UPDATE spin_state SET tickets=tickets-1 WHERE telegram_id=?",(uid,))
 
-            reward = random.choices(SPIN_REWARDS, weights=[x["weight"] for x in SPIN_REWARDS], k=1)[0]
+            reward = pick_free_spin_reward()
             await conn.execute(
                 "INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points,source) VALUES(?,?,?,?,?)",
                 (uid,reward["name"],reward["tier"],int(reward["value_stars"]),source)
@@ -1077,7 +1157,7 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
             await conn.close()
 
     free_remaining = max(0, MAX_FREE_SPINS_24H - used - (1 if source=="free" else 0))
-    if reward["tier"] in ("LEGENDARY","MYTHIC"):
+    if reward["tier"] in ("RED","GOLD","LEGENDARY","MYTHIC"):
         asyncio.create_task(announce_top_drop(uid, reward))
     return {
       "reward":reward,"source":source,
@@ -1227,7 +1307,7 @@ async def wins_feed():
             "CASE WHEN COALESCE(u.username,'')<>'' THEN '@'||u.username "
             "WHEN COALESCE(u.first_name,'')<>'' THEN u.first_name ELSE 'Игрок' END player "
             "FROM spin_history h LEFT JOIN users u ON u.telegram_id=h.telegram_id "
-            "WHERE h.reward_tier IN ('LEGENDARY','MYTHIC') ORDER BY h.id DESC LIMIT 30"
+            "WHERE h.reward_tier IN ('RED','GOLD','LEGENDARY','MYTHIC') ORDER BY h.id DESC LIMIT 30"
         )).fetchall()
     finally:
         await conn.close()
@@ -1708,7 +1788,7 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .setting-card h3{margin:0 0 5px;font-size:15px}.setting-card .muted{font-size:11px}
 .switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
 .switch-row input{width:22px;height:22px;accent-color:#ffc21c}
-.spin-options-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.spin-options-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:12px}
 .spin-options-grid .spin-options{margin-top:0;min-height:58px}
 @media(max-width:430px){.spin-options-grid{grid-template-columns:1fr}.settings-grid{grid-template-columns:1fr}}
 .history-filters{background:#111418;border:1px solid #2a3036;border-radius:18px;padding:12px;margin-bottom:12px}
@@ -1723,7 +1803,7 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .wins{height:42px;border:1px solid #2a2f35;background:#0d1013;border-radius:14px;overflow:hidden;margin:0 0 16px;display:flex;align-items:center;position:relative}
 .wins:before{content:"LIVE";position:absolute;z-index:3;left:0;top:0;bottom:0;display:flex;align-items:center;padding:0 10px;font-size:10px;font-weight:950;color:#111;background:linear-gradient(135deg,#ffd431,#f4a900);box-shadow:7px 0 18px #000}
 .wins-track{display:flex;align-items:center;gap:28px;white-space:nowrap;width:max-content;padding-left:65px;animation:ticker 12s linear infinite}
-.win-item{font-size:12px;font-weight:800}.win-item.legendary{color:#ffc15a;text-shadow:0 0 12px #ff970055}.win-item.mythic{color:#ff6262;text-shadow:0 0 14px #ff202088}
+.win-item{font-size:12px;font-weight:800}.win-item.legendary,.win-item.gold{color:#ffd85c;text-shadow:0 0 14px #ffc40088}.win-item.mythic,.win-item.red{color:#ff6262;text-shadow:0 0 14px #ff202088}
 @keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 
 /* Bright vector 3D tiles — no raster images, no gray cards */
@@ -1758,6 +1838,13 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .tier-epic{color:#c985ff;background:#261034;border-color:#8b3fc7;box-shadow:0 0 16px #8b3fc744}
 .tier-legendary{color:#ffbd4a;background:#362109;border-color:#ff9900;box-shadow:0 0 22px #ff990055}
 .tier-mythic{color:#ff6262;background:linear-gradient(135deg,#3d0808,#1e0707);border-color:#ff2d2d;box-shadow:0 0 26px #ff2d2d77}
+.tier-gray{color:#d0d5da;background:#20242a;border-color:#606870}
+.tier-cyan{color:#70efff;background:#082a30;border-color:#22bccc;box-shadow:0 0 14px #27d9e744}
+.tier-blue{color:#65a9ff;background:#0a1d3b;border-color:#2a6fd0;box-shadow:0 0 16px #2a7dff55}
+.tier-purple{color:#c982ff;background:#29103a;border-color:#9142d0;box-shadow:0 0 18px #a64cff66}
+.tier-pink{color:#ff82d6;background:#3b0b2c;border-color:#db399d;box-shadow:0 0 20px #ff4fba77}
+.tier-red{color:#ff6767;background:#3a0808;border-color:#e72c2c;box-shadow:0 0 26px #ff242488}
+.tier-gold{color:#ffe06a;background:#3a2a05;border-color:#ffb400;box-shadow:0 0 30px #ffc40099}
 .rarity-row{margin-top:10px}.rarity-label{font-size:10px;font-weight:950;letter-spacing:1px;margin-bottom:5px}
 .rarity-bar{height:5px;border-radius:999px;position:relative;overflow:hidden;background:#252a30}
 .rarity-bar:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#fff8,transparent);transform:translateX(-120%);animation:raritySweep 2.2s linear infinite}
@@ -1766,6 +1853,13 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .rb-epic{background:linear-gradient(90deg,#6b28a4,#d071ff);box-shadow:0 0 13px #b349ff77}
 .rb-legendary{background:linear-gradient(90deg,#8c5000,#ff9d00,#ffe27a,#ff9d00);background-size:220% 100%;animation:legendaryFlow 1.8s linear infinite;box-shadow:0 0 12px #ff9d00,0 0 25px #ff9d0077}
 .rb-mythic{background:linear-gradient(90deg,#5b0505,#ff1f1f,#ff7777,#ff1f1f,#5b0505);background-size:260% 100%;animation:mythicFlow 1.05s linear infinite;box-shadow:0 0 14px #ff2424,0 0 30px #ff0000aa}
+.rb-gray{background:linear-gradient(90deg,#58616a,#b3bbc3)}
+.rb-cyan{background:linear-gradient(90deg,#087b88,#65f1ff);box-shadow:0 0 10px #43e6f777}
+.rb-blue{background:linear-gradient(90deg,#123d91,#63aaff);box-shadow:0 0 12px #3d86ff77}
+.rb-purple{background:linear-gradient(90deg,#6620a0,#cc78ff);box-shadow:0 0 14px #b54cff88}
+.rb-pink{background:linear-gradient(90deg,#8f155f,#ff78cf,#ffb2e3);background-size:200% 100%;animation:legendaryFlow 2s linear infinite;box-shadow:0 0 18px #ff4fbc88}
+.rb-red{background:linear-gradient(90deg,#5b0505,#ff2323,#ff7777,#ff2323);background-size:240% 100%;animation:mythicFlow 1.25s linear infinite;box-shadow:0 0 20px #ff2525aa}
+.rb-gold{background:linear-gradient(90deg,#8d5700,#ffbe00,#fff0a0,#ffbe00,#8d5700);background-size:260% 100%;animation:legendaryFlow .95s linear infinite;box-shadow:0 0 22px #ffc400,0 0 38px #ff9d0088}
 @keyframes raritySweep{to{transform:translateX(120%)}}@keyframes legendaryFlow{to{background-position:220% 0}}@keyframes mythicFlow{to{background-position:260% 0}}
 
 /* spin */
@@ -1781,6 +1875,20 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .loot-cube:before{content:"";position:absolute;left:10px;right:10px;top:8px;height:17px;border-radius:50%;background:linear-gradient(180deg,#fff7,transparent);pointer-events:none}
 .loot-cube span{position:relative;z-index:2;text-shadow:0 4px 4px #0009}
 .cube-common{background:linear-gradient(145deg,#7b8792,#303840);border-color:#aeb7c0;box-shadow:inset 0 3px 2px #ffffff35,inset 0 -16px 24px #0008,0 0 18px #96a1aa55,0 16px 22px #0008}
+.cube-gray{background:linear-gradient(145deg,#7b8792,#303840);border-color:#aeb7c0;box-shadow:inset 0 3px 2px #ffffff35,inset 0 -16px 24px #0008,0 0 18px #96a1aa55,0 16px 22px #0008}
+.cube-cyan{background:linear-gradient(145deg,#5eefff,#087580);border-color:#9af8ff;box-shadow:inset 0 3px 2px #ffffff55,inset 0 -16px 24px #003b42aa,0 0 24px #48eaff99,0 16px 22px #0008}
+.cube-blue{background:linear-gradient(145deg,#559cff,#123b86);border-color:#8cbdff;box-shadow:inset 0 3px 2px #ffffff50,inset 0 -16px 24px #001a4aaa,0 0 27px #3985ff99,0 16px 22px #0008}
+.cube-purple{background:linear-gradient(145deg,#c060ff,#5a178a);border-color:#d391ff;box-shadow:inset 0 3px 2px #ffffff45,inset 0 -16px 24px #25003daa,0 0 30px #a84cffaa,0 16px 22px #0008}
+.cube-pink{background:linear-gradient(145deg,#ff77d2,#9d176d);border-color:#ffb5e8;box-shadow:inset 0 3px 2px #ffffff55,inset 0 -16px 24px #47002faa,0 0 34px #ff4fbcaa,0 16px 22px #0008;animation:pinkCube 1.35s ease-in-out infinite}
+.cube-red{background:linear-gradient(145deg,#ff4a4a,#a60000 55%,#360000);border-color:#ffb0b0;box-shadow:inset 0 3px 2px #ffffff70,inset 0 -16px 24px #4a0000bb,0 0 38px #ff2020dd,0 0 62px #ff000099,0 16px 22px #0008;animation:redCube .8s ease-in-out infinite;overflow:visible}
+.cube-red:after{content:"⚡";position:absolute;z-index:3;left:50%;top:50%;font-size:25px;color:#fff;opacity:0;transform:translate(-50%,-50%) rotate(-18deg) scale(.45);text-shadow:-28px 15px 0 #ff3b3b,28px -15px 0 #fff,18px 25px 0 #ff1d1d;animation:redLightning 1.15s steps(1,end) infinite;pointer-events:none}
+.cube-gold{background:linear-gradient(145deg,#fff29a,#ffbf00 45%,#9a5600);border-color:#fff4bd;box-shadow:inset 0 3px 2px #ffffffaa,inset 0 -16px 24px #7d3e00aa,0 0 42px #ffc400ee,0 0 78px #ff9d0099,0 16px 22px #0008;animation:goldCube .7s ease-in-out infinite;overflow:visible}
+.cube-gold:after{content:"✦";position:absolute;z-index:3;left:50%;top:50%;font-size:24px;color:#fff9c9;text-shadow:-34px -18px 0 #fff,34px 18px 0 #ffd54a,28px -28px 0 #fff7b0,-25px 30px 0 #ffbf00;animation:goldSpark .95s ease-in-out infinite;pointer-events:none}
+@keyframes pinkCube{0%,100%{filter:brightness(1)}50%{filter:brightness(1.28)}}
+@keyframes redCube{0%,100%{filter:brightness(1)}45%{filter:brightness(1.5)}52%{filter:brightness(2)}58%{filter:brightness(1.2)}}
+@keyframes redLightning{0%,18%,24%,57%,63%,100%{opacity:0}19%,22%,58%,61%{opacity:1;transform:translate(-50%,-50%) rotate(-18deg) scale(1.08)}20%,60%{opacity:.35;transform:translate(-46%,-54%) rotate(9deg) scale(.82)}}
+@keyframes goldCube{0%,100%{filter:brightness(1);transform:perspective(180px) rotateX(7deg) rotateY(-8deg) scale(1)}50%{filter:brightness(1.35);transform:perspective(180px) rotateX(4deg) rotateY(-5deg) scale(1.045)}}
+@keyframes goldSpark{0%,100%{opacity:.35;transform:translate(-50%,-50%) rotate(0deg) scale(.75)}50%{opacity:1;transform:translate(-50%,-50%) rotate(20deg) scale(1.2)}}
 .cube-rare{background:linear-gradient(145deg,#42adff,#0a4b86);border-color:#6ec1ff;box-shadow:inset 0 3px 2px #ffffff45,inset 0 -16px 24px #001a35aa,0 0 24px #249cff88,0 16px 22px #0008}
 .cube-epic{background:linear-gradient(145deg,#c060ff,#5a178a);border-color:#d391ff;box-shadow:inset 0 3px 2px #ffffff45,inset 0 -16px 24px #25003daa,0 0 28px #a84cff99,0 16px 22px #0008}
 .cube-legendary{background:linear-gradient(145deg,#ffd35a,#c66a00);border-color:#ffe49a;box-shadow:inset 0 3px 2px #ffffff66,inset 0 -16px 24px #5a2400aa,0 0 32px #ff9d00bb,0 16px 22px #0008;animation:legendaryCube 1.2s ease-in-out infinite}
@@ -1832,6 +1940,9 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .drop-fx.mythic{background:radial-gradient(circle at 50% 40%,#7a090999,#000e 58%)}
 .drop-fx.mythic .drop-card{border-color:#ff3131;box-shadow:0 0 80px #ff202099,0 0 140px #a8000066;animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards,mythicPulse .7s ease-in-out 3}
 .drop-fx.mythic .drop-card:before{content:"";position:absolute;inset:-70%;background:conic-gradient(from 0deg,transparent,#ff242455,transparent,#ff7a7a44,transparent);animation:mythicSpin 2s linear infinite}.drop-fx.mythic .drop-card:after{content:"⚡";position:absolute;left:12%;top:14%;font-size:64px;color:#fff;z-index:1;text-shadow:210px 35px 0 #ff3434,110px 180px 0 #fff;animation:dropLightning .9s steps(1,end) infinite;opacity:0}@keyframes dropLightning{0%,32%,40%,75%,83%,100%{opacity:0}33%,37%,76%,80%{opacity:1;filter:drop-shadow(0 0 16px #ff2020)}}
+.drop-fx.red{background:radial-gradient(circle at 50% 40%,#7a090999,#000e 58%)}.drop-fx.red .drop-card{border-color:#ff3131;box-shadow:0 0 90px #ff2020aa,0 0 150px #a8000077;animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards,mythicPulse .65s ease-in-out 4}.drop-fx.red .drop-card:after{content:"⚡";position:absolute;left:12%;top:14%;font-size:64px;color:#fff;z-index:1;text-shadow:210px 35px 0 #ff3434,110px 180px 0 #fff;animation:dropLightning .8s steps(1,end) infinite;opacity:0}
+.drop-fx.gold{background:radial-gradient(circle at 50% 40%,#8a650099,#000e 60%)}.drop-fx.gold .drop-card{border-color:#ffd43b;box-shadow:0 0 100px #ffc400cc,0 0 180px #ff8c0077;animation:dropPop .65s cubic-bezier(.2,1.45,.3,1) forwards,goldDropPulse .55s ease-in-out 5}.drop-fx.gold .drop-card:before{content:"";position:absolute;inset:-70%;background:conic-gradient(from 0deg,transparent,#fff29a77,transparent,#ffbe0088,transparent);animation:mythicSpin 1.25s linear infinite}.drop-fx.gold .drop-card:after{content:"✦";position:absolute;left:8%;top:8%;font-size:72px;color:#fff7bd;z-index:1;text-shadow:230px 30px 0 #ffd84a,105px 190px 0 #fff,210px 175px 0 #ffbf00;animation:goldDropStars .75s ease-in-out infinite}
+@keyframes goldDropPulse{0%,100%{filter:brightness(1);transform:scale(1)}50%{filter:brightness(1.5);transform:scale(1.065)}}@keyframes goldDropStars{0%,100%{opacity:.35;transform:rotate(0deg) scale(.8)}50%{opacity:1;transform:rotate(20deg) scale(1.15)}}
 .drop-content{position:relative;z-index:2}.spark{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 14px currentColor;animation:sparkFly 1.2s ease-out forwards}
 @keyframes fxFade{from{opacity:0}to{opacity:1}}@keyframes dropPop{to{transform:scale(1)}}@keyframes legendaryPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}@keyframes mythicPulse{0%,100%{filter:brightness(1);transform:scale(1)}50%{filter:brightness(1.55);transform:scale(1.06)}}@keyframes mythicSpin{to{transform:rotate(360deg)}}@keyframes sparkFly{from{transform:translate(0,0) scale(1);opacity:1}to{transform:translate(var(--x),var(--y)) scale(0);opacity:0}}
 
@@ -1984,12 +2095,14 @@ function resumeSpinSoundIfNeeded(){
 function sfxStop(){if(!soundsEnabled())return;noiseBurst(.09,.035);tone(150,.16,.05,'sine');tone(82,.22,.035,'triangle',.035)}
 function sfxDrop(tier){
  if(!soundsEnabled())return;
- const t=String(tier||'COMMON').toUpperCase();
- if(t==='COMMON'){tone(520,.12,.035,'sine');tone(660,.12,.025,'sine',.08)}
- else if(t==='RARE'){tone(520,.13,.035,'triangle');tone(720,.16,.04,'triangle',.08);tone(920,.18,.035,'sine',.16)}
- else if(t==='EPIC'){[440,660,880,1100].forEach((f,i)=>tone(f,.22,.045,'triangle',i*.07))}
- else if(t==='LEGENDARY'){noiseBurst(.18,.035);[392,523,659,784,1047].forEach((f,i)=>tone(f,.32,.055,'sine',i*.085))}
- else {noiseBurst(.28,.055);tone(110,.5,.06,'sawtooth');[440,554,659,880,1108,1320].forEach((f,i)=>tone(f,.28,.055,i%2?'square':'triangle',.08+i*.065))}
+ const t=String(tier||'GRAY').toUpperCase();
+ if(t==='GRAY'||t==='COMMON'){tone(520,.12,.03,'sine');tone(660,.12,.022,'sine',.08)}
+ else if(t==='CYAN'||t==='RARE'){tone(520,.13,.032,'triangle');tone(720,.16,.036,'triangle',.08);tone(920,.18,.03,'sine',.16)}
+ else if(t==='BLUE'){[440,587,784].forEach((f,i)=>tone(f,.18,.038,'triangle',i*.07))}
+ else if(t==='PURPLE'||t==='EPIC'){[440,660,880,1100].forEach((f,i)=>tone(f,.22,.045,'triangle',i*.07))}
+ else if(t==='PINK'){[523,659,784,1047,1318].forEach((f,i)=>tone(f,.25,.048,'sine',i*.065))}
+ else if(t==='RED'||t==='MYTHIC'){noiseBurst(.22,.045);tone(110,.45,.05,'sawtooth');[440,554,659,880,1108].forEach((f,i)=>tone(f,.3,.052,i%2?'square':'triangle',.07+i*.07))}
+ else {noiseBurst(.3,.055);[392,523,659,784,1047,1318,1568].forEach((f,i)=>tone(f,.38,.06,'sine',i*.07))}
 }
 function sfxSell(){if(!soundsEnabled())return;[660,880,1100,1320].forEach((f,i)=>tone(f,.13,.04,'triangle',i*.055))}
 function sfxSave(){if(!soundsEnabled())return;noiseBurst(.08,.018);tone(420,.13,.035,'sine');tone(630,.18,.035,'sine',.08);tone(840,.2,.03,'sine',.14)}
@@ -2030,7 +2143,7 @@ async function loadWinsFeed(){
   const wins=await api('/api/wins-feed');
   const el=document.querySelector('#winsTicker .wins-track');if(!el)return;
   if(!wins.length){el.innerHTML='<span class="muted">Пока ждём первый Legendary / Mythic дроп</span>';return}
-  const one=wins.map(x=>'<span class="win-item '+String(x.reward_tier).toLowerCase()+'">'+(x.reward_tier==='MYTHIC'?'◆':'★')+' '+esc(x.player)+' выбил '+esc(x.reward_name)+' <b>'+esc(x.reward_tier)+'</b></span>').join('');
+  const one=wins.map(x=>'<span class="win-item '+String(x.reward_tier).toLowerCase()+'">'+(x.reward_tier==='RED'||x.reward_tier==='MYTHIC'?'◆':'★')+' '+esc(x.player)+' выбил '+esc(x.reward_name)+' <b>'+esc(x.reward_tier)+'</b></span>').join('');
   el.innerHTML=one+one;
  }catch(_){}
 }
@@ -2120,10 +2233,11 @@ async function ordersHtml(){
 }
 
 function showDropFx(reward){
- if(!reward||(reward.tier!=='LEGENDARY'&&reward.tier!=='MYTHIC'))return;
- try{if(tg&&tg.HapticFeedback){tg.HapticFeedback.notificationOccurred('success');tg.HapticFeedback.impactOccurred(reward.tier==='MYTHIC'?'heavy':'medium')}}catch(_){}
+ if(!reward||!['RED','GOLD','LEGENDARY','MYTHIC'].includes(reward.tier))return;
+ const top=reward.tier==='GOLD'||reward.tier==='LEGENDARY';
+ try{if(tg&&tg.HapticFeedback){tg.HapticFeedback.notificationOccurred('success');tg.HapticFeedback.impactOccurred('heavy')}}catch(_){}
  const fx=document.createElement('div');fx.className='drop-fx '+reward.tier.toLowerCase();
- fx.innerHTML='<div class="drop-card"><div class="drop-content"><h2>'+(reward.tier==='MYTHIC'?'MYTHIC DROP!':'LEGENDARY DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div>'+rarityBar(reward.tier)+'<div class="muted" style="margin-top:12px">Продажа: '+reward.points+' SHR</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
+ fx.innerHTML='<div class="drop-card"><div class="drop-content"><h2>'+(top?'GOLD DROP!':'RED DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div>'+rarityBar(reward.tier)+'<div class="muted" style="margin-top:12px">Продажа: '+reward.points+' SHR</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
  document.body.appendChild(fx);const card=fx.querySelector('.drop-card'),total=reward.tier==='MYTHIC'?30:20;
  for(let i=0;i<total;i++){const s=document.createElement('i');s.className='spark';const a=Math.PI*2*i/total,d=90+Math.random()*170;s.style.left=(45+Math.random()*10)+'%';s.style.top=(45+Math.random()*10)+'%';s.style.setProperty('--x',(Math.cos(a)*d)+'px');s.style.setProperty('--y',(Math.sin(a)*d)+'px');s.style.color=reward.tier==='MYTHIC'?(i%2?'#ff4bd8':'#8b62ff'):'#ffad25';card.appendChild(s)}
  fx.querySelector('#closeDrop').addEventListener('click',()=>fx.remove())
@@ -2143,7 +2257,7 @@ function utcFilterValue(value){
  return d.toISOString().slice(0,19).replace('T',' ')
 }
 function tierLabel(tier){
- const labels={COMMON:'COMMON',RARE:'RARE',EPIC:'EPIC',LEGENDARY:'LEGENDARY',MYTHIC:'MYTHIC'};
+ const labels={GRAY:'СЕРЫЙ',CYAN:'ГОЛУБОЙ',BLUE:'СИНИЙ',PURPLE:'ФИОЛЕТОВЫЙ',PINK:'РОЗОВЫЙ',RED:'КРАСНЫЙ',GOLD:'ЗОЛОТОЙ',COMMON:'COMMON',RARE:'RARE',EPIC:'EPIC',LEGENDARY:'LEGENDARY',MYTHIC:'MYTHIC'};
  return labels[String(tier||'').toUpperCase()]||String(tier||'')
 }
 function tierChance(tier){
@@ -2151,7 +2265,7 @@ function tierChance(tier){
  return Number(v||0)
 }
 function rarityCatalogHtml(){
- const tiers=['COMMON','RARE','EPIC','LEGENDARY','MYTHIC'];
+ const tiers=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD'];
  return '<section class="rarity-catalog"><div class="rarity-catalog-head"><h3>Качество кубиков</h3><div class="mini">Нажмите на кубик<br>чтобы посмотреть содержимое</div></div><div class="rarity-scroll">'+
  tiers.map(t=>{
    const count=(spinState.rewards||[]).filter(x=>x.tier===t).length;
@@ -2183,7 +2297,7 @@ async function spinHtml(){
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
  '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
- '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label><label class="spin-options"><input type="checkbox" id="spinSoundToggle" '+(soundsEnabled()?'checked':'')+'><span>Звуки эффектов</span></label></div>'+
+ '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
  '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
  rarityCatalogHtml()+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
@@ -2193,10 +2307,6 @@ function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
- const snd=document.getElementById('spinSoundToggle');if(snd)snd.addEventListener('change',()=>{
-  setSoundEnabled(snd.checked);
-  const other=document.getElementById('settingsSound');if(other)other.checked=snd.checked
- });
  bindRarityCatalog();
  document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
 }
@@ -2217,18 +2327,14 @@ function cubeHtml(tier,extra=''){
 }
 function visualTier(){
  const r=Math.random()*100;
- const common=tierChance('COMMON');
- const rare=common+tierChance('RARE');
- const epic=rare+tierChance('EPIC');
- const legendary=epic+tierChance('LEGENDARY');
- if(r<common)return 'COMMON';
- if(r<rare)return 'RARE';
- if(r<epic)return 'EPIC';
- if(r<legendary)return 'LEGENDARY';
- return 'MYTHIC'
+ const gray=tierChance('GRAY');
+ const cyan=gray+tierChance('CYAN');
+ if(r<gray)return 'GRAY';
+ if(r<cyan)return 'CYAN';
+ return 'BLUE'
 }
 function idleCubeStrip(){
- const tiers=['COMMON','RARE','COMMON','EPIC','COMMON','RARE','COMMON','LEGENDARY','COMMON'];
+ const tiers=['GRAY','CYAN','GRAY','BLUE','GRAY','CYAN','GRAY','BLUE','GRAY'];
  return tiers.map(t=>cubeHtml(t)).join('')
 }
 function buildSpinStrip(reward){
@@ -2394,7 +2500,7 @@ async function dropHistoryHtml(){
  const d=await api('/api/spin/history?'+q.toString());
  const items=(d.items||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  return '<section class="hero"><div class="cat">ИСТОРИЯ ДРОПОВ</div><h1>Все выпадения</h1><div class="muted">Фильтруйте историю по времени и качеству кубика.</div></section>'+
- '<div class="history-filters"><div class="history-filter-grid"><select id="historyTier"><option value="ALL">Все редкости</option><option value="COMMON">Common</option><option value="RARE">Rare</option><option value="EPIC">Epic</option><option value="LEGENDARY">Legendary</option><option value="MYTHIC">Mythic</option></select><button class="secondary" id="historyApply">Применить фильтр</button><input id="historyFrom" type="datetime-local" aria-label="С даты"><input id="historyTo" type="datetime-local" aria-label="По дату"></div>'+
+ '<div class="history-filters"><div class="history-filter-grid"><select id="historyTier"><option value="ALL">Все редкости</option><option value="GRAY">Серый</option><option value="CYAN">Голубой</option><option value="BLUE">Синий</option><option value="PURPLE">Фиолетовый</option><option value="PINK">Розовый</option><option value="RED">Красный</option><option value="GOLD">Золотой</option></select><button class="secondary" id="historyApply">Применить фильтр</button><input id="historyFrom" type="datetime-local" aria-label="С даты"><input id="historyTo" type="datetime-local" aria-label="По дату"></div>'+
  '<div class="history-periods"><button data-hperiod="all">Всё время</button><button data-hperiod="24h">24 часа</button><button data-hperiod="7d">7 дней</button><button data-hperiod="30d">30 дней</button><button data-hperiod="90d">90 дней</button><button data-hperiod="custom">Свой период</button></div></div>'+
  '<div class="history-result-head"><h3 style="margin:0">Найдено: '+d.count+'</h3><div class="mini">до 500 записей</div></div>'+
  (items||'<div class="empty">По выбранным фильтрам выпадений нет.</div>')
@@ -2432,7 +2538,6 @@ function bindSettings(){
  const a=document.getElementById('settingsSkip');if(a)a.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',a.checked?'1':'0'));
  const s=document.getElementById('settingsSound');if(s)s.addEventListener('change',()=>{
   setSoundEnabled(s.checked);
-  const other=document.getElementById('spinSoundToggle');if(other)other.checked=s.checked
  });
  document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)))
 }
