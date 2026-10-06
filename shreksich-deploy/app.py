@@ -1851,15 +1851,22 @@ function noiseBurst(dur=.08,vol=.025,delay=0){
 function playSpinTick(progress=0){
  if(!soundsEnabled())return;
  const p=Math.max(0,Math.min(1,progress));
- tone(520-p*250,.035,.018,'square'); if(p>.82)tone(330-p*100,.045,.012,'triangle',.008)
+ const body=178-p*58;
+ noiseBurst(.025,.011+p*.004);
+ tone(body,.055,.024,'triangle');
+ tone(620-p*240,.032,.010,'sine',.008);
+ if(p>.72)tone(118-p*28,.07,.014,'sine',.018)
 }
-function startSpinSound(totalMs=20000){
+function startSpinSound(totalMs=30000){
  stopSpinSound();if(!soundsEnabled())return;
  spinSoundStarted=performance.now();
  const loop=()=>{
   const p=Math.min(1,(performance.now()-spinSoundStarted)/totalMs);
   playSpinTick(p);
-  if(p<1){const gap=45+Math.pow(p,3)*320;spinSoundTimer=setTimeout(loop,gap)}
+  if(p<1){
+   const gap=Math.round(135 + Math.pow(p,2.35)*760);
+   spinSoundTimer=setTimeout(loop,gap)
+  }
  };
  loop()
 }
@@ -2105,22 +2112,22 @@ function centerTrackOnTarget(track,windowEl,targetIndex,animate){
   track.style.transform='translate3d('+finalX+'px,-50%,0)';
   return Promise.resolve()
  }
- const travel=Math.max(5500,windowEl.clientWidth*14);
+ const travel=Math.max(6000,windowEl.clientWidth*15);
  const startX=finalX-travel;
  track.style.transform='translate3d('+startX+'px,-50%,0)';
  void track.offsetWidth;
  if(track.animate){
   const anim=track.animate([
    {transform:'translate3d('+startX+'px,-50%,0)',offset:0},
-   {transform:'translate3d('+(finalX-2850)+'px,-50%,0)',offset:.26},
-   {transform:'translate3d('+(finalX-1450)+'px,-50%,0)',offset:.50},
-   {transform:'translate3d('+(finalX-620)+'px,-50%,0)',offset:.70},
-   {transform:'translate3d('+(finalX-250)+'px,-50%,0)',offset:.84},
-   {transform:'translate3d('+(finalX-78)+'px,-50%,0)',offset:.94},
+   {transform:'translate3d('+(finalX-3300)+'px,-50%,0)',offset:.25},
+   {transform:'translate3d('+(finalX-1750)+'px,-50%,0)',offset:.50},
+   {transform:'translate3d('+(finalX-760)+'px,-50%,0)',offset:.70},
+   {transform:'translate3d('+(finalX-300)+'px,-50%,0)',offset:.84},
+   {transform:'translate3d('+(finalX-92)+'px,-50%,0)',offset:.95},
    {transform:'translate3d('+finalX+'px,-50%,0)',offset:1}
   ],{
-   duration:20000,
-   easing:'cubic-bezier(.04,.76,.10,1)',
+   duration:30000,
+   easing:'cubic-bezier(.035,.70,.10,1)',
    fill:'forwards'
   });
   return anim.finished.catch(()=>{}).then(()=>{
@@ -2128,10 +2135,9 @@ function centerTrackOnTarget(track,windowEl,targetIndex,animate){
    anim.cancel()
   })
  }
- track.style.transition='transform 20s cubic-bezier(.04,.76,.10,1)';
+ track.style.transition='transform 30s cubic-bezier(.035,.70,.10,1)';
  track.style.transform='translate3d('+finalX+'px,-50%,0)';
- return sleep(20050).then(()=>{track.style.transition=''})
-}
+ return sleep(30050).then(()=>{track.style.transition=''})}
 async function animateSpinRight(track,windowEl,reward){
  const strip=buildSpinStrip(reward);
  track.innerHTML=strip.html;
@@ -2183,7 +2189,7 @@ async function spinOnce(){
    try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
    showDropFx(d.reward)
   }else{
-   startSpinSound(20000);
+   startSpinSound(30000);
    await animateSpinRight(track,windowEl,d.reward);
    stopSpinSound();sfxStop();
    await sleep(220);
@@ -2243,7 +2249,7 @@ function settingsHtml(){
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  const sound=soundsEnabled();
  return '<section class="hero"><div class="cat">НАСТРОЙКИ</div><h1>Шрексич</h1><div class="muted">Управляйте анимацией, звуками и быстрыми разделами.</div></section>'+
- '<div class="settings-grid"><div class="setting-card"><h3>Анимация SPIN</h3><div class="muted">Обычный прокрут длится 20 секунд и плавно останавливается.</div><label class="switch-row"><span>Пропускать анимацию</span><input type="checkbox" id="settingsSkip" '+(skip?'checked':'')+'></label></div>'+
+ '<div class="settings-grid"><div class="setting-card"><h3>Анимация SPIN</h3><div class="muted">Обычный прокрут длится 30 секунд: быстрый старт и плавное замедление до полной остановки.</div><label class="switch-row"><span>Пропускать анимацию</span><input type="checkbox" id="settingsSkip" '+(skip?'checked':'')+'></label></div>'+
  '<div class="setting-card"><h3>Звуки эффектов</h3><div class="muted">Прокрут, остановка, выпадение, продажа и сохранение. SFX генерируются внутри приложения.</div><label class="switch-row"><span>Звуки включены</span><input type="checkbox" id="settingsSound" '+(sound?'checked':'')+'></label></div></div>'+
  '<div class="sticker-grid">'+sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+sticker('Поддержка','Обращения и помощь','support','st-blue','data-go="support"')+'</div>'
 }
