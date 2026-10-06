@@ -292,6 +292,12 @@ async def init_db():
         "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,"
         "resolved_at TEXT NOT NULL DEFAULT '')"
     )
+    for reward in SPIN_REWARDS:
+        await conn.execute(
+            "UPDATE inventory_items SET sell_shr=?, value_stars=? "
+            "WHERE reward_name=? AND status IN ('pending','saved')",
+            (int(reward["value_stars"]), int(reward["value_stars"]), reward["name"])
+        )
     spin_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(spin_history)")).fetchall()}
     if "source" not in spin_cols:
         await conn.execute("ALTER TABLE spin_history ADD COLUMN source TEXT NOT NULL DEFAULT 'free'")
@@ -994,12 +1000,12 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
             reward = random.choices(SPIN_REWARDS, weights=[x["weight"] for x in SPIN_REWARDS], k=1)[0]
             await conn.execute(
                 "INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points,source) VALUES(?,?,?,?,?)",
-                (uid,reward["name"],reward["tier"],reward["points"],source)
+                (uid,reward["name"],reward["tier"],int(reward["value_stars"]),source)
             )
             inv = await conn.execute(
                 "INSERT INTO inventory_items(telegram_id,reward_name,reward_tier,sell_shr,value_stars,status,source) "
                 "VALUES(?,?,?,?,?,'pending','spin')",
-                (uid,reward["name"],reward["tier"],int(reward["points"]),int(reward["value_stars"]))
+                (uid,reward["name"],reward["tier"],int(reward["value_stars"]),int(reward["value_stars"]))
             )
             inventory_item_id = inv.lastrowid
             await conn.commit()
@@ -1013,7 +1019,7 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
     return {
       "reward":reward,"source":source,
       "inventory_item_id":inventory_item_id,
-      "sell_shr":int(reward["points"]),
+      "sell_shr":int(reward["value_stars"]),
       "free_remaining":free_remaining,
       "bonus_tickets":int(state["tickets"] or 0),
       "remaining_spins":free_remaining + int(state["tickets"] or 0),
