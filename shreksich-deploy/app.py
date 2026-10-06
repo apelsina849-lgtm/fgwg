@@ -437,6 +437,42 @@ async def init_db():
       rewarded INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS case_configs(
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      icon TEXT NOT NULL DEFAULT 'crate',
+      stars_price INTEGER NOT NULL DEFAULT 0,
+      is_free INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      tiers_json TEXT NOT NULL DEFAULT '[]',
+      contents_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS case_openings(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id INTEGER NOT NULL,
+      case_id TEXT NOT NULL,
+      case_name TEXT NOT NULL,
+      stars_amount INTEGER NOT NULL DEFAULT 0,
+      payment_method TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'awaiting_payment',
+      snapshot_json TEXT NOT NULL DEFAULT '{}',
+      reward_name TEXT NOT NULL DEFAULT '',
+      reward_tier TEXT NOT NULL DEFAULT '',
+      reward_value INTEGER NOT NULL DEFAULT 0,
+      telegram_charge_id TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      paid_at TEXT NOT NULL DEFAULT '',
+      opened_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS donation_ticket_balances(
+      telegram_id INTEGER NOT NULL,
+      case_id TEXT NOT NULL DEFAULT '*',
+      tickets INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(telegram_id,case_id)
+    );
     """)
     # Lightweight SQLite migrations for the persistent Railway volume.
     user_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(users)")).fetchall()}
@@ -460,6 +496,10 @@ async def init_db():
         await conn.execute("ALTER TABLE promos ADD COLUMN promo_type TEXT NOT NULL DEFAULT 'discount'")
     if "spin_tickets" not in promo_cols:
         await conn.execute("ALTER TABLE promos ADD COLUMN spin_tickets INTEGER NOT NULL DEFAULT 0")
+    if "donation_tickets" not in promo_cols:
+        await conn.execute("ALTER TABLE promos ADD COLUMN donation_tickets INTEGER NOT NULL DEFAULT 0")
+    if "case_id" not in promo_cols:
+        await conn.execute("ALTER TABLE promos ADD COLUMN case_id TEXT NOT NULL DEFAULT ''")
     # Rescue legacy SPIN promos created before spin_tickets was stored reliably.
     await conn.execute("UPDATE promos SET spin_tickets=1 WHERE lower(promo_type)='spin' AND COALESCE(spin_tickets,0)<=0")
     await conn.execute(
@@ -492,6 +532,23 @@ async def init_db():
     spin_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(spin_history)")).fetchall()}
     if "source" not in spin_cols:
         await conn.execute("ALTER TABLE spin_history ADD COLUMN source TEXT NOT NULL DEFAULT 'free'")
+
+    # Seed editable case configuration once. Existing admin changes are never overwritten.
+    for case_cfg in DEFAULT_CASE_CATALOG:
+        await conn.execute(
+            "INSERT OR IGNORE INTO case_configs(id,name,description,icon,stars_price,is_free,active,sort_order,tiers_json,contents_json) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (
+                case_cfg["id"],case_cfg["name"],case_cfg.get("description",""),case_cfg.get("icon","crate"),
+                int(case_cfg.get("stars_price",0)),1 if case_cfg.get("is_free") else 0,
+                1 if case_cfg.get("active",True) else 0,int(case_cfg.get("sort_order",0)),
+                json.dumps(case_cfg.get("tiers",[]),ensure_ascii=False),
+                json.dumps(case_default_contents(case_cfg),ensure_ascii=False)
+            )
+        )
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_case_openings_user_status ON case_openings(telegram_id,status)")
+    await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_case_openings_charge ON case_openings(telegram_charge_id) WHERE telegram_charge_id<>''")
+
     reset = await (await conn.execute("SELECT value FROM settings WHERE key='bonus_tickets_v1'")).fetchone()
     if not reset:
         await conn.execute("UPDATE spin_state SET tickets=0")
