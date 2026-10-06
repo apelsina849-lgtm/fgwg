@@ -1468,6 +1468,20 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
             if pending:
                 await conn.rollback()
                 raise HTTPException(409,"Сначала сохраните или продайте предыдущий выпавший предмет")
+            paid_case = await (await conn.execute(
+                "SELECT id,case_name FROM case_openings WHERE telegram_id=? AND status='paid' ORDER BY id ASC LIMIT 1",
+                (uid,)
+            )).fetchone()
+            if paid_case:
+                await conn.rollback()
+                raise HTTPException(409,f"Сначала откройте уже оплаченный кейс «{paid_case['case_name']}»")
+            case_row = await (await conn.execute(
+                "SELECT * FROM case_configs WHERE id='FREE' AND active=1"
+            )).fetchone()
+            if not case_row:
+                await conn.rollback()
+                raise HTTPException(409,"Бесплатный кейс сейчас отключён")
+            free_cfg = parse_case_row(case_row)
             used_row = await (await conn.execute(
                 "SELECT COUNT(*) c FROM spin_history WHERE telegram_id=? AND source='free' AND created_at >= datetime('now','-24 hours')",
                 (uid,)
@@ -1477,11 +1491,11 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
             if used >= MAX_FREE_SPINS_24H:
                 if int(state["tickets"] or 0) <= 0:
                     await conn.rollback()
-                    raise HTTPException(429,"Бесплатный SPIN уже использован. Следующее вращение будет доступно позже.")
+                    raise HTTPException(429,"Лимит бесплатных SPIN исчерпан. Следующее вращение будет доступно позже.")
                 source = "ticket"
                 await conn.execute("UPDATE spin_state SET tickets=tickets-1 WHERE telegram_id=?",(uid,))
 
-            reward = pick_free_spin_reward()
+            reward = pick_case_reward(free_cfg)
             await conn.execute(
                 "INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points,source) VALUES(?,?,?,?,?)",
                 (uid,reward["name"],reward["tier"],int(reward["value_stars"]),source)
@@ -3482,8 +3496,8 @@ function adminCases(){
 function adminPromos(){
  const cases=(adminData.cases&&adminData.cases.cases)||[];
  const caseOptions='<option value="*">Все донат-кейсы</option>'+cases.filter(c=>c.id!=='FREE').map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>').join('');
- return '<h2>Промокоды</h2><div class="card"><select id="promoTypeNew"><option value="discount">Скидка на покупку</option><option value="spin">Обычные SPIN-билеты</option><option value="donation">Синие Donation Tickets</option></select><input id="promoCodeNew" placeholder="Код"><div class="row"><input id="promoDiscountNew" type="number" min="0" max="90" placeholder="Скидка %"><input id="promoSpinNew" type="number" min="0" max="100" placeholder="SPIN-билетов"></div><div class="row"><input id="promoDonationNew" type="number" min="0" max="100" placeholder="Donation Tickets"><select id="promoDonationCaseNew">'+caseOptions+'</select></div><div class="row"><input id="promoUsesNew" type="number" value="0" placeholder="Участников (0=∞)"><input id="promoExpiryNew" placeholder="Срок: 2026-12-31 23:59:59"></div><div class="mini">Donation Ticket — отдельный синий тикет, открывающий донат-кейс без списания Stars.</div><button class="buy" id="promoCreateBtn" style="margin-top:10px">Создать промокод</button></div>'+
- adminData.promos.map(p=>{const type=String(p.promo_type||'').toLowerCase();const isDonation=type==='donation'||Number(p.donation_tickets||0)>0;const isSpin=!isDonation&&(Number(p.spin_tickets||0)>0||type==='spin');const reward=isDonation?('🎟️ +'+Math.max(1,Number(p.donation_tickets||0))+' Donation'):isSpin?('🎟 +'+Math.max(1,Number(p.spin_tickets||0))+' SPIN'):('-'+p.discount_percent+'% ⭐');const typeText=isDonation?'Donation Ticket промокод'+(p.case_id&&p.case_id!=='*'?' • '+esc(p.case_id):' • все кейсы'):isSpin?'SPIN-промокод':'Скидочный промокод';return '<div class="admin-card"><div class="name">'+esc(p.code)+' • <span class="'+(isDonation?'blue-ticket':'')+'">'+reward+'</span></div><div class="mini">'+typeText+' • участников '+p.uses+(p.max_uses?' / '+p.max_uses:' / ∞')+(p.expires_at?' • до '+esc(p.expires_at):' • без срока')+'</div><div class="row" style="margin-top:8px"><button class="secondary" data-promo-toggle="'+p.id+'" data-active="'+p.active+'">'+(p.active?'Отключить':'Включить')+'</button><button class="danger" data-promo-del="'+p.id+'">Удалить</button></div></div>'}).join('')
+ return '<h2>Промокоды</h2><div class="card"><select id="promoTypeNew"><option value="discount">Скидка на покупку</option><option value="spin">Обычные SPIN-билеты</option><option value="donation_spin">Синие Donation Tickets</option></select><input id="promoCodeNew" placeholder="Код"><div class="row"><input id="promoDiscountNew" type="number" min="0" max="90" placeholder="Скидка %"><input id="promoSpinNew" type="number" min="0" max="100" placeholder="SPIN-билетов"></div><div class="row"><input id="promoDonationNew" type="number" min="0" max="100" placeholder="Donation Tickets"><select id="promoDonationCaseNew">'+caseOptions+'</select></div><div class="row"><input id="promoUsesNew" type="number" value="0" placeholder="Участников (0=∞)"><input id="promoExpiryNew" placeholder="Срок: 2026-12-31 23:59:59"></div><div class="mini">Donation Ticket — отдельный синий тикет, открывающий донат-кейс без списания Stars.</div><button class="buy" id="promoCreateBtn" style="margin-top:10px">Создать промокод</button></div>'+
+ adminData.promos.map(p=>{const type=String(p.promo_type||'').toLowerCase();const isDonation=(type==='donation_spin'||type==='donation')||Number(p.donation_tickets||0)>0;const isSpin=!isDonation&&(Number(p.spin_tickets||0)>0||type==='spin');const reward=isDonation?('🎟️ +'+Math.max(1,Number(p.donation_tickets||0))+' Donation'):isSpin?('🎟 +'+Math.max(1,Number(p.spin_tickets||0))+' SPIN'):('-'+p.discount_percent+'% ⭐');const typeText=isDonation?'Donation Ticket промокод'+(p.case_id&&p.case_id!=='*'?' • '+esc(p.case_id):' • все кейсы'):isSpin?'SPIN-промокод':'Скидочный промокод';return '<div class="admin-card"><div class="name">'+esc(p.code)+' • <span class="'+(isDonation?'blue-ticket':'')+'">'+reward+'</span></div><div class="mini">'+typeText+' • участников '+p.uses+(p.max_uses?' / '+p.max_uses:' / ∞')+(p.expires_at?' • до '+esc(p.expires_at):' • без срока')+'</div><div class="row" style="margin-top:8px"><button class="secondary" data-promo-toggle="'+p.id+'" data-active="'+p.active+'">'+(p.active?'Отключить':'Включить')+'</button><button class="danger" data-promo-del="'+p.id+'">Удалить</button></div></div>'}).join('')
 }
 function adminRewards(){
  const spin=adminData.spins.slice(0,80).map(x=>'<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+x.reward_tier+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="mini">'+esc(x.user_token||'Без жетона')+' • '+esc(x.created_at)+'</div></div>').join('');
