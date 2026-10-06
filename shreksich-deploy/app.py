@@ -1895,14 +1895,26 @@ const headers={'Content-Type':'application/json','X-Telegram-Init-Data':initData
 let products=[],me=null,spinState=null,lastSpinReward=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
 let adminSection='overview',adminData=null;
 
-let audioCtx=null,spinSoundTimer=null,spinSoundStarted=0,spinSoundStep=0;
+let audioCtx=null,spinSoundTimer=null,spinSoundStarted=0,spinSoundStep=0,spinSoundTotalMs=30000,spinSoundActive=false;
 function soundsEnabled(){return localStorage.getItem('shx_sound_enabled')!=='0'}
 function getAudio(){
  if(!soundsEnabled())return null;
  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;
- if(!audioCtx)audioCtx=new AC();
+ if(!audioCtx||audioCtx.state==='closed'){
+  try{audioCtx=new AC()}catch(_){audioCtx=null;return null}
+ }
  if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
  return audioCtx
+}
+function unlockAudio(){
+ if(!soundsEnabled())return null;
+ const ac=getAudio();if(!ac)return null;
+ try{
+  const o=ac.createOscillator(),g=ac.createGain();
+  o.frequency.value=32;g.gain.value=.000001;
+  o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.02)
+ }catch(_){}
+ return ac
 }
 function tone(freq,dur=.08,vol=.035,type='sine',delay=0){
  const ac=getAudio();if(!ac)return;
@@ -1918,33 +1930,57 @@ function noiseBurst(dur=.08,vol=.025,delay=0){
  const s=ac.createBufferSource(),g=ac.createGain(),f=ac.createBiquadFilter();s.buffer=buf;f.type='highpass';f.frequency.value=900;
  g.gain.value=vol;s.connect(f);f.connect(g);g.connect(ac.destination);s.start(ac.currentTime+delay)
 }
-function playSpinTick(progress=0){
+function playSpinMelody(progress=0){
  if(!soundsEnabled())return;
  const p=Math.max(0,Math.min(1,progress));
- const melody=[392,523,659,784,659,523];
- const base=melody[spinSoundStep%melody.length];
- const pitch=base*(1-p*.16);
- noiseBurst(.022,.007+p*.003);
- tone(pitch,.075,.022,'triangle');
- tone(pitch*1.5,.055,.011,'sine',.018);
- if(spinSoundStep%6===3)tone(pitch*2,.09,.014,'sine',.035);
- if(p>.78&&spinSoundStep%2===0)tone(246-p*35,.08,.010,'triangle',.025);
+ const melody=[392.00,440.00,523.25,659.25,587.33,523.25,440.00,493.88,587.33,698.46,659.25,523.25];
+ const roots=[196.00,220.00,261.63,246.94];
+ const note=melody[spinSoundStep%melody.length]*(1-p*.08);
+ const root=roots[Math.floor(spinSoundStep/3)%roots.length]*(1-p*.05);
+ const dur=.44+p*.34;
+ tone(note,dur,.026,'sine');
+ tone(note/2,dur+.10,.013,'triangle',.015);
+ if(spinSoundStep%3===0)tone(root,dur+.24,.016,'sine',.025);
+ if(spinSoundStep%6===4)tone(note*1.25,dur*.8,.010,'sine',.08);
  spinSoundStep++
 }
 function startSpinSound(totalMs=30000){
  stopSpinSound();if(!soundsEnabled())return;
- spinSoundStarted=performance.now();spinSoundStep=0;
+ unlockAudio();
+ spinSoundTotalMs=totalMs;spinSoundStarted=performance.now();spinSoundStep=0;spinSoundActive=true;
  const loop=()=>{
-  const p=Math.min(1,(performance.now()-spinSoundStarted)/totalMs);
-  playSpinTick(p);
+  if(!spinSoundActive||!soundsEnabled())return;
+  const p=Math.min(1,(performance.now()-spinSoundStarted)/spinSoundTotalMs);
+  playSpinMelody(p);
   if(p<1){
-   const gap=Math.round(175 + Math.pow(p,2.25)*850);
+   const gap=Math.round(300 + Math.pow(p,2.1)*650);
    spinSoundTimer=setTimeout(loop,gap)
-  }
+  }else{spinSoundActive=false;spinSoundTimer=null}
  };
  loop()
 }
-function stopSpinSound(){if(spinSoundTimer){clearTimeout(spinSoundTimer);spinSoundTimer=null}}
+function stopSpinSound(){
+ spinSoundActive=false;
+ if(spinSoundTimer){clearTimeout(spinSoundTimer);spinSoundTimer=null}
+}
+function resumeSpinSoundIfNeeded(){
+ if(!soundsEnabled())return;
+ unlockAudio();
+ if(!spinSoundActive&&spinSoundStarted>0){
+  const elapsed=performance.now()-spinSoundStarted;
+  if(elapsed>0&&elapsed<spinSoundTotalMs){
+   spinSoundActive=true;
+   const loop=()=>{
+    if(!spinSoundActive||!soundsEnabled())return;
+    const p=Math.min(1,(performance.now()-spinSoundStarted)/spinSoundTotalMs);
+    playSpinMelody(p);
+    if(p<1)spinSoundTimer=setTimeout(loop,Math.round(300+Math.pow(p,2.1)*650));
+    else{spinSoundActive=false;spinSoundTimer=null}
+   };
+   loop()
+  }
+ }
+}
 function sfxStop(){if(!soundsEnabled())return;noiseBurst(.09,.035);tone(150,.16,.05,'sine');tone(82,.22,.035,'triangle',.035)}
 function sfxDrop(tier){
  if(!soundsEnabled())return;
@@ -1957,7 +1993,13 @@ function sfxDrop(tier){
 }
 function sfxSell(){if(!soundsEnabled())return;[660,880,1100,1320].forEach((f,i)=>tone(f,.13,.04,'triangle',i*.055))}
 function sfxSave(){if(!soundsEnabled())return;noiseBurst(.08,.018);tone(420,.13,.035,'sine');tone(630,.18,.035,'sine',.08);tone(840,.2,.03,'sine',.14)}
-function setSoundEnabled(on){localStorage.setItem('shx_sound_enabled',on?'1':'0');if(!on)stopSpinSound();else getAudio()}
+function setSoundEnabled(on){
+ localStorage.setItem('shx_sound_enabled',on?'1':'0');
+ if(!on){stopSpinSound();return}
+ unlockAudio();
+ resumeSpinSoundIfNeeded();
+ tone(523.25,.10,.018,'sine');tone(659.25,.12,.014,'sine',.07)
+}
 
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function stars(n){return Number(n||0).toLocaleString('ru-RU')+' ⭐'}
@@ -2151,7 +2193,10 @@ function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
- const snd=document.getElementById('spinSoundToggle');if(snd)snd.addEventListener('change',()=>setSoundEnabled(snd.checked));
+ const snd=document.getElementById('spinSoundToggle');if(snd)snd.addEventListener('change',()=>{
+  setSoundEnabled(snd.checked);
+  const other=document.getElementById('settingsSound');if(other)other.checked=snd.checked
+ });
  bindRarityCatalog();
  document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
 }
@@ -2268,19 +2313,9 @@ async function spinOnce(){
  const skip=!!document.getElementById('skipSpinAnimation')?.checked;
  b.disabled=true;b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
  if(result)result.textContent='';
- // Unlock Web Audio synchronously from the user's tap so iOS/Telegram WebView
- // can still play the rarity drop sound after the server response arrives.
- if(soundsEnabled()){
-  const ac=getAudio();
-  if(ac){
-   try{
-    const o=ac.createOscillator(),g=ac.createGain();
-    o.frequency.value=1;g.gain.value=.000001;
-    o.connect(g);g.connect(ac.destination);
-    o.start();o.stop(ac.currentTime+.015)
-   }catch(_){}
-  }
- }
+ // Unlock Web Audio directly from the user's tap so iOS/Telegram WebView
+ // keeps rarity SFX working even when the reel animation is skipped.
+ unlockAudio();
  try{
   const d=await api('/api/spin/free',{method:'POST'});
   lastSpinReward=d.reward;
@@ -2395,7 +2430,10 @@ function settingsHtml(){
 }
 function bindSettings(){
  const a=document.getElementById('settingsSkip');if(a)a.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',a.checked?'1':'0'));
- const s=document.getElementById('settingsSound');if(s)s.addEventListener('change',()=>setSoundEnabled(s.checked));
+ const s=document.getElementById('settingsSound');if(s)s.addEventListener('change',()=>{
+  setSoundEnabled(s.checked);
+  const other=document.getElementById('spinSoundToggle');if(other)other.checked=s.checked
+ });
  document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)))
 }
 function addHomeExit(){
