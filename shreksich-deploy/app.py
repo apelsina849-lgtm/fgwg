@@ -804,37 +804,54 @@ async def process_update(update: dict):
     pq = update.get("pre_checkout_query")
     if pq:
         ok = False
-        error_message = "Платёж не соответствует заказу"
+        error_message = "Платёж не соответствует операции"
         payload = pq.get("invoice_payload", "")
         try:
-            _, oid, uid = payload.split(":")
+            parts = payload.split(":")
             conn = await db()
             try:
-                row = await (await conn.execute(
-                    "SELECT * FROM orders WHERE id=? AND telegram_id=?",
-                    (int(oid), int(uid))
-                )).fetchone()
-                ok = bool(
-                    row and row["status"] == "Ожидает оплаты"
-                    and pq.get("currency") == "XTR"
-                    and int(pq.get("total_amount",0)) == int(row["stars_amount"])
-                )
-                if ok and row["promo_code"]:
-                    promo = await (await conn.execute(
-                        "SELECT * FROM promos WHERE code=? AND active=1 AND COALESCE(discount_percent,0)>0 "
-                        "AND (max_uses=0 OR uses<max_uses) "
-                        "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
-                        (row["promo_code"],)
+                if len(parts) == 3 and parts[0] == "case":
+                    opening_id, uid = int(parts[1]), int(parts[2])
+                    row = await (await conn.execute(
+                        "SELECT * FROM case_openings WHERE id=? AND telegram_id=?",
+                        (opening_id,uid)
                     )).fetchone()
-                    redeemed = None
-                    if promo:
-                        redeemed = await (await conn.execute(
-                            "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
-                            (promo["id"], int(uid))
+                    ok = bool(
+                        row and row["status"] == "awaiting_payment"
+                        and pq.get("currency") == "XTR"
+                        and int(pq.get("total_amount",0)) == int(row["stars_amount"])
+                    )
+                    if not ok:
+                        error_message = "Счёт кейса устарел, уже оплачен или его цена изменилась"
+                elif len(parts) == 3 and parts[0] == "order":
+                    oid, uid = int(parts[1]), int(parts[2])
+                    row = await (await conn.execute(
+                        "SELECT * FROM orders WHERE id=? AND telegram_id=?",
+                        (oid,uid)
+                    )).fetchone()
+                    ok = bool(
+                        row and row["status"] == "Ожидает оплаты"
+                        and pq.get("currency") == "XTR"
+                        and int(pq.get("total_amount",0)) == int(row["stars_amount"])
+                    )
+                    if ok and row["promo_code"]:
+                        promo = await (await conn.execute(
+                            "SELECT * FROM promos WHERE code=? AND active=1 AND COALESCE(discount_percent,0)>0 "
+                            "AND (max_uses=0 OR uses<max_uses) "
+                            "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
+                            (row["promo_code"],)
                         )).fetchone()
-                    if not promo or redeemed:
-                        ok = False
-                        error_message = "Промокод истёк, закончился или уже использован"
+                        redeemed = None
+                        if promo:
+                            redeemed = await (await conn.execute(
+                                "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
+                                (promo["id"],uid)
+                            )).fetchone()
+                        if not promo or redeemed:
+                            ok = False
+                            error_message = "Промокод истёк, закончился или уже использован"
+                else:
+                    error_message = "Неизвестный тип платежа"
             finally:
                 await conn.close()
         except Exception:
@@ -849,14 +866,49 @@ async def process_update(update: dict):
     sp = msg.get("successful_payment")
     if sp:
         payload = sp.get("invoice_payload", "")
+        charge_id = sp.get("telegram_payment_charge_id", "")
         try:
-            _, oid, uid = payload.split(":")
-            charge_id = sp.get("telegram_payment_charge_id", "")
+            parts = payload.split(":")
+            if len(parts) == 3 and parts[0] == "case":
+                opening_id, uid = int(parts[1]), int(parts[2])
+                async with db_write_lock:
+                    conn = await db()
+                    try:
+                        await conn.execute("BEGIN IMMEDIATE")
+                        row = await (await conn.execute(
+                            "SELECT * FROM case_openings WHERE id=? AND telegram_id=?",
+                            (opening_id,uid)
+                        )).fetchone()
+                        if not row:
+                            await conn.rollback()
+                            return
+                        if row["telegram_charge_id"] or row["status"] in ("paid","opened"):
+                            await conn.rollback()
+                            return
+                        if row["status"] != "awaiting_payment":
+                            await conn.rollback()
+                            return
+                        await conn.execute(
+                            "UPDATE case_openings SET status='paid',payment_method='Telegram Stars',"
+                            "telegram_charge_id=?,paid_at=CURRENT_TIMESTAMP WHERE id=?",
+                            (charge_id,opening_id)
+                        )
+                        await conn.commit()
+                    finally:
+                        await conn.close()
+                return
+
+            if len(parts) != 3 or parts[0] != "order":
+                return
+            oid, uid = int(parts[1]), int(parts[2])
             async with db_write_lock:
                 conn = await db()
                 try:
                     await conn.execute("BEGIN IMMEDIATE")
-                    row = await (await conn.execute("SELECT * FROM orders WHERE id=? AND telegram_id=?", (int(oid), int(uid)))).fetchone()
+                    row = await (await conn.execute(
+                        "SELECT * FROM orders WHERE id=? AND telegram_id=?",
+                        (oid,uid)
+                    )).fetchone()
                     if not row:
                         await conn.rollback()
                         return
@@ -865,7 +917,7 @@ async def process_update(update: dict):
                         return
                     await conn.execute(
                         "UPDATE orders SET status='Оплачен',payment_method='Telegram Stars',telegram_charge_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                        (charge_id, int(oid))
+                        (charge_id,oid)
                     )
                     if row["promo_code"]:
                         promo = await (await conn.execute(
@@ -875,13 +927,13 @@ async def process_update(update: dict):
                         if promo:
                             cur = await conn.execute(
                                 "INSERT OR IGNORE INTO promo_redemptions(promo_id,telegram_id) VALUES(?,?)",
-                                (promo["id"],int(uid))
+                                (promo["id"],uid)
                             )
                             if cur.rowcount:
                                 await conn.execute("UPDATE promos SET uses=uses+1 WHERE id=?", (promo["id"],))
                     ref = await (await conn.execute(
                         "SELECT * FROM referrals WHERE referred_id=? AND rewarded=0",
-                        (int(uid),)
+                        (uid,)
                     )).fetchone()
                     if ref:
                         await conn.execute("UPDATE referrals SET rewarded=1 WHERE id=?", (ref["id"],))
