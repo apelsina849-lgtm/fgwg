@@ -1277,6 +1277,16 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
                 "ORDER BY id DESC LIMIT 1",
                 (uid,)
             )).fetchone()
+            paid_case = await (await conn.execute(
+                "SELECT id,case_id,case_name,stars_amount,payment_method,created_at,paid_at "
+                "FROM case_openings WHERE telegram_id=? AND status='paid' ORDER BY id ASC LIMIT 1",
+                (uid,)
+            )).fetchone()
+            case_catalog = await load_case_catalog(conn,uid)
+            donation_rows = await (await conn.execute(
+                "SELECT case_id,tickets FROM donation_ticket_balances WHERE telegram_id=? AND tickets>0",
+                (uid,)
+            )).fetchall()
         finally:
             await conn.close()
     used = int(used_row["c"] or 0)
@@ -1285,11 +1295,14 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
     next_reset = 0
     if free_remaining == 0 and used_row["first_ts"]:
         next_reset = max(0, int(used_row["first_ts"]) + 86400 - int(time.time()))
+    donation_wallet = {str(x["case_id"]):int(x["tickets"] or 0) for x in donation_rows}
     return {
       "free_remaining":free_remaining,
       "max_free_spins":MAX_FREE_SPINS_24H,
       "bonus_tickets":bonus_tickets,
       "remaining_spins":free_remaining + bonus_tickets,
+      "donation_tickets_total":sum(donation_wallet.values()),
+      "donation_ticket_wallet":donation_wallet,
       "shr":int(state["upgrade_points"]),
       "upgrade_points":int(state["upgrade_points"]),
       "next_reset_seconds":next_reset,
@@ -1297,7 +1310,8 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "upgrade_rewards":SHR_REWARDS,
       "tier_chances":SPIN_TIER_CHANCES,
       "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS],
-      "case_catalog":CASE_CATALOG,
+      "case_catalog":case_catalog,
+      "paid_case_opening":dict(paid_case) if paid_case else None,
       "pending_drop":(
         {
           "inventory_item_id":int(pending["id"]),
