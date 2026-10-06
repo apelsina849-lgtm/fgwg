@@ -1565,8 +1565,18 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .spin-shell{background:linear-gradient(145deg,#12151a,#090b0d);border:1px solid #3a2c0a;border-radius:22px;padding:16px;margin:14px 0;overflow:hidden}
 .reel-window{position:relative;height:118px;border:1px solid #2b3036;background:#0b0d10;border-radius:18px;overflow:hidden;display:flex;align-items:center;justify-content:center}
 .reel-window:after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:#ffc21c;box-shadow:0 0 18px #ffc21c;transform:translateX(-50%)}
-.reel-item{font-size:20px;font-weight:950;text-align:center;padding:0 28px;will-change:transform,opacity}
-.reel-item.tier-common{color:#d1d6dc}.reel-item.tier-rare{color:#67b7ff;text-shadow:0 0 18px #249cff}.reel-item.tier-epic{color:#c985ff;text-shadow:0 0 20px #a84cff}.reel-item.tier-legendary{color:#ffc250;text-shadow:0 0 24px #ff9800}.reel-item.tier-mythic{color:#ff79df;text-shadow:0 0 26px #ff37d2,0 0 44px #7d45ff}
+.reel-item{display:grid;place-items:center;min-width:96px;min-height:96px;will-change:transform,opacity}
+.loot-cube{width:78px;height:78px;border-radius:18px;display:grid;place-items:center;font-size:38px;font-weight:1000;color:#fff;position:relative;transform:perspective(180px) rotateX(7deg) rotateY(-8deg);border:2px solid transparent;box-shadow:inset 0 3px 2px #ffffff30,inset 0 -16px 24px #0008,0 16px 22px #0008}
+.loot-cube:before{content:"";position:absolute;left:10px;right:10px;top:8px;height:17px;border-radius:50%;background:linear-gradient(180deg,#fff7,transparent);pointer-events:none}
+.loot-cube span{position:relative;z-index:2;text-shadow:0 4px 4px #0009}
+.cube-common{background:linear-gradient(145deg,#7b8792,#303840);border-color:#aeb7c0;box-shadow:inset 0 3px 2px #ffffff35,inset 0 -16px 24px #0008,0 0 18px #96a1aa55,0 16px 22px #0008}
+.cube-rare{background:linear-gradient(145deg,#42adff,#0a4b86);border-color:#6ec1ff;box-shadow:inset 0 3px 2px #ffffff45,inset 0 -16px 24px #001a35aa,0 0 24px #249cff88,0 16px 22px #0008}
+.cube-epic{background:linear-gradient(145deg,#c060ff,#5a178a);border-color:#d391ff;box-shadow:inset 0 3px 2px #ffffff45,inset 0 -16px 24px #25003daa,0 0 28px #a84cff99,0 16px 22px #0008}
+.cube-legendary{background:linear-gradient(145deg,#ffd35a,#c66a00);border-color:#ffe49a;box-shadow:inset 0 3px 2px #ffffff66,inset 0 -16px 24px #5a2400aa,0 0 32px #ff9d00bb,0 16px 22px #0008;animation:legendaryCube 1.2s ease-in-out infinite}
+.cube-mythic{background:linear-gradient(145deg,#ff58db,#713cff 58%,#351060);border-color:#ffb1ef;box-shadow:inset 0 3px 2px #ffffff66,inset 0 -16px 24px #2b0640aa,0 0 36px #ff39d0cc,0 0 58px #7547ff88,0 16px 22px #0008;animation:mythicCube .9s ease-in-out infinite}
+@keyframes legendaryCube{0%,100%{filter:brightness(1)}50%{filter:brightness(1.25)}}@keyframes mythicCube{0%,100%{filter:brightness(1)}50%{filter:brightness(1.38)}}
+.reveal-name{font-size:18px;font-weight:950;line-height:1.25;margin-top:10px;animation:revealName .42s cubic-bezier(.2,1.2,.3,1)}
+@keyframes revealName{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
 .spin-options{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;border-radius:14px;background:#111418;border:1px solid #252a30;cursor:pointer;user-select:none}
 .spin-options input{width:20px;height:20px;margin:0;accent-color:#ffc21c;flex:0 0 20px}
 .spin-options span{font-size:13px;font-weight:800;color:#d7dbe0}
@@ -1774,7 +1784,7 @@ async function spinHtml(){
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">UPGRADE</div><div class="price">'+spinState.upgrade_points+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
+ '<div class="spin-shell"><div class="reel-window"><div class="reel-item" id="reelItem"><div class="loot-cube cube-common"><span>?</span></div></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
  '<label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию и сразу показать награду</span></label>'+
  '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div><div class="mini" style="margin-top:8px">Common 97.5% • Rare 1.8% • Epic 0.5% • Legendary 0.15% • Mythic 0.05%</div></div>'+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
@@ -1797,18 +1807,26 @@ async function applySpinPromo(){
  }catch(e){info.innerHTML='<span class="warn">'+esc(e.message)+'</span>';b.disabled=false;b.textContent='Активировать'}
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
-function showReelItem(reel,item,duration){
- reel.textContent=item.name;
- reel.className='reel-item '+tierClass(item.tier);
+function cubeClass(tier){return 'cube-'+String(tier||'COMMON').toLowerCase()}
+function setMysteryCube(reel,tier){
+ reel.className='reel-item';
+ reel.innerHTML='<div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div>';
+}
+function showMysteryCube(reel,item,duration){
+ setMysteryCube(reel,item.tier);
  const old=reel.getAnimations?reel.getAnimations():[];
  old.forEach(a=>a.cancel());
  if(reel.animate){
   reel.animate([
-   {transform:'translateX(-125px) scale(.93)',opacity:0},
-   {transform:'translateX(0) scale(1)',opacity:1,offset:.48},
-   {transform:'translateX(125px) scale(.94)',opacity:.1}
-  ],{duration:Math.max(150,duration),easing:'cubic-bezier(.22,.72,.28,1)'});
+   {transform:'translateX(-135px) scale(.9)',opacity:0},
+   {transform:'translateX(0) scale(1)',opacity:1,offset:.5},
+   {transform:'translateX(135px) scale(.92)',opacity:.08}
+  ],{duration:Math.max(170,duration),easing:'cubic-bezier(.22,.72,.28,1)'});
  }
+}
+function visualMysteryItem(pool){
+ if(!pool.length)return {tier:'COMMON'};
+ return pool[Math.floor(Math.random()*pool.length)];
 }
 async function animateSpinRight(reel,pool,reward){
  const steps=34;
@@ -1816,15 +1834,19 @@ async function animateSpinRight(reel,pool,reward){
   const p=i/(steps-1);
   const eased=p*p*p;
   const delay=Math.round(85 + eased*360);
-  const item=i===steps-1?reward:pool[Math.floor(Math.random()*pool.length)];
-  showReelItem(reel,item,Math.min(420,delay+80));
+  const item=i===steps-1?reward:visualMysteryItem(pool);
+  showMysteryCube(reel,item,Math.min(440,delay+90));
   await sleep(delay);
  }
  if(reel.getAnimations)reel.getAnimations().forEach(a=>a.cancel());
- reel.textContent=reward.name;
- reel.className='reel-item '+tierClass(reward.tier);
+ setMysteryCube(reel,reward.tier);
  reel.style.transform='translateX(0)';
  reel.style.opacity='1';
+ await sleep(650);
+}
+function revealReward(result,reward){
+ if(!result)return;
+ result.innerHTML='<div class="reveal-name '+tierClass(reward.tier)+'">'+esc(reward.name)+'</div><div class="mini">+'+reward.points+' Upgrade pts</div>';
 }
 async function spinOnce(){
  const b=document.getElementById('spinBtn');if(!b||b.disabled)return;
@@ -1836,16 +1858,18 @@ async function spinOnce(){
   const d=await api('/api/spin/free',{method:'POST'});
   lastSpinReward=d.reward;
   if(skip){
-   if(reel){reel.textContent=d.reward.name;reel.className='reel-item '+tierClass(d.reward.tier)}
-   if(result)result.innerHTML='<span class="'+tierClass(d.reward.tier)+'">Выпало: '+esc(d.reward.name)+' • +'+d.reward.points+' pts</span>';
+   setMysteryCube(reel,d.reward.tier);
+   revealReward(result,d.reward);
    try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
-   await sleep(850);
+   showDropFx(d.reward);
+   await sleep(950);
   }else{
    await animateSpinRight(reel,pool,d.reward);
-   if(result)result.innerHTML='<span class="'+tierClass(d.reward.tier)+'">Выпало: '+esc(d.reward.name)+' • +'+d.reward.points+' pts</span>';
-   await sleep(700);
+   revealReward(result,d.reward);
+   try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
+   await sleep(850);
    showDropFx(d.reward);
-   await sleep(d.reward.tier==='LEGENDARY'||d.reward.tier==='MYTHIC'?350:250);
+   await sleep(d.reward.tier==='LEGENDARY'||d.reward.tier==='MYTHIC'?450:300);
   }
   app.innerHTML=await spinHtml();bindSpin();loadWinsFeed()
  }catch(e){
