@@ -212,6 +212,169 @@ CASE_CATALOG = [
     },
 ]
 
+
+VALID_CASE_TIERS = ("GRAY","CYAN","BLUE","PURPLE","PINK","RED","GOLD")
+CASE_SEED_META = {
+    "FREE":{"name":"Бесплатный кейс","description":"Ежедневный бесплатный кейс. Использует обычные бесплатные SPIN и бонусные билеты.","price_stars":0,"is_free":1,"icon":"gift","sort_order":0},
+    "CASE29":{"name":"Кейс 29","description":"Стартовый донат-кейс с редкими и эпическими предметами.","price_stars":29,"is_free":0,"icon":"crate","sort_order":10},
+    "CASE79":{"name":"Кейс 79","description":"Усиленный донат-кейс с повышенным шансом более дорогого лута.","price_stars":79,"is_free":0,"icon":"supply","sort_order":20},
+    "CASE199":{"name":"Кейс 199","description":"Премиальный донат-кейс с красными и золотыми наградами.","price_stars":199,"is_free":0,"icon":"vault","sort_order":30},
+    "CASE499":{"name":"Mythic Case","description":"Топовый донат-кейс: 70% красный / 30% золотой.","price_stars":499,"is_free":0,"icon":"crown","sort_order":40},
+}
+CASE_SEED_TIERS = {
+    "FREE":[("GRAY",60.0),("CYAN",30.0),("BLUE",10.0)],
+    "CASE29":[("BLUE",65.0),("PURPLE",25.0),("PINK",10.0)],
+    "CASE79":[("PURPLE",55.0),("PINK",35.0),("RED",10.0)],
+    "CASE199":[("PURPLE",40.0),("PINK",30.0),("RED",25.0),("GOLD",5.0)],
+    "CASE499":[("RED",70.0),("GOLD",30.0)],
+}
+CASE_ICON_CHOICES = ("gift","crate","supply","vault","crown")
+
+
+async def load_case_catalog(conn, include_inactive: bool = False) -> list[dict]:
+    where = "" if include_inactive else " WHERE active=1"
+    rows = await (await conn.execute(
+        "SELECT id,name,description,price_stars,is_free,active,icon,sort_order FROM cases"
+        + where + " ORDER BY sort_order,id"
+    )).fetchall()
+    reward_lookup = {x["name"]: x for x in SPIN_REWARDS}
+    result = []
+    for row in rows:
+        tier_rows = await (await conn.execute(
+            "SELECT tier,chance FROM case_tiers WHERE case_id=? ORDER BY rowid",
+            (row["id"],)
+        )).fetchall()
+        item_rows = await (await conn.execute(
+            "SELECT reward_name FROM case_items WHERE case_id=? ORDER BY reward_name",
+            (row["id"],)
+        )).fetchall()
+        items = [r["reward_name"] for r in item_rows if r["reward_name"] in reward_lookup]
+        if not items:
+            enabled = {r["tier"] for r in tier_rows}
+            items = [x["name"] for x in SPIN_REWARDS if x["tier"] in enabled]
+        tiers = []
+        for tr in tier_rows:
+            tier = str(tr["tier"]).upper()
+            if tier not in VALID_CASE_TIERS:
+                continue
+            if any(reward_lookup[n]["tier"] == tier for n in items if n in reward_lookup):
+                tiers.append({"tier":tier,"chance":float(tr["chance"])})
+        result.append({
+            "id":row["id"],
+            "name":row["name"],
+            "description":row["description"] or "",
+            "price_stars":int(row["price_stars"] or 0),
+            "price_label":"БЕСПЛАТНО" if int(row["is_free"] or 0) or int(row["price_stars"] or 0) <= 0 else f"{int(row['price_stars'])} ⭐",
+            "is_free":bool(row["is_free"]),
+            "active":bool(row["active"]),
+            "icon":row["icon"] or "crate",
+            "sort_order":int(row["sort_order"] or 0),
+            "tiers":tiers,
+            "items":items,
+        })
+    return result
+
+
+def case_snapshot(cfg: dict) -> dict:
+    return {
+        "id":cfg["id"],
+        "name":cfg["name"],
+        "tiers":[{"tier":x["tier"],"chance":float(x["chance"])} for x in cfg.get("tiers",[])],
+        "items":list(cfg.get("items",[])),
+    }
+
+
+def pick_case_reward(snapshot: dict) -> dict:
+    reward_lookup = {x["name"]: x for x in SPIN_REWARDS}
+    allowed_names = [n for n in snapshot.get("items",[]) if n in reward_lookup]
+    eligible = []
+    for tier_cfg in snapshot.get("tiers",[]):
+        tier = str(tier_cfg.get("tier","")).upper()
+        chance = float(tier_cfg.get("chance",0) or 0)
+        pool = [reward_lookup[n] for n in allowed_names if reward_lookup[n]["tier"] == tier]
+        if tier in VALID_CASE_TIERS and chance > 0 and pool:
+            eligible.append((tier,chance,pool))
+    if not eligible:
+        raise RuntimeError("У кейса нет доступных наград")
+    chosen = random.choices(eligible, weights=[x[1] for x in eligible], k=1)[0]
+    return random.choice(chosen[2])
+
+
+async def donation_ticket_counts(conn, telegram_id: int) -> tuple[int, dict[str,int]]:
+    rows = await (await conn.execute(
+        "SELECT case_id,tickets FROM donation_ticket_wallet WHERE telegram_id=? AND tickets>0",
+        (telegram_id,)
+    )).fetchall()
+    by_case = {str(r["case_id"]):int(r["tickets"] or 0) for r in rows}
+    return sum(by_case.values()), by_case
+
+
+async def consume_donation_ticket(conn, telegram_id: int, case_id: str) -> str:
+    for scope in (case_id, "*"):
+        row = await (await conn.execute(
+            "SELECT tickets FROM donation_ticket_wallet WHERE telegram_id=? AND case_id=?",
+            (telegram_id,scope)
+        )).fetchone()
+        if row and int(row["tickets"] or 0) > 0:
+            await conn.execute(
+                "UPDATE donation_ticket_wallet SET tickets=tickets-1 WHERE telegram_id=? AND case_id=?",
+                (telegram_id,scope)
+            )
+            await conn.execute(
+                "DELETE FROM donation_ticket_wallet WHERE telegram_id=? AND case_id=? AND tickets<=0",
+                (telegram_id,scope)
+            )
+            return scope
+    return ""
+
+
+async def fulfill_case_purchase(conn, purchase, source: str) -> dict:
+    if int(purchase["inventory_item_id"] or 0) > 0 and purchase["reward_name"]:
+        reward_value = int(purchase["reward_value_stars"] or 0)
+        return {
+            "reward":{
+                "name":purchase["reward_name"],
+                "tier":purchase["reward_tier"],
+                "points":reward_value,
+                "value_stars":reward_value,
+            },
+            "inventory_item_id":int(purchase["inventory_item_id"]),
+            "sell_shr":reward_value,
+            "source":purchase["source"] or source,
+            "purchase_id":int(purchase["id"]),
+        }
+    snapshot = json.loads(purchase["config_json"] or "{}")
+    reward = pick_case_reward(snapshot)
+    value = int(reward["value_stars"])
+    await conn.execute(
+        "INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points,source) VALUES(?,?,?,?,?)",
+        (int(purchase["telegram_id"]),reward["name"],reward["tier"],value,source)
+    )
+    inv = await conn.execute(
+        "INSERT INTO inventory_items(telegram_id,reward_name,reward_tier,sell_shr,value_stars,status,source) "
+        "VALUES(?,?,?,?,?,'pending',?)",
+        (int(purchase["telegram_id"]),reward["name"],reward["tier"],value,value,f"case:{purchase['case_id']}:{source}")
+    )
+    inventory_item_id = int(inv.lastrowid)
+    payment_method = {
+        "case_stars":"Telegram Stars",
+        "donation_ticket":"Donation Ticket",
+        "case_free":"Бесплатно",
+    }.get(source, source)
+    await conn.execute(
+        "UPDATE case_purchases SET status='fulfilled',payment_method=?,source=?,reward_name=?,reward_tier=?,"
+        "reward_value_stars=?,inventory_item_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (payment_method,source,reward["name"],reward["tier"],value,inventory_item_id,int(purchase["id"]))
+    )
+    return {
+        "reward":reward,
+        "inventory_item_id":inventory_item_id,
+        "sell_shr":value,
+        "source":source,
+        "purchase_id":int(purchase["id"]),
+    }
+
+
 SHR_REWARDS = [
     {"points":5,"name":"Набор расходников"},
     {"points":10,"name":"Metro Starter Kit"},
@@ -362,6 +525,52 @@ async def init_db():
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(promo_id, telegram_id)
     );
+    CREATE TABLE IF NOT EXISTS cases(
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      price_stars INTEGER NOT NULL DEFAULT 0,
+      is_free INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      icon TEXT NOT NULL DEFAULT 'crate',
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS case_tiers(
+      case_id TEXT NOT NULL,
+      tier TEXT NOT NULL,
+      chance REAL NOT NULL DEFAULT 0,
+      PRIMARY KEY(case_id,tier)
+    );
+    CREATE TABLE IF NOT EXISTS case_items(
+      case_id TEXT NOT NULL,
+      reward_name TEXT NOT NULL,
+      PRIMARY KEY(case_id,reward_name)
+    );
+    CREATE TABLE IF NOT EXISTS donation_ticket_wallet(
+      telegram_id INTEGER NOT NULL,
+      case_id TEXT NOT NULL DEFAULT '*',
+      tickets INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(telegram_id,case_id)
+    );
+    CREATE TABLE IF NOT EXISTS case_purchases(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id INTEGER NOT NULL,
+      case_id TEXT NOT NULL,
+      case_name TEXT NOT NULL,
+      stars_amount INTEGER NOT NULL DEFAULT 0,
+      config_json TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'awaiting_payment',
+      payment_method TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT '',
+      telegram_charge_id TEXT NOT NULL DEFAULT '',
+      reward_name TEXT NOT NULL DEFAULT '',
+      reward_tier TEXT NOT NULL DEFAULT '',
+      reward_value_stars INTEGER NOT NULL DEFAULT 0,
+      inventory_item_id INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_purchases_user ON case_purchases(telegram_id,id);
     CREATE TABLE IF NOT EXISTS referrals(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       referrer_id INTEGER NOT NULL,
@@ -392,6 +601,10 @@ async def init_db():
         await conn.execute("ALTER TABLE promos ADD COLUMN promo_type TEXT NOT NULL DEFAULT 'discount'")
     if "spin_tickets" not in promo_cols:
         await conn.execute("ALTER TABLE promos ADD COLUMN spin_tickets INTEGER NOT NULL DEFAULT 0")
+    if "donation_tickets" not in promo_cols:
+        await conn.execute("ALTER TABLE promos ADD COLUMN donation_tickets INTEGER NOT NULL DEFAULT 0")
+    if "donation_case_id" not in promo_cols:
+        await conn.execute("ALTER TABLE promos ADD COLUMN donation_case_id TEXT NOT NULL DEFAULT '*'")
     # Rescue legacy SPIN promos created before spin_tickets was stored reliably.
     await conn.execute("UPDATE promos SET spin_tickets=1 WHERE lower(promo_type)='spin' AND COALESCE(spin_tickets,0)<=0")
     await conn.execute(
@@ -428,6 +641,23 @@ async def init_db():
     if not reset:
         await conn.execute("UPDATE spin_state SET tickets=0")
         await conn.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('bonus_tickets_v1','1')")
+    case_count = await (await conn.execute("SELECT COUNT(*) c FROM cases")).fetchone()
+    if int(case_count["c"] or 0) == 0:
+        for case_id, meta in CASE_SEED_META.items():
+            await conn.execute(
+                "INSERT INTO cases(id,name,description,price_stars,is_free,active,icon,sort_order) VALUES(?,?,?,?,?,1,?,?)",
+                (case_id,meta["name"],meta["description"],int(meta["price_stars"]),int(meta["is_free"]),meta["icon"],int(meta["sort_order"]))
+            )
+            tiers = CASE_SEED_TIERS[case_id]
+            await conn.executemany(
+                "INSERT INTO case_tiers(case_id,tier,chance) VALUES(?,?,?)",
+                [(case_id,tier,float(chance)) for tier,chance in tiers]
+            )
+            enabled_tiers = {tier for tier,_ in tiers}
+            await conn.executemany(
+                "INSERT INTO case_items(case_id,reward_name) VALUES(?,?)",
+                [(case_id,reward["name"]) for reward in SPIN_REWARDS if reward["tier"] in enabled_tiers]
+            )
     row = await (await conn.execute("SELECT COUNT(*) c FROM products")).fetchone()
     if row["c"] == 0:
         items = [
@@ -679,37 +909,55 @@ async def process_update(update: dict):
     pq = update.get("pre_checkout_query")
     if pq:
         ok = False
-        error_message = "Платёж не соответствует заказу"
+        error_message = "Платёж не соответствует операции"
         payload = pq.get("invoice_payload", "")
         try:
-            _, oid, uid = payload.split(":")
+            parts = payload.split(":")
+            if len(parts) != 3:
+                raise ValueError("bad payload")
+            kind, entity_id, uid = parts
             conn = await db()
             try:
-                row = await (await conn.execute(
-                    "SELECT * FROM orders WHERE id=? AND telegram_id=?",
-                    (int(oid), int(uid))
-                )).fetchone()
-                ok = bool(
-                    row and row["status"] == "Ожидает оплаты"
-                    and pq.get("currency") == "XTR"
-                    and int(pq.get("total_amount",0)) == int(row["stars_amount"])
-                )
-                if ok and row["promo_code"]:
-                    promo = await (await conn.execute(
-                        "SELECT * FROM promos WHERE code=? AND active=1 AND COALESCE(discount_percent,0)>0 "
-                        "AND (max_uses=0 OR uses<max_uses) "
-                        "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
-                        (row["promo_code"],)
+                if kind == "order":
+                    row = await (await conn.execute(
+                        "SELECT * FROM orders WHERE id=? AND telegram_id=?",
+                        (int(entity_id), int(uid))
                     )).fetchone()
-                    redeemed = None
-                    if promo:
-                        redeemed = await (await conn.execute(
-                            "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
-                            (promo["id"], int(uid))
+                    ok = bool(
+                        row and row["status"] == "Ожидает оплаты"
+                        and pq.get("currency") == "XTR"
+                        and int(pq.get("total_amount",0)) == int(row["stars_amount"])
+                    )
+                    if ok and row["promo_code"]:
+                        promo = await (await conn.execute(
+                            "SELECT * FROM promos WHERE code=? AND active=1 AND COALESCE(discount_percent,0)>0 "
+                            "AND (max_uses=0 OR uses<max_uses) "
+                            "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
+                            (row["promo_code"],)
                         )).fetchone()
-                    if not promo or redeemed:
-                        ok = False
-                        error_message = "Промокод истёк, закончился или уже использован"
+                        redeemed = None
+                        if promo:
+                            redeemed = await (await conn.execute(
+                                "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
+                                (promo["id"], int(uid))
+                            )).fetchone()
+                        if not promo or redeemed:
+                            ok = False
+                            error_message = "Промокод истёк, закончился или уже использован"
+                elif kind == "case":
+                    purchase = await (await conn.execute(
+                        "SELECT * FROM case_purchases WHERE id=? AND telegram_id=?",
+                        (int(entity_id), int(uid))
+                    )).fetchone()
+                    ok = bool(
+                        purchase and purchase["status"] == "awaiting_payment"
+                        and not purchase["telegram_charge_id"]
+                        and pq.get("currency") == "XTR"
+                        and int(pq.get("total_amount",0)) == int(purchase["stars_amount"])
+                        and int(purchase["stars_amount"]) > 0
+                    )
+                    if not ok:
+                        error_message = "Этот счёт кейса уже недействителен"
             finally:
                 await conn.close()
         except Exception:
@@ -725,52 +973,93 @@ async def process_update(update: dict):
     if sp:
         payload = sp.get("invoice_payload", "")
         try:
-            _, oid, uid = payload.split(":")
+            parts = payload.split(":")
+            if len(parts) != 3:
+                raise ValueError("bad payload")
+            kind, entity_id, uid = parts
             charge_id = sp.get("telegram_payment_charge_id", "")
-            async with db_write_lock:
-                conn = await db()
-                try:
-                    await conn.execute("BEGIN IMMEDIATE")
-                    row = await (await conn.execute("SELECT * FROM orders WHERE id=? AND telegram_id=?", (int(oid), int(uid)))).fetchone()
-                    if not row:
-                        await conn.rollback()
-                        return
-                    if row["telegram_charge_id"]:
-                        await conn.rollback()
-                        return
-                    await conn.execute(
-                        "UPDATE orders SET status='Оплачен',payment_method='Telegram Stars',telegram_charge_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                        (charge_id, int(oid))
-                    )
-                    if row["promo_code"]:
-                        promo = await (await conn.execute(
-                            "SELECT id FROM promos WHERE code=? AND COALESCE(discount_percent,0)>0",
-                            (row["promo_code"],)
+            if kind == "order":
+                async with db_write_lock:
+                    conn = await db()
+                    try:
+                        await conn.execute("BEGIN IMMEDIATE")
+                        row = await (await conn.execute(
+                            "SELECT * FROM orders WHERE id=? AND telegram_id=?",
+                            (int(entity_id), int(uid))
                         )).fetchone()
-                        if promo:
-                            cur = await conn.execute(
-                                "INSERT OR IGNORE INTO promo_redemptions(promo_id,telegram_id) VALUES(?,?)",
-                                (promo["id"],int(uid))
+                        if not row:
+                            await conn.rollback()
+                            return
+                        if row["telegram_charge_id"]:
+                            await conn.rollback()
+                            return
+                        await conn.execute(
+                            "UPDATE orders SET status='Оплачен',payment_method='Telegram Stars',telegram_charge_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                            (charge_id, int(entity_id))
+                        )
+                        if row["promo_code"]:
+                            promo = await (await conn.execute(
+                                "SELECT id FROM promos WHERE code=? AND COALESCE(discount_percent,0)>0",
+                                (row["promo_code"],)
+                            )).fetchone()
+                            if promo:
+                                cur = await conn.execute(
+                                    "INSERT OR IGNORE INTO promo_redemptions(promo_id,telegram_id) VALUES(?,?)",
+                                    (promo["id"],int(uid))
+                                )
+                                if cur.rowcount:
+                                    await conn.execute("UPDATE promos SET uses=uses+1 WHERE id=?", (promo["id"],))
+                        ref = await (await conn.execute(
+                            "SELECT * FROM referrals WHERE referred_id=? AND rewarded=0",
+                            (int(uid),)
+                        )).fetchone()
+                        if ref:
+                            await conn.execute("UPDATE referrals SET rewarded=1 WHERE id=?", (ref["id"],))
+                            await conn.execute(
+                                "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
+                                (ref["referrer_id"],)
                             )
-                            if cur.rowcount:
-                                await conn.execute("UPDATE promos SET uses=uses+1 WHERE id=?", (promo["id"],))
-                    ref = await (await conn.execute(
-                        "SELECT * FROM referrals WHERE referred_id=? AND rewarded=0",
-                        (int(uid),)
-                    )).fetchone()
-                    if ref:
-                        await conn.execute("UPDATE referrals SET rewarded=1 WHERE id=?", (ref["id"],))
+                            await conn.execute(
+                                "UPDATE spin_state SET tickets=tickets+1,upgrade_points=upgrade_points+3 WHERE telegram_id=?",
+                                (ref["referrer_id"],)
+                            )
+                        await conn.commit()
+                    finally:
+                        await conn.close()
+            elif kind == "case":
+                reward_for_announce = None
+                async with db_write_lock:
+                    conn = await db()
+                    try:
+                        await conn.execute("BEGIN IMMEDIATE")
+                        purchase = await (await conn.execute(
+                            "SELECT * FROM case_purchases WHERE id=? AND telegram_id=?",
+                            (int(entity_id), int(uid))
+                        )).fetchone()
+                        if not purchase:
+                            await conn.rollback()
+                            return
+                        if purchase["telegram_charge_id"] or purchase["status"] == "fulfilled":
+                            await conn.rollback()
+                            return
+                        if purchase["status"] != "awaiting_payment":
+                            await conn.rollback()
+                            return
                         await conn.execute(
-                            "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
-                            (ref["referrer_id"],)
+                            "UPDATE case_purchases SET status='paid',payment_method='Telegram Stars',telegram_charge_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                            (charge_id,int(entity_id))
                         )
-                        await conn.execute(
-                            "UPDATE spin_state SET tickets=tickets+1,upgrade_points=upgrade_points+3 WHERE telegram_id=?",
-                            (ref["referrer_id"],)
-                        )
-                    await conn.commit()
-                finally:
-                    await conn.close()
+                        purchase = await (await conn.execute(
+                            "SELECT * FROM case_purchases WHERE id=?",
+                            (int(entity_id),)
+                        )).fetchone()
+                        result = await fulfill_case_purchase(conn,purchase,"case_stars")
+                        reward_for_announce = result["reward"]
+                        await conn.commit()
+                    finally:
+                        await conn.close()
+                if reward_for_announce and reward_for_announce["tier"] in ("RED","GOLD","LEGENDARY","MYTHIC"):
+                    asyncio.create_task(announce_top_drop(int(uid),reward_for_announce))
         except Exception as e:
             print("payment processing error:", repr(e), flush=True)
         return
@@ -852,6 +1141,8 @@ class AdminGrantIn(BaseModel):
 class AdminRewardIn(BaseModel):
     token: str = Field(min_length=4, max_length=32)
     tickets: int = Field(default=0, ge=0, le=100)
+    donation_tickets: int = Field(default=0, ge=0, le=100)
+    donation_case_id: str = Field(default="*", max_length=32)
     upgrade_points: int = Field(default=0, ge=0, le=10000)
 
 
@@ -864,8 +1155,27 @@ class PromoCreateIn(BaseModel):
     promo_type: str = Field(default="discount", max_length=16)
     discount_percent: int = Field(default=0, ge=0, le=90)
     spin_tickets: int = Field(default=0, ge=0, le=100)
+    donation_tickets: int = Field(default=0, ge=0, le=100)
+    donation_case_id: str = Field(default="*", max_length=32)
     max_uses: int = Field(default=0, ge=0, le=100000)
     expires_at: str = Field(default="", max_length=32)
+
+
+class CaseTierAdminIn(BaseModel):
+    tier: str = Field(min_length=3, max_length=16)
+    chance: float = Field(gt=0, le=100)
+
+
+class CaseAdminIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=500)
+    price_stars: int = Field(default=0, ge=0, le=1000000)
+    is_free: bool = False
+    active: bool = True
+    icon: str = Field(default="crate", max_length=20)
+    sort_order: int = Field(default=0, ge=0, le=10000)
+    tiers: list[CaseTierAdminIn]
+    items: list[str]
 
 
 class SpinPromoIn(BaseModel):
@@ -1080,6 +1390,8 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
                 "ORDER BY id DESC LIMIT 1",
                 (uid,)
             )).fetchone()
+            case_catalog = await load_case_catalog(conn)
+            donation_total, donation_by_case = await donation_ticket_counts(conn,uid)
         finally:
             await conn.close()
     used = int(used_row["c"] or 0)
@@ -1093,6 +1405,8 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "max_free_spins":MAX_FREE_SPINS_24H,
       "bonus_tickets":bonus_tickets,
       "remaining_spins":free_remaining + bonus_tickets,
+      "donation_tickets_total":donation_total,
+      "donation_tickets_by_case":donation_by_case,
       "shr":int(state["upgrade_points"]),
       "upgrade_points":int(state["upgrade_points"]),
       "next_reset_seconds":next_reset,
@@ -1100,7 +1414,7 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "upgrade_rewards":SHR_REWARDS,
       "tier_chances":SPIN_TIER_CHANCES,
       "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS],
-      "case_catalog":CASE_CATALOG,
+      "case_catalog":case_catalog,
       "pending_drop":(
         {
           "inventory_item_id":int(pending["id"]),
@@ -1242,6 +1556,118 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
     }
 
 
+@app.post("/api/spin/case/{case_id}/open")
+async def open_case(case_id: str, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    case_id = (case_id or "").strip().upper()
+    if case_id == "FREE":
+        raise HTTPException(400,"Бесплатный кейс открывается обычной кнопкой SPIN")
+    immediate = None
+    purchase_id = 0
+    invoice_price = 0
+    case_name = ""
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            cases = await load_case_catalog(conn,include_inactive=True)
+            cfg = next((x for x in cases if x["id"] == case_id),None)
+            if not cfg or not cfg["active"]:
+                await conn.rollback()
+                raise HTTPException(404,"Кейс недоступен")
+            pending = await (await conn.execute(
+                "SELECT id FROM inventory_items WHERE telegram_id=? AND status='pending' ORDER BY id DESC LIMIT 1",
+                (uid,)
+            )).fetchone()
+            if pending:
+                await conn.rollback()
+                raise HTTPException(409,"Сначала сохраните или продайте предыдущий выпавший предмет")
+            snapshot_json = json.dumps(case_snapshot(cfg),ensure_ascii=False,separators=(",",":"))
+            case_name = cfg["name"]
+            is_free = bool(cfg["is_free"]) or int(cfg["price_stars"] or 0) <= 0
+            ticket_scope = ""
+            if not is_free:
+                ticket_scope = await consume_donation_ticket(conn,uid,case_id)
+            if is_free or ticket_scope:
+                source = "case_free" if is_free else "donation_ticket"
+                cur = await conn.execute(
+                    "INSERT INTO case_purchases(telegram_id,case_id,case_name,stars_amount,config_json,status,payment_method,source) "
+                    "VALUES(?,?,?,?,?,'processing',?,?)",
+                    (uid,case_id,cfg["name"],0,snapshot_json,
+                     "Бесплатно" if is_free else "Donation Ticket",source)
+                )
+                purchase_id = int(cur.lastrowid)
+                purchase = await (await conn.execute(
+                    "SELECT * FROM case_purchases WHERE id=?",(purchase_id,)
+                )).fetchone()
+                immediate = await fulfill_case_purchase(conn,purchase,source)
+                total_tickets, by_case = await donation_ticket_counts(conn,uid)
+                await conn.commit()
+                immediate.update({
+                    "mode":"free" if is_free else "donation_ticket",
+                    "donation_tickets_total":total_tickets,
+                    "donation_tickets_by_case":by_case,
+                })
+            else:
+                invoice_price = int(cfg["price_stars"])
+                cur = await conn.execute(
+                    "INSERT INTO case_purchases(telegram_id,case_id,case_name,stars_amount,config_json,status) "
+                    "VALUES(?,?,?,?,?,'awaiting_payment')",
+                    (uid,case_id,cfg["name"],invoice_price,snapshot_json)
+                )
+                purchase_id = int(cur.lastrowid)
+                await conn.commit()
+        finally:
+            await conn.close()
+    if immediate:
+        if immediate["reward"]["tier"] in ("RED","GOLD","LEGENDARY","MYTHIC"):
+            asyncio.create_task(announce_top_drop(uid,immediate["reward"]))
+        return immediate
+    link = await tg("createInvoiceLink", {
+        "title":case_name,
+        "description":f"Открытие кейса {case_name}",
+        "payload":f"case:{purchase_id}:{uid}",
+        "provider_token":"",
+        "currency":"XTR",
+        "prices":[{"label":case_name,"amount":invoice_price}]
+    })
+    return {"mode":"stars","purchase_id":purchase_id,"url":link,"price_stars":invoice_price}
+
+
+@app.get("/api/spin/case/purchase/{purchase_id}")
+async def case_purchase_status(purchase_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    conn = await db()
+    try:
+        row = await (await conn.execute(
+            "SELECT * FROM case_purchases WHERE id=? AND telegram_id=?",
+            (purchase_id,uid)
+        )).fetchone()
+    finally:
+        await conn.close()
+    if not row:
+        raise HTTPException(404,"Открытие кейса не найдено")
+    if row["status"] != "fulfilled":
+        return {"purchase_id":purchase_id,"status":row["status"]}
+    value = int(row["reward_value_stars"] or 0)
+    return {
+        "purchase_id":purchase_id,
+        "status":"fulfilled",
+        "mode":"stars",
+        "source":row["source"] or "case_stars",
+        "inventory_item_id":int(row["inventory_item_id"]),
+        "sell_shr":value,
+        "reward":{
+            "name":row["reward_name"],
+            "tier":row["reward_tier"],
+            "points":value,
+            "value_stars":value
+        }
+    }
+
+
 @app.post("/api/spin/promo")
 async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
@@ -1253,14 +1679,14 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
             await conn.execute("BEGIN IMMEDIATE")
             promo = await (await conn.execute(
                 "SELECT * FROM promos WHERE code=? AND active=1 "
-                "AND (lower(COALESCE(promo_type,''))='spin' OR COALESCE(spin_tickets,0)>0) "
+                "AND (lower(COALESCE(promo_type,'')) IN ('spin','donation') OR COALESCE(spin_tickets,0)>0 OR COALESCE(donation_tickets,0)>0) "
                 "AND (max_uses=0 OR uses<max_uses) "
                 "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
                 (code,)
             )).fetchone()
             if not promo:
                 await conn.rollback()
-                raise HTTPException(400,"SPIN-промокод недействителен, закончился или истёк")
+                raise HTTPException(400,"Промокод недействителен, закончился или истёк")
             redeemed = await (await conn.execute(
                 "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
                 (promo["id"],uid)
@@ -1268,31 +1694,62 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
             if redeemed:
                 await conn.rollback()
                 raise HTTPException(409,"Вы уже активировали этот промокод")
-            tickets = int(promo["spin_tickets"] or 0)
-            if tickets <= 0 and str(promo["promo_type"] or "").lower()=="spin":
-                tickets = 1
-                await conn.execute("UPDATE promos SET spin_tickets=1 WHERE id=?",(promo["id"],))
-            if tickets <= 0:
+            promo_type = str(promo["promo_type"] or "").lower()
+            spin_added = int(promo["spin_tickets"] or 0)
+            donation_added = int(promo["donation_tickets"] or 0)
+            donation_case_id = str(promo["donation_case_id"] or "*").upper()
+            if promo_type == "spin" and spin_added <= 0:
+                spin_added = 1
+            if promo_type == "donation" and donation_added <= 0:
+                donation_added = 1
+            if promo_type not in ("spin","donation") and spin_added <= 0 and donation_added <= 0:
                 await conn.rollback()
-                raise HTTPException(400,"Этот промокод не выдаёт SPIN-билеты")
+                raise HTTPException(400,"Этот промокод предназначен для покупки товара")
             await conn.execute(
                 "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
                 (uid,)
             )
-            await conn.execute(
-                "UPDATE spin_state SET tickets=tickets+? WHERE telegram_id=?",
-                (tickets,uid)
-            )
+            if spin_added > 0:
+                await conn.execute(
+                    "UPDATE spin_state SET tickets=tickets+? WHERE telegram_id=?",
+                    (spin_added,uid)
+                )
+            if donation_added > 0:
+                if donation_case_id != "*":
+                    exists = await (await conn.execute(
+                        "SELECT 1 FROM cases WHERE id=? AND active=1",(donation_case_id,)
+                    )).fetchone()
+                    if not exists:
+                        await conn.rollback()
+                        raise HTTPException(400,"Кейс для Donation Ticket больше недоступен")
+                await conn.execute(
+                    "INSERT INTO donation_ticket_wallet(telegram_id,case_id,tickets) VALUES(?,?,?) "
+                    "ON CONFLICT(telegram_id,case_id) DO UPDATE SET tickets=tickets+excluded.tickets",
+                    (uid,donation_case_id,donation_added)
+                )
             await conn.execute(
                 "INSERT INTO promo_redemptions(promo_id,telegram_id) VALUES(?,?)",
                 (promo["id"],uid)
             )
             await conn.execute("UPDATE promos SET uses=uses+1 WHERE id=?",(promo["id"],))
             await conn.commit()
-            state = await (await conn.execute("SELECT tickets FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+            state = await (await conn.execute(
+                "SELECT tickets FROM spin_state WHERE telegram_id=?",(uid,)
+            )).fetchone()
+            donation_total, donation_by_case = await donation_ticket_counts(conn,uid)
         finally:
             await conn.close()
-    return {"ok":True,"code":code,"tickets_added":tickets,"bonus_tickets":int(state["tickets"] or 0)}
+    return {
+        "ok":True,
+        "code":code,
+        "promo_type":"donation" if donation_added > 0 and promo_type == "donation" else "spin",
+        "tickets_added":spin_added,
+        "bonus_tickets":int(state["tickets"] or 0),
+        "donation_tickets_added":donation_added,
+        "donation_case_id":donation_case_id,
+        "donation_tickets_total":donation_total,
+        "donation_tickets_by_case":donation_by_case
+    }
 
 
 @app.get("/api/inventory")
@@ -1591,6 +2048,7 @@ async def admin_users(x_telegram_init_data: str | None = Header(default=None)):
         rows = await (await conn.execute(
             "SELECT u.token,u.username,u.first_name,u.created_at,"
             "COALESCE(s.tickets,0) tickets,COALESCE(s.upgrade_points,0) upgrade_points,"
+            "COALESCE((SELECT SUM(d.tickets) FROM donation_ticket_wallet d WHERE d.telegram_id=u.telegram_id),0) donation_tickets,"
             "(SELECT COUNT(*) FROM orders o WHERE o.telegram_id=u.telegram_id) orders_count,"
             "(SELECT COUNT(*) FROM referrals r WHERE r.referrer_id=u.telegram_id) referrals_count "
             "FROM users u LEFT JOIN spin_state s ON s.telegram_id=u.telegram_id "
@@ -1604,8 +2062,9 @@ async def admin_users(x_telegram_init_data: str | None = Header(default=None)):
 @app.post("/api/admin/rewards/grant")
 async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
-    if body.tickets <= 0 and body.upgrade_points <= 0:
-        raise HTTPException(400,"Укажите билеты или SHR")
+    if body.tickets <= 0 and body.donation_tickets <= 0 and body.upgrade_points <= 0:
+        raise HTTPException(400,"Укажите обычные билеты, Donation Tickets или SHR")
+    case_target = (body.donation_case_id or "*").strip().upper()
     async with db_write_lock:
         conn = await db()
         try:
@@ -1613,6 +2072,12 @@ async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | N
             if not user:
                 raise HTTPException(404,"Пользователь с таким жетоном не найден")
             uid = int(user["telegram_id"])
+            if body.donation_tickets > 0 and case_target != "*":
+                exists = await (await conn.execute(
+                    "SELECT 1 FROM cases WHERE id=?",(case_target,)
+                )).fetchone()
+                if not exists:
+                    raise HTTPException(404,"Кейс для Donation Ticket не найден")
             await conn.execute(
                 "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
                 (uid,)
@@ -1621,10 +2086,108 @@ async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | N
                 "UPDATE spin_state SET tickets=tickets+?,upgrade_points=upgrade_points+? WHERE telegram_id=?",
                 (body.tickets,body.upgrade_points,uid)
             )
+            if body.donation_tickets > 0:
+                await conn.execute(
+                    "INSERT INTO donation_ticket_wallet(telegram_id,case_id,tickets) VALUES(?,?,?) "
+                    "ON CONFLICT(telegram_id,case_id) DO UPDATE SET tickets=tickets+excluded.tickets",
+                    (uid,case_target,body.donation_tickets)
+                )
             await conn.commit()
         finally:
             await conn.close()
-    return {"ok":True,"token":body.token.strip().upper(),"tickets_added":body.tickets,"upgrade_points_added":body.upgrade_points}
+    return {
+        "ok":True,
+        "token":body.token.strip().upper(),
+        "tickets_added":body.tickets,
+        "donation_tickets_added":body.donation_tickets,
+        "donation_case_id":case_target,
+        "upgrade_points_added":body.upgrade_points
+    }
+
+
+@app.get("/api/admin/cases")
+async def admin_cases(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn = await db()
+    try:
+        cases = await load_case_catalog(conn,include_inactive=True)
+    finally:
+        await conn.close()
+    rewards = [
+        {"name":x["name"],"tier":x["tier"],"value_stars":int(x["value_stars"])}
+        for x in sorted(SPIN_REWARDS,key=lambda r:(VALID_CASE_TIERS.index(r["tier"]),int(r["value_stars"]),r["name"]))
+    ]
+    return {"cases":cases,"rewards":rewards,"tiers":list(VALID_CASE_TIERS)}
+
+
+@app.patch("/api/admin/cases/{case_id}")
+async def admin_update_case(case_id: str, body: CaseAdminIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    case_id = (case_id or "").strip().upper()
+    tier_map = {}
+    for t in body.tiers:
+        tier = t.tier.strip().upper()
+        if tier not in VALID_CASE_TIERS:
+            raise HTTPException(400,f"Неизвестное качество: {tier}")
+        if tier in tier_map:
+            raise HTTPException(400,f"Качество {tier} указано дважды")
+        tier_map[tier] = float(t.chance)
+    if not tier_map:
+        raise HTTPException(400,"Оставьте хотя бы одно качество")
+    if abs(sum(tier_map.values()) - 100.0) > 0.05:
+        raise HTTPException(400,"Сумма процентов качеств должна быть ровно 100%")
+    reward_lookup = {x["name"]:x for x in SPIN_REWARDS}
+    selected = []
+    seen = set()
+    for name in body.items:
+        if name in reward_lookup and name not in seen:
+            selected.append(name)
+            seen.add(name)
+    if not selected:
+        raise HTTPException(400,"Выберите хотя бы один предмет")
+    bad = [n for n in selected if reward_lookup[n]["tier"] not in tier_map]
+    if bad:
+        raise HTTPException(400,"В содержимом есть предметы из выключенных качеств")
+    for tier in tier_map:
+        if not any(reward_lookup[n]["tier"] == tier for n in selected):
+            raise HTTPException(400,f"Для качества {tier} выберите хотя бы один предмет")
+    icon = body.icon.strip().lower()
+    if icon not in CASE_ICON_CHOICES:
+        raise HTTPException(400,"Некорректная иконка кейса")
+    is_free = bool(body.is_free)
+    price_stars = int(body.price_stars)
+    if case_id == "FREE":
+        is_free = True
+        price_stars = 0
+    elif not is_free and price_stars <= 0:
+        raise HTTPException(400,"Для платного кейса укажите цену в Stars")
+    async with db_write_lock:
+        conn = await db()
+        try:
+            exists = await (await conn.execute("SELECT 1 FROM cases WHERE id=?",(case_id,))).fetchone()
+            if not exists:
+                raise HTTPException(404,"Кейс не найден")
+            await conn.execute("BEGIN IMMEDIATE")
+            await conn.execute(
+                "UPDATE cases SET name=?,description=?,price_stars=?,is_free=?,active=?,icon=?,sort_order=? WHERE id=?",
+                (body.name.strip(),body.description.strip(),price_stars,1 if is_free else 0,
+                 1 if body.active else 0,icon,int(body.sort_order),case_id)
+            )
+            await conn.execute("DELETE FROM case_tiers WHERE case_id=?",(case_id,))
+            await conn.executemany(
+                "INSERT INTO case_tiers(case_id,tier,chance) VALUES(?,?,?)",
+                [(case_id,tier,float(chance)) for tier,chance in tier_map.items()]
+            )
+            await conn.execute("DELETE FROM case_items WHERE case_id=?",(case_id,))
+            await conn.executemany(
+                "INSERT INTO case_items(case_id,reward_name) VALUES(?,?)",
+                [(case_id,name) for name in selected]
+            )
+            await conn.commit()
+            updated = next(x for x in await load_case_catalog(conn,include_inactive=True) if x["id"] == case_id)
+        finally:
+            await conn.close()
+    return {"ok":True,"case":updated}
 
 
 @app.get("/api/admin/promos")
@@ -1645,21 +2208,34 @@ async def admin_create_promo(body: PromoCreateIn, x_telegram_init_data: str | No
     promo_type=body.promo_type.strip().lower()
     if not code.replace("_","").replace("-","").isalnum():
         raise HTTPException(400,"Код может содержать буквы, цифры, - и _")
-    if promo_type not in ("discount","spin"):
-        raise HTTPException(400,"Тип промокода: discount или spin")
+    if promo_type not in ("discount","spin","donation"):
+        raise HTTPException(400,"Тип промокода: discount, spin или donation")
     if promo_type=="discount" and body.discount_percent<=0:
         raise HTTPException(400,"Для скидочного промокода укажите процент скидки")
     if promo_type=="spin" and body.spin_tickets<=0:
         raise HTTPException(400,"Для SPIN-промокода укажите количество билетов")
+    if promo_type=="donation" and body.donation_tickets<=0:
+        raise HTTPException(400,"Для Donation Ticket промокода укажите количество синих тикетов")
+    case_target=(body.donation_case_id or "*").strip().upper()
     async with db_write_lock:
         conn=await db()
         try:
+            if promo_type=="donation" and case_target!="*":
+                exists=await (await conn.execute("SELECT 1 FROM cases WHERE id=?",(case_target,))).fetchone()
+                if not exists:
+                    raise HTTPException(404,"Кейс для промокода не найден")
             try:
                 cur=await conn.execute(
-                    "INSERT INTO promos(code,promo_type,discount_percent,spin_tickets,max_uses,expires_at) VALUES(?,?,?,?,?,?)",
-                    (code,promo_type,body.discount_percent if promo_type=="discount" else 0,
-                     body.spin_tickets if promo_type=="spin" else 0,
-                     body.max_uses,body.expires_at.strip())
+                    "INSERT INTO promos(code,promo_type,discount_percent,spin_tickets,donation_tickets,donation_case_id,max_uses,expires_at) "
+                    "VALUES(?,?,?,?,?,?,?,?)",
+                    (
+                        code,promo_type,
+                        body.discount_percent if promo_type=="discount" else 0,
+                        body.spin_tickets if promo_type=="spin" else 0,
+                        body.donation_tickets if promo_type=="donation" else 0,
+                        case_target if promo_type=="donation" else "*",
+                        body.max_uses,body.expires_at.strip()
+                    )
                 )
                 await conn.commit()
             except Exception as e:
@@ -1855,10 +2431,13 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .nav button{flex:1;background:transparent;color:#8f969e;font-size:12px;padding:10px 3px}.nav button.active{background:#24200f;color:#ffd24b}
 .nav.spin-locked{opacity:.48;filter:saturate(.55);pointer-events:none}.nav.spin-locked:after{content:"SPIN";position:absolute;right:10px;top:-8px;font-size:9px;font-weight:1000;letter-spacing:.7px;color:#171000;background:#ffd044;border-radius:8px;padding:3px 6px;box-shadow:0 0 14px #ffc21c55}
 .spin-lock-note{display:none;margin-top:9px;font-size:11px;font-weight:850;color:#ffd45a;text-align:center}.spin-lock-note.show{display:block}
-.spin-case-picker{margin:12px 0 14px}.spin-case-picker h3{margin:0 0 9px}.spin-case-scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}.spin-case-scroll::-webkit-scrollbar{display:none}
-.spin-case-card{flex:0 0 132px;background:#111418;border:1px solid #2b3036;border-radius:18px;padding:11px 9px;color:#fff;text-align:left;position:relative;overflow:hidden;transition:.16s transform,.16s border-color,.16s box-shadow}.spin-case-card:active{transform:scale(.97)}.spin-case-card.active{border-color:#ffd044;box-shadow:0 0 22px #ffc21c44,inset 0 0 24px #ffc21c12}
-.spin-case-card:disabled{opacity:.55}.spin-case-top{display:flex;align-items:center;gap:8px}.spin-case-card .loot-cube{width:42px;height:42px;flex:0 0 42px;border-radius:12px;font-size:21px}.spin-case-title{font-size:12px;font-weight:950;line-height:1.1}.spin-case-price{font-size:11px;font-weight:950;color:#ffd45a;margin-top:3px}.spin-case-odds{display:flex;flex-wrap:wrap;gap:4px;margin-top:9px}.spin-case-odds span{font-size:8.5px;font-weight:900;padding:4px 6px;border-radius:8px;background:#1c2127;border:1px solid #2c3238}
-.spin-case-note{font-size:10px;color:#939aa2;margin-top:6px;line-height:1.3}
+.spin-case-picker{margin:12px 0 14px}.spin-case-picker h3{margin:0 0 9px}.spin-case-scroll{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:2px 0 8px}
+.spin-case-card{min-width:0;min-height:196px;background:#111418;border:1px solid #2b3036;border-radius:19px;padding:12px 11px;color:#fff;text-align:left;position:relative;overflow:hidden;transition:.16s transform,.16s border-color,.16s box-shadow;display:flex;flex-direction:column}.spin-case-card:active{transform:scale(.98)}.spin-case-card.active{border-color:#ffd044;box-shadow:0 0 22px #ffc21c44,inset 0 0 24px #ffc21c12}
+.spin-case-card:disabled{opacity:.55}.spin-case-top{display:grid;grid-template-columns:54px minmax(0,1fr);align-items:center;gap:9px;min-height:58px}.spin-case-title{font-size:13px;font-weight:950;line-height:1.15}.spin-case-price{font-size:12px;font-weight:950;color:#ffd45a;margin-top:4px}.spin-case-desc{font-size:10.5px;color:#a8b0b8;line-height:1.35;min-height:43px;margin:9px 0 7px}.spin-case-odds{display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px;margin-top:auto;min-height:48px}.spin-case-odds span{font-size:8.7px;font-weight:900;padding:4px 6px;border-radius:8px;background:#1c2127;border:1px solid #2c3238}.spin-case-ticket{margin-top:8px;font-size:9.5px;font-weight:950;color:#67bfff}
+.spin-case-note{font-size:10px;color:#939aa2;margin-top:7px;line-height:1.35}
+.case-icon{width:52px;height:52px;border-radius:15px;display:grid;place-items:center;border:1px solid #3b4857;background:linear-gradient(145deg,#202a35,#0b1015);box-shadow:inset 0 1px #ffffff22,0 10px 18px #0007;position:relative}.case-icon svg{width:30px;height:30px;stroke:#eaf4ff;fill:none;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 7px currentColor)}.case-icon-gift{color:#49e6dc;border-color:#2aa69e}.case-icon-crate{color:#559cff;border-color:#3e7bd2}.case-icon-supply{color:#c060ff;border-color:#9144c6}.case-icon-vault{color:#ff77d2;border-color:#b63d82}.case-icon-crown{color:#ffd45a;border-color:#a57d16;background:linear-gradient(145deg,#3f2d05,#0c0a05)}
+.blue-ticket{color:#75c6ff!important;text-shadow:0 0 10px #319fff66}.donation-stat{border-color:#245f98!important;background:linear-gradient(145deg,#10283f,#0b141e)!important}
+@media(max-width:360px){.spin-case-scroll{grid-template-columns:1fr}.spin-case-card{min-height:176px}}
 .page-home{display:inline-flex;align-items:center;gap:7px;margin:0 0 12px;background:#171b20;color:#dce1e6;border:1px solid #30363d;padding:9px 12px;border-radius:13px;box-shadow:inset 0 1px #ffffff0a}
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
 .setting-card{background:#111418;border:1px solid #2a3036;border-radius:18px;padding:14px}
@@ -1874,12 +2453,14 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .history-periods button{white-space:nowrap;background:#1c2127;color:#aeb5bd;border:1px solid #30363d;padding:8px 10px}.history-periods button.active{background:#33290c;color:#ffd45b;border-color:#6d5719}
 .history-result-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:12px 0 8px}
 .history-time{font-size:11px;font-weight:850;color:#d0d6dc;margin-top:7px}
-.case-guide{display:grid;gap:12px}.case-guide-card{background:#111418;border:1px solid #2a3036;border-radius:20px;padding:14px;overflow:hidden}
-.case-guide-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.case-guide-name{font-size:17px;font-weight:950}.case-guide-price{font-size:15px;font-weight:1000;color:#ffd45a;white-space:nowrap}
-.case-tier-row{display:flex;gap:8px;overflow-x:auto;padding:3px 0 5px;scrollbar-width:none}.case-tier-row::-webkit-scrollbar{display:none}
-.case-tier-btn{flex:0 0 112px;background:#171b20;border:1px solid #2c3238;border-radius:16px;padding:10px;text-align:center;color:#fff}
-.case-tier-btn .loot-cube{width:52px;height:52px;border-radius:14px;font-size:25px;margin:0 auto 7px}.case-tier-btn .rarity-card-title{font-size:10px}.case-tier-btn .rarity-card-chance{font-size:16px}
-.case-guide-note{font-size:10px;color:#858d96;margin-top:9px;line-height:1.35}
+.case-guide{display:grid;gap:12px}.case-guide-card{background:#111418;border:1px solid #2a3036;border-radius:20px;padding:14px;overflow:hidden;min-height:248px;display:flex;flex-direction:column}
+.case-guide-head{display:grid;grid-template-columns:62px minmax(0,1fr) auto;align-items:center;gap:10px;margin-bottom:8px;min-height:64px}.case-guide-head .case-icon{width:58px;height:58px}.case-guide-name{font-size:17px;font-weight:950}.case-guide-price{font-size:15px;font-weight:1000;color:#ffd45a;white-space:nowrap}.case-guide-desc{min-height:40px;font-size:11px;color:#a1a8b0;line-height:1.35;margin-bottom:10px}
+.case-tier-row{display:flex;gap:9px;overflow-x:auto;padding:3px 0 5px;scrollbar-width:none;margin-top:auto}.case-tier-row::-webkit-scrollbar{display:none}
+.case-tier-btn{flex:0 0 132px;min-height:130px;background:#171b20;border:1px solid #2c3238;border-radius:17px;padding:12px 10px;text-align:center;color:#fff}
+.case-tier-btn .loot-cube{width:60px;height:60px;border-radius:15px;font-size:28px;margin:0 auto 8px}.case-tier-btn .rarity-card-title{font-size:10.5px}.case-tier-btn .rarity-card-chance{font-size:17px}
+.case-guide-note{font-size:10px;color:#858d96;margin-top:10px;line-height:1.35}
+.case-admin-card{border-color:#304154}.case-admin-top{display:grid;grid-template-columns:1fr 1fr;gap:8px}.case-admin-tier-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}.case-admin-tier{display:grid;grid-template-columns:auto 1fr 76px;gap:7px;align-items:center;background:#151a20;border:1px solid #2c333b;border-radius:13px;padding:8px}.case-admin-tier input[type=checkbox]{width:20px;height:20px;margin:0}.case-admin-tier input[type=number]{margin:0;padding:9px}.case-admin-items details{background:#11161b;border:1px solid #29323b;border-radius:13px;padding:8px 10px;margin:7px 0}.case-admin-items summary{cursor:pointer;font-weight:900}.case-item-list{display:grid;gap:6px;margin-top:8px;max-height:210px;overflow:auto}.case-item-list label{display:flex;align-items:center;gap:8px;font-size:11px;background:#171d23;border-radius:9px;padding:7px}.case-item-list input{width:17px;height:17px;margin:0}.case-item-list b{margin-left:auto;color:#ffd45a}.donation-ticket-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border-radius:9px;background:#0c2d4d;border:1px solid #2678bd;color:#78c9ff;font-size:10px;font-weight:950}
+@media(max-width:430px){.case-guide-head{grid-template-columns:58px minmax(0,1fr);}.case-guide-price{grid-column:2}.case-admin-top,.case-admin-tier-grid{grid-template-columns:1fr}}
 @media(max-width:430px){.history-filter-grid{grid-template-columns:1fr}}
 
 /* live big wins */
@@ -1986,7 +2567,7 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .spin-options input{width:20px;height:20px;margin:0;accent-color:#ffc21c;flex:0 0 20px}
 .spin-options span{font-size:13px;font-weight:800;color:#d7dbe0}
 .spin-result{min-height:22px;margin-top:10px;font-size:13px;font-weight:850;text-align:center}
-.spin-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:11px}.spin-stat .price{font-size:17px}
+.spin-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:11px}.spin-stat .price{font-size:17px}@media(max-width:430px){.spin-stats{grid-template-columns:repeat(2,1fr)}}
 .rarity-catalog{margin:18px 0 8px}
 .rarity-catalog-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:10px}
 .rarity-catalog-head h3{margin:0}.rarity-catalog-head .mini{text-align:right}
@@ -2394,6 +2975,30 @@ function tierLabel(tier){
  const labels={GRAY:'СЕРЫЙ',CYAN:'ГОЛУБОЙ',BLUE:'СИНИЙ',PURPLE:'ФИОЛЕТОВЫЙ',PINK:'РОЗОВЫЙ',RED:'КРАСНЫЙ',GOLD:'ЗОЛОТОЙ',COMMON:'COMMON',RARE:'RARE',EPIC:'EPIC',LEGENDARY:'LEGENDARY',MYTHIC:'MYTHIC'};
  return labels[String(tier||'').toUpperCase()]||String(tier||'')
 }
+function caseIcon(kind){
+ const k=String(kind||'crate').toLowerCase();
+ const icons={
+  gift:'<svg viewBox="0 0 32 32"><path d="M5 13h22v14H5z"/><path d="M3.5 9.5h25V14h-25z"/><path d="M16 9.5V27"/><path d="M16 9c-1.8-5-7.2-5.2-7.2-1.8C8.8 9.1 11 9.5 16 9.5"/><path d="M16 9c1.8-5 7.2-5.2 7.2-1.8 0 1.9-2.2 2.3-7.2 2.3"/></svg>',
+  crate:'<svg viewBox="0 0 32 32"><path d="M5 8h22v18H5z"/><path d="M5 13h22M10 8v18M22 8v18"/><path d="M10 13l12 13M22 13L10 26"/></svg>',
+  supply:'<svg viewBox="0 0 32 32"><path d="M7 19h18v9H7z"/><path d="M10 19v9M22 19v9"/><path d="M16 4v15"/><path d="M6 10c2.2-4 5.6-6 10-6s7.8 2 10 6"/><path d="M6 10l10 4 10-4"/></svg>',
+  vault:'<svg viewBox="0 0 32 32"><rect x="5" y="5" width="22" height="22" rx="3"/><circle cx="16" cy="16" r="6"/><path d="M16 10v4M16 18v4M10 16h4M18 16h4"/><path d="M8 9h3M21 9h3M8 23h3M21 23h3"/></svg>',
+  crown:'<svg viewBox="0 0 32 32"><path d="M5 11l6 5 5-9 5 9 6-5-3 14H8z"/><path d="M8 25h16"/></svg>'
+ };
+ return '<div class="case-icon case-icon-'+esc(k)+'">'+(icons[k]||icons.crate)+'</div>'
+}
+function donationTicketsForCase(id){
+ const w=(spinState&&spinState.donation_tickets_by_case)||{};
+ return Number(w[id]||0)+Number(w['*']||0)
+}
+function historySourceLabel(src){
+ const s=String(src||'');
+ if(s==='ticket')return '🎟 Бонусный билет';
+ if(s==='free')return '🕐 Бесплатный SPIN';
+ if(s==='donation_ticket')return '🎟️ Donation Ticket';
+ if(s==='case_stars')return '⭐ Telegram Stars';
+ if(s==='case_free')return '🎁 Бесплатный кейс';
+ return '🎰 Кейс'
+}
 function tierChance(tier){
  const v=spinState&&spinState.tier_chances?spinState.tier_chances[String(tier||'').toUpperCase()]:0;
  return Number(v||0)
@@ -2437,10 +3042,10 @@ function spinCasePickerHtml(){
  if(!cases.length)return '';
  return '<section class="spin-case-picker"><h3>Выберите кейс</h3><div class="spin-case-scroll">'+cases.map(c=>{
   const active=c.id===selectedCaseId;
-  const visual=caseVisualTier(c);
   const odds=(c.tiers||[]).map(t=>'<span class="'+tierClass(t.tier)+'">'+tierLabel(t.tier)+' '+Number(t.chance||0)+'%</span>').join('');
-  return '<button type="button" class="spin-case-card '+(active?'active':'')+'" data-spin-case="'+esc(c.id)+'" '+(spinState.pending_drop?'disabled':'')+'><div class="spin-case-top"><div class="loot-cube '+cubeClass(visual)+'"><span>?</span></div><div><div class="spin-case-title">'+esc(c.name)+'</div><div class="spin-case-price">'+esc(c.price_label)+'</div></div></div><div class="spin-case-odds">'+odds+'</div></button>'
- }).join('')+'</div><div class="spin-case-note">Нажмите на кейс, чтобы выбрать его. Бесплатный кейс открывается здесь; платные случайные открытия за Stars не подключены.</div></section>'
+  const dt=donationTicketsForCase(c.id);
+  return '<button type="button" class="spin-case-card '+(active?'active':'')+'" data-spin-case="'+esc(c.id)+'" '+(spinState.pending_drop?'disabled':'')+'><div class="spin-case-top">'+caseIcon(c.icon)+'<div><div class="spin-case-title">'+esc(c.name)+'</div><div class="spin-case-price">'+esc(c.price_label)+'</div></div></div><div class="spin-case-desc">'+esc(c.description||'')+'</div><div class="spin-case-odds">'+odds+'</div>'+(!c.is_free&&dt>0?'<div class="spin-case-ticket">🎟️ Синих тикетов для кейса: '+dt+'</div>':'')+'</button>'
+ }).join('')+'</div><div class="spin-case-note">Донат-кейс можно открыть за Telegram Stars или синим Donation Ticket. Цена и шансы берутся из настроек админки.</div></section>'
 }
 function bindSpinCasePicker(){
  document.querySelectorAll('[data-spin-case]').forEach(b=>b.addEventListener('click',async()=>{
@@ -2465,22 +3070,30 @@ function selectedCaseIdleStrip(){
 
 async function spinHtml(){
  spinState=await api('/api/spin/state');
- const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
+ const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+historySourceLabel(x.source)+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0);
  const pending=spinState.pending_drop||null;
- if(pending&&selectedCaseId!=='FREE'){selectedCaseId='FREE';localStorage.setItem('shx_selected_case','FREE')}
  const cfg=selectedCase();
- const isFree=!cfg||cfg.id==='FREE';
- const buttonText=pending?'СНАЧАЛА РАЗБЕРИТЕ ДРОП':!isFree?'СЛУЧАЙНОЕ ОТКРЫТИЕ ЗА STARS НЕДОСТУПНО':spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
+ const isBaseFree=!cfg||cfg.id==='FREE';
+ const caseTicketCount=cfg?donationTicketsForCase(cfg.id):0;
+ const caseIsFree=cfg&&!!cfg.is_free;
+ let buttonText='ОТКРЫТЬ КЕЙС';
+ let disabled=!!pending;
+ if(pending)buttonText='СНАЧАЛА РАЗБЕРИТЕ ДРОП';
+ else if(isBaseFree){buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';disabled=total<=0}
+ else if(caseIsFree)buttonText='ОТКРЫТЬ БЕСПЛАТНО';
+ else if(caseTicketCount>0)buttonText='ОТКРЫТЬ ЗА СИНИЙ ТИКЕТ';
+ else buttonText='ОТКРЫТЬ ЗА '+Number(cfg.price_stars||0)+' ⭐';
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
- return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
+ const statusText=isBaseFree?(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds)):(caseIsFree?'Этот кейс сейчас бесплатный':caseTicketCount>0?'Будет использован синий Donation Ticket':'После нажатия откроется счёт Telegram Stars');
+ return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">Бесплатный SPIN, донат-кейсы за Stars и отдельные синие Donation Tickets из промокодов.</div></section>'+
  spinCasePickerHtml()+
- '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0||pending||!isFree?'disabled':'')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
+ '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / '+spinState.max_free_spins+'</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION</div><div class="price blue-ticket">🎟️ '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
+ '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(disabled?'disabled':'')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
- '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
- '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
+ '<div class="muted" style="margin-top:10px">'+statusText+'</div></div>'+
+ '<div class="card"><div class="cat">ПРОМОКОД</div><div class="muted">Промокод может выдать обычные SPIN-билеты или синие Donation Tickets для платных кейсов.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<h3>SHR MARKET</h3><div class="card"><div class="muted">SHR можно получить за продажу выпавших предметов и обменять на гарантированные награды.</div>'+claims+'</div><h3>Последние 5 выпадений</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
@@ -2505,8 +3118,12 @@ async function applySpinPromo(){
  const b=document.getElementById('spinPromoBtn');b.disabled=true;b.textContent='Проверяем…';
  try{
   const d=await api('/api/spin/promo',{method:'POST',body:JSON.stringify({code})});
-  info.innerHTML='<span class="ok">+'+d.tickets_added+' SPIN-билет(а). Теперь у вас 🎟 '+d.bonus_tickets+'</span>';
-  setTimeout(async()=>{app.innerHTML=await spinHtml();bindSpin()},650)
+  if(d.promo_type==='donation'&&Number(d.donation_tickets_added||0)>0){
+   info.innerHTML='<span class="blue-ticket">🎟️ +'+d.donation_tickets_added+' Donation Ticket. Всего синих тикетов: '+d.donation_tickets_total+'</span>'
+  }else{
+   info.innerHTML='<span class="ok">+'+d.tickets_added+' SPIN-билет(а). Теперь у вас 🎟 '+d.bonus_tickets+'</span>'
+  }
+  setTimeout(async()=>{app.innerHTML=await spinHtml();bindSpin();addHomeExit()},650)
  }catch(e){info.innerHTML='<span class="warn">'+esc(e.message)+'</span>';b.disabled=false;b.textContent='Активировать'}
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
@@ -2603,22 +3220,43 @@ async function resolveDrop(itemId,action,btn){
   }
  }catch(e){if(btn)btn.disabled=false;alert(e.message)}
 }
+async function waitForCasePurchase(id){
+ for(let i=0;i<24;i++){
+  const p=await api('/api/spin/case/purchase/'+id);
+  if(p.status==='fulfilled')return p;
+  await sleep(500)
+ }
+ throw new Error('Платёж принят, но выдача дропа ещё не завершилась. Откройте SPIN ещё раз — результат сохранён.')
+}
+async function requestSpinResult(){
+ const cfg=selectedCase();
+ if(!cfg||cfg.id==='FREE')return await api('/api/spin/free',{method:'POST'});
+ const d=await api('/api/spin/case/'+encodeURIComponent(cfg.id)+'/open',{method:'POST'});
+ if(d.mode!=='stars')return d;
+ if(!(tg&&tg.openInvoice)){location.href=d.url;return null}
+ const status=await new Promise(resolve=>tg.openInvoice(d.url,s=>resolve(s||'cancelled')));
+ if(status!=='paid'){
+  const e=new Error(status==='cancelled'?'Оплата отменена':'Оплата не завершена');
+  e.silent=true;throw e
+ }
+ return await waitForCasePurchase(d.purchase_id)
+}
 async function spinOnce(){
  const b=document.getElementById('spinBtn');if(!b||b.disabled)return;
  const track=document.getElementById('reelTrack'),windowEl=document.getElementById('reelWindow'),result=document.getElementById('spinResult');
  const skip=!!document.getElementById('skipSpinAnimation')?.checked;
- b.disabled=true;b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
+ b.disabled=true;b.textContent='ПОДГОТАВЛИВАЕМ…';
  if(result)result.textContent='';
  setSpinNavigationLocked(true);
- // Start audio from the user's tap so Telegram/iOS cannot suspend it while the request is in flight.
  const audioReady=ensureAudioReady();
- if(!skip)beginAudioHold();
- else tone(523.25,.09,.024,'sine');
  try{
-  const d=await api('/api/spin/free',{method:'POST'});
+  const d=await requestSpinResult();
+  if(!d){setSpinNavigationLocked(false);return}
   await audioReady;
   lastSpinReward=d.reward;
+  b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
   if(skip){
+   tone(523.25,.09,.024,'sine');
    showFinalCube(track,windowEl,d.reward);
    sfxDrop(d.reward.tier);
    revealReward(result,d);
@@ -2626,6 +3264,7 @@ async function spinOnce(){
    showDropFx(d.reward);
    setSpinNavigationLocked(false)
   }else{
+   beginAudioHold();
    startSpinSound(30000);
    await animateSpinRight(track,windowEl,d.reward);
    stopSpinSound();sfxStop();
@@ -2641,8 +3280,8 @@ async function spinOnce(){
  }catch(e){
   stopSpinSound();
   setSpinNavigationLocked(false);
-  b.disabled=false;b.textContent='КРУТИТЬ SPIN';
-  alert(e.message)
+  if(!e.silent)alert(e.message);
+  app.innerHTML=await spinHtml();bindSpin();addHomeExit()
  }
 }
 async function claimUpgrade(points){try{const d=await api('/api/upgrade/claim',{method:'POST',body:JSON.stringify({points})});alert('Заявка создана: '+d.reward.name);app.innerHTML=await spinHtml();bindSpin()}catch(e){alert(e.message)}}
@@ -2727,12 +3366,14 @@ async function caseCatalogHtml(){
  spinState=await api('/api/spin/state');
  const cases=spinState.case_catalog||[];
  const html=cases.map(c=>{
-  const tiers=(c.tiers||[]).filter(t=>(spinState.rewards||[]).some(x=>x.tier===t.tier));
-  return '<div class="case-guide-card"><div class="case-guide-head"><div><div class="case-guide-name">'+esc(c.name)+'</div><div class="mini">'+tiers.length+' качеств</div></div><div class="case-guide-price">'+esc(c.price_label)+'</div></div>'+
+  const allowed=new Set(c.items||[]);
+  const tiers=(c.tiers||[]).filter(t=>(spinState.rewards||[]).some(x=>x.tier===t.tier&&allowed.has(x.name)));
+  return '<div class="case-guide-card"><div class="case-guide-head">'+caseIcon(c.icon)+'<div><div class="case-guide-name">'+esc(c.name)+'</div><div class="mini">'+tiers.length+' качеств • '+(c.items||[]).length+' предметов</div></div><div class="case-guide-price">'+esc(c.price_label)+'</div></div>'+
+   '<div class="case-guide-desc">'+esc(c.description||'')+'</div>'+
    '<div class="case-tier-row">'+tiers.map(t=>'<button type="button" class="case-tier-btn" data-case-tier="'+esc(c.id)+'" data-tier="'+esc(t.tier)+'"><div class="loot-cube '+cubeClass(t.tier)+'"><span>?</span></div><div class="rarity-card-title '+tierClass(t.tier)+'">'+tierLabel(t.tier)+'</div><div class="rarity-card-chance">'+Number(t.chance||0)+'%</div></button>').join('')+'</div>'+
-   '<div class="case-guide-note">Нажмите на качество, чтобы посмотреть предметы и цены по возрастанию.</div></div>'
+   '<div class="case-guide-note">Нажмите на качество, чтобы посмотреть только предметы этого кейса и их цены по возрастанию.</div></div>'
  }).join('');
- return '<section class="hero"><div class="cat">КУБИКИ И ПРЕДМЕТЫ</div><h1>Каталог кейсов</h1><div class="muted">В каждом кейсе показаны только доступные ему качества. Цены предметов отсортированы от меньшей к большей.</div></section>'+
+ return '<section class="hero"><div class="cat">КЕЙСЫ И ПРЕДМЕТЫ</div><h1>Каталог кейсов</h1><div class="muted">В каждом кейсе показаны только реально включённые качества и предметы. Цены отсортированы по возрастанию.</div></section>'+
  '<div class="case-guide">'+html+'</div><div class="rarity-modal hide" id="caseTierModal"><div class="rarity-sheet" id="caseTierSheet"></div></div>'
 }
 function openCaseTier(caseId,tier){
@@ -2740,7 +3381,8 @@ function openCaseTier(caseId,tier){
  const tierCfg=cfg&&(cfg.tiers||[]).find(x=>x.tier===tier);
  const modal=document.getElementById('caseTierModal'),sheet=document.getElementById('caseTierSheet');
  if(!cfg||!tierCfg||!modal||!sheet)return;
- const items=(spinState.rewards||[]).filter(x=>x.tier===tier).slice().sort((a,b)=>Number(a.value_stars||0)-Number(b.value_stars||0));
+ const allowed=new Set(cfg.items||[]);
+ const items=(spinState.rewards||[]).filter(x=>x.tier===tier&&allowed.has(x.name)).slice().sort((a,b)=>Number(a.value_stars||0)-Number(b.value_stars||0));
  sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div><div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+tierLabel(tier)+'</h3><div class="muted">'+esc(cfg.name)+' • шанс '+Number(tierCfg.chance||0)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="caseTierClose">Закрыть</button></div>'+
  items.map(x=>'<div class="rarity-item-row"><div class="rarity-item-name">'+esc(x.name)+'</div><div class="rarity-item-price">🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+' / '+Number(x.value_stars||0).toLocaleString('ru-RU')+' SHR</div></div>').join('');
  modal.classList.remove('hide');
@@ -2777,12 +3419,13 @@ function addHomeExit(){
 async function loadAdminData(){
  const r=await Promise.all([
   api('/api/admin/stats'),api('/api/admin/orders'),api('/api/admin/users'),api('/api/admin/products'),
-  api('/api/admin/promos'),api('/api/admin/tickets'),api('/api/admin/spins'),api('/api/admin/upgrades'),api('/api/admin/referrals')
+  api('/api/admin/promos'),api('/api/admin/tickets'),api('/api/admin/spins'),api('/api/admin/upgrades'),api('/api/admin/referrals'),
+  api('/api/admin/cases')
  ]);
- adminData={stats:r[0],orders:r[1],users:r[2],products:r[3],promos:r[4],tickets:r[5],spins:r[6],upgrades:r[7],referrals:r[8]}
+ adminData={stats:r[0],orders:r[1],users:r[2],products:r[3],promos:r[4],tickets:r[5],spins:r[6],upgrades:r[7],referrals:r[8],cases:r[9]}
 }
 function adminNav(){
- const items=[['overview','Обзор'],['orders','Заказы'],['users','Игроки'],['products','Товары'],['promos','Промо'],['rewards','Награды'],['support','Поддержка'],['bot','Бот']];
+ const items=[['overview','Обзор'],['orders','Заказы'],['users','Игроки'],['products','Товары'],['cases','Кейсы'],['promos','Промо'],['rewards','Награды'],['support','Поддержка'],['bot','Бот']];
  return '<div class="admin-nav">'+items.map(x=>'<button data-admin="'+x[0]+'" class="'+(adminSection===x[0]?'active':'')+'">'+x[1]+'</button>').join('')+'</div>'
 }
 function metric(label,val){return '<div class="metric"><span class="mini">'+label+'</span><b>'+val+'</b></div>'}
@@ -2796,16 +3439,31 @@ function adminOrders(){
  return '<h2>Заказы</h2>'+adminData.orders.map(o=>{const st=['Ожидает оплаты','Оплачен','Принят','В работе','Ожидает клиента','Выполнен','Отменён','Возврат'];return '<div class="admin-card"><div class="cat">#'+o.number+' • '+esc(o.user_token||'Без жетона')+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+stars(o.stars_amount)+' • PUBG UID '+esc(o.uid)+(o.promo_code?' • '+esc(o.promo_code):'')+'</div><div class="adminline"><select id="os'+o.id+'">'+st.map(s=>'<option '+(s===o.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-order-save="'+o.id+'">Сохранить</button></div></div>'}).join('')
 }
 function adminUsers(){
- return '<h2>Игроки и бонусы</h2><div class="card"><input id="userSearch" placeholder="Поиск по жетону, нику или имени"><div class="adminline"><input id="grantToken" placeholder="Жетон SHX-..."><input id="grantTickets" type="number" min="0" value="1" placeholder="Билеты"><input id="grantPts" type="number" min="0" value="0" placeholder="SHR"><button class="buy" id="grantBtn">Выдать</button></div></div>'+
- adminData.users.map(u=>'<div class="admin-card user-row" data-search="'+esc(((u.token||'')+' '+(u.username||'')+' '+(u.first_name||'')).toLowerCase())+'"><div class="name">'+esc(u.first_name||u.username||'Игрок')+' '+(u.username?'@'+esc(u.username):'')+'</div><div class="token-code">'+esc(u.token||'Без жетона')+'</div><div class="mini">заказов '+u.orders_count+' • рефералов '+u.referrals_count+' • 🎟 '+u.tickets+' • pts '+u.upgrade_points+'</div><button class="secondary" data-message-user="'+esc(u.token||'')+'" style="margin-top:8px">Написать по жетону</button></div>').join('')
+ const cases=(adminData.cases&&adminData.cases.cases)||[];
+ return '<h2>Игроки и бонусы</h2><div class="card"><input id="userSearch" placeholder="Поиск по жетону, нику или имени"><div class="adminline"><input id="grantToken" placeholder="Жетон SHX-..."><input id="grantTickets" type="number" min="0" value="0" placeholder="Обычные билеты"><input id="grantDonation" type="number" min="0" value="0" placeholder="Синие Donation Tickets"><input id="grantPts" type="number" min="0" value="0" placeholder="SHR"></div><select id="grantDonationCase"><option value="*">Donation Ticket: любой донат-кейс</option>'+cases.filter(c=>c.id!=='FREE').map(c=>'<option value="'+esc(c.id)+'">Только '+esc(c.name)+'</option>').join('')+'</select><button class="buy" id="grantBtn">Выдать</button></div>'+
+ adminData.users.map(u=>'<div class="admin-card user-row" data-search="'+esc(((u.token||'')+' '+(u.username||'')+' '+(u.first_name||'')).toLowerCase())+'"><div class="name">'+esc(u.first_name||u.username||'Игрок')+' '+(u.username?'@'+esc(u.username):'')+'</div><div class="token-code">'+esc(u.token||'Без жетона')+'</div><div class="mini">заказов '+u.orders_count+' • рефералов '+u.referrals_count+' • 🎟 '+u.tickets+' • <span class="blue-ticket">🎟️ Donation '+u.donation_tickets+'</span> • SHR '+u.upgrade_points+'</div><button class="secondary" data-message-user="'+esc(u.token||'')+'" style="margin-top:8px">Написать по жетону</button></div>').join('')
 }
 function adminProducts(){
  return '<h2>Товары</h2><div class="card"><input id="newPName" placeholder="Название"><input id="newPCat" placeholder="Категория"><textarea id="newPDesc" placeholder="Описание"></textarea><div class="row"><input id="newPStars" type="number" placeholder="Цена ⭐"><input id="newPSort" type="number" value="0" placeholder="Сортировка"></div><button class="buy" id="newPBtn">Добавить товар</button></div>'+
  adminData.products.map(p=>'<div class="admin-card" data-product-card="'+p.id+'"><input data-p="name" value="'+esc(p.name)+'"><input data-p="category" value="'+esc(p.category)+'"><textarea data-p="description">'+esc(p.description)+'</textarea><div class="row"><input data-p="stars_price" type="number" value="'+p.stars_price+'"><input data-p="sort_order" type="number" value="'+p.sort_order+'"></div><label class="mini"><input data-p="active" type="checkbox" '+(p.active?'checked':'')+' style="width:auto"> Активен</label><button class="secondary" data-product-save="'+p.id+'" style="width:100%;margin-top:8px">Сохранить</button></div>').join('')
 }
+function adminCases(){
+ const payload=adminData.cases||{cases:[],rewards:[],tiers:[]},rewards=payload.rewards||[],tiers=payload.tiers||[];
+ const iconOptions=[['gift','Подарок'],['crate','Ящик'],['supply','Аирдроп'],['vault','Сейф'],['crown','Корона']];
+ return '<h2>Кейсы</h2><div class="card"><div class="muted">Здесь меняются цена Stars, бесплатность, проценты и конкретное содержимое. Сумма процентов включённых качеств должна быть 100%.</div></div>'+
+ (payload.cases||[]).map(c=>{
+  const tmap={};(c.tiers||[]).forEach(t=>tmap[t.tier]=Number(t.chance||0));
+  const selected=new Set(c.items||[]);
+  const tierEditors=tiers.map(t=>'<label class="case-admin-tier"><input type="checkbox" data-case-tier-enabled="'+t+'" '+(tmap[t]!=null?'checked':'')+'><span class="'+tierClass(t)+'">'+tierLabel(t)+'</span><input type="number" min="0" max="100" step="0.1" data-case-tier-chance="'+t+'" value="'+(tmap[t]!=null?tmap[t]:0)+'"></label>').join('');
+  const groups=tiers.map(t=>{const rr=rewards.filter(r=>r.tier===t);return '<details '+(tmap[t]!=null?'open':'')+'><summary class="'+tierClass(t)+'">'+tierLabel(t)+' • '+rr.length+' предметов</summary><div class="case-item-list">'+rr.map(r=>'<label><input type="checkbox" data-case-item="'+esc(r.name)+'" '+(selected.has(r.name)?'checked':'')+'><span>'+esc(r.name)+'</span><b>'+Number(r.value_stars||0)+' SHR</b></label>').join('')+'</div></details>'}).join('');
+  return '<div class="admin-card case-admin-card" data-case-admin="'+esc(c.id)+'"><div class="cat">'+esc(c.id)+'</div><div class="case-admin-top"><input data-ca="name" value="'+esc(c.name)+'" placeholder="Название"><input data-ca="price_stars" type="number" min="0" value="'+Number(c.price_stars||0)+'" placeholder="Цена Stars"></div><textarea data-ca="description" placeholder="Описание">'+esc(c.description||'')+'</textarea><div class="case-admin-top"><select data-ca="icon">'+iconOptions.map(o=>'<option value="'+o[0]+'" '+(o[0]===c.icon?'selected':'')+'>'+o[1]+'</option>').join('')+'</select><input data-ca="sort_order" type="number" min="0" value="'+Number(c.sort_order||0)+'" placeholder="Сортировка"></div><div class="row"><label class="mini"><input data-ca="is_free" type="checkbox" '+(c.is_free?'checked':'')+' style="width:auto"> Бесплатный кейс</label><label class="mini"><input data-ca="active" type="checkbox" '+(c.active?'checked':'')+' style="width:auto"> Активен</label></div><div class="mini">Проценты качеств</div><div class="case-admin-tier-grid">'+tierEditors+'</div><div class="case-admin-items">'+groups+'</div><button class="buy" data-case-save="'+esc(c.id)+'" style="width:100%;margin-top:10px">Сохранить кейс</button></div>'
+ }).join('')
+}
 function adminPromos(){
- return '<h2>Промокоды</h2><div class="card"><select id="promoTypeNew"><option value="discount">Скидка на покупку</option><option value="spin">SPIN-билеты</option></select><input id="promoCodeNew" placeholder="Код"><div class="row"><input id="promoDiscountNew" type="number" min="0" max="90" placeholder="Скидка %"><input id="promoSpinNew" type="number" min="0" max="100" placeholder="SPIN-билетов"></div><div class="row"><input id="promoUsesNew" type="number" value="0" placeholder="Участников (0=∞)"><input id="promoExpiryNew" placeholder="Срок: 2026-12-31 23:59:59"></div><div class="mini">Можно оставить только срок, только лимит участников или задать оба ограничения сразу.</div><button class="buy" id="promoCreateBtn" style="margin-top:10px">Создать промокод</button></div>'+
- adminData.promos.map(p=>{const isSpin=Number(p.spin_tickets||0)>0||String(p.promo_type||'').toLowerCase()==='spin';const reward=isSpin?('🎟 +'+Math.max(1,Number(p.spin_tickets||0))+' SPIN'):('-'+p.discount_percent+'% ⭐');return '<div class="admin-card"><div class="name">'+esc(p.code)+' • '+reward+'</div><div class="mini">'+(isSpin?'SPIN-промокод':'Скидочный промокод')+' • участников '+p.uses+(p.max_uses?' / '+p.max_uses:' / ∞')+(p.expires_at?' • до '+esc(p.expires_at):' • без срока')+'</div><div class="row" style="margin-top:8px"><button class="secondary" data-promo-toggle="'+p.id+'" data-active="'+p.active+'">'+(p.active?'Отключить':'Включить')+'</button><button class="danger" data-promo-del="'+p.id+'">Удалить</button></div></div>'}).join('')
+ const cases=(adminData.cases&&adminData.cases.cases)||[];
+ const caseOptions='<option value="*">Все донат-кейсы</option>'+cases.filter(c=>c.id!=='FREE').map(c=>'<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>').join('');
+ return '<h2>Промокоды</h2><div class="card"><select id="promoTypeNew"><option value="discount">Скидка на покупку</option><option value="spin">Обычные SPIN-билеты</option><option value="donation">Синие Donation Tickets</option></select><input id="promoCodeNew" placeholder="Код"><div class="row"><input id="promoDiscountNew" type="number" min="0" max="90" placeholder="Скидка %"><input id="promoSpinNew" type="number" min="0" max="100" placeholder="SPIN-билетов"></div><div class="row"><input id="promoDonationNew" type="number" min="0" max="100" placeholder="Donation Tickets"><select id="promoDonationCaseNew">'+caseOptions+'</select></div><div class="row"><input id="promoUsesNew" type="number" value="0" placeholder="Участников (0=∞)"><input id="promoExpiryNew" placeholder="Срок: 2026-12-31 23:59:59"></div><div class="mini">Donation Ticket — отдельный синий тикет, который открывает Stars-кейс без списания Stars.</div><button class="buy" id="promoCreateBtn" style="margin-top:10px">Создать промокод</button></div>'+
+ adminData.promos.map(p=>{const type=String(p.promo_type||'').toLowerCase();const isDonation=type==='donation'||Number(p.donation_tickets||0)>0;const isSpin=!isDonation&&(Number(p.spin_tickets||0)>0||type==='spin');const reward=isDonation?('🎟️ +'+Math.max(1,Number(p.donation_tickets||0))+' Donation'):isSpin?('🎟 +'+Math.max(1,Number(p.spin_tickets||0))+' SPIN'):('-'+p.discount_percent+'% ⭐');const typeText=isDonation?'Donation Ticket промокод'+(p.donation_case_id&&p.donation_case_id!=='*'?' • '+esc(p.donation_case_id):' • все кейсы'):isSpin?'SPIN-промокод':'Скидочный промокод';return '<div class="admin-card"><div class="name">'+esc(p.code)+' • <span class="'+(isDonation?'blue-ticket':'')+'">'+reward+'</span></div><div class="mini">'+typeText+' • участников '+p.uses+(p.max_uses?' / '+p.max_uses:' / ∞')+(p.expires_at?' • до '+esc(p.expires_at):' • без срока')+'</div><div class="row" style="margin-top:8px"><button class="secondary" data-promo-toggle="'+p.id+'" data-active="'+p.active+'">'+(p.active?'Отключить':'Включить')+'</button><button class="danger" data-promo-del="'+p.id+'">Удалить</button></div></div>'}).join('')
 }
 function adminRewards(){
  const spin=adminData.spins.slice(0,80).map(x=>'<div class="order"><span class="tier '+tierClass(x.reward_tier)+'">'+x.reward_tier+'</span><div class="name">'+esc(x.reward_name)+'</div><div class="mini">'+esc(x.user_token||'Без жетона')+' • '+esc(x.created_at)+'</div></div>').join('');
@@ -2819,17 +3477,26 @@ function adminSupport(){
 function adminBot(){
  return '<h2>Управление ботом</h2><div class="card"><h3>Сообщение пользователю</h3><input id="botUserToken" placeholder="Жетон SHX-..."><textarea id="botUserMsg" placeholder="Сообщение"></textarea><button class="buy" id="botSendBtn">Отправить</button></div><div class="card" style="margin-top:12px"><h3>Рассылка</h3><textarea id="broadcastMsg" placeholder="Сообщение всем зарегистрированным пользователям"></textarea><button class="danger" id="broadcastBtn">Запустить рассылку</button></div><div class="card" style="margin-top:12px"><div class="name">Команды бота</div><div class="muted">/start • /shop • /faq • /ref • /token • /help<br>Каждый пользователь имеет постоянный жетон SHX-.... Вся работа с пользователями идёт по жетонам.</div></div>'
 }
-function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
+function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
 async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+adminSectionHtml()}
 async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">Обновляем…</div>';app.innerHTML=await adminHtml();bindAdmin()}
 function bindAdmin(){
  document.querySelectorAll('[data-admin]').forEach(b=>b.addEventListener('click',()=>{adminSection=b.dataset.admin;app.innerHTML=adminNav()+adminSectionHtml();bindAdmin()}));
  document.querySelectorAll('[data-order-save]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.orderSave;try{await api('/api/admin/orders/'+id,{method:'PATCH',body:JSON.stringify({status:document.getElementById('os'+id).value})});alert('Статус сохранён')}catch(e){alert(e.message)}}));
- const gb=document.getElementById('grantBtn');if(gb)gb.addEventListener('click',async()=>{try{await api('/api/admin/rewards/grant',{method:'POST',body:JSON.stringify({token:document.getElementById('grantToken').value,tickets:Number(document.getElementById('grantTickets').value||0),upgrade_points:Number(document.getElementById('grantPts').value||0)})});alert('Награда выдана');refreshAdmin()}catch(e){alert(e.message)}});
+ const gb=document.getElementById('grantBtn');if(gb)gb.addEventListener('click',async()=>{try{await api('/api/admin/rewards/grant',{method:'POST',body:JSON.stringify({token:document.getElementById('grantToken').value,tickets:Number(document.getElementById('grantTickets').value||0),donation_tickets:Number(document.getElementById('grantDonation').value||0),donation_case_id:document.getElementById('grantDonationCase').value,upgrade_points:Number(document.getElementById('grantPts').value||0)})});alert('Награда выдана');refreshAdmin()}catch(e){alert(e.message)}});
  document.querySelectorAll('[data-message-user]').forEach(b=>b.addEventListener('click',()=>{adminSection='bot';app.innerHTML=adminNav()+adminBot();document.getElementById('botUserToken').value=b.dataset.messageUser;bindAdmin()}));
  const np=document.getElementById('newPBtn');if(np)np.addEventListener('click',async()=>{try{await api('/api/admin/products',{method:'POST',body:JSON.stringify({name:document.getElementById('newPName').value,category:document.getElementById('newPCat').value,description:document.getElementById('newPDesc').value,stars_price:Number(document.getElementById('newPStars').value),sort_order:Number(document.getElementById('newPSort').value||0),active:true})});alert('Товар добавлен');refreshAdmin()}catch(e){alert(e.message)}});
  document.querySelectorAll('[data-product-save]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.productSave,card=document.querySelector('[data-product-card="'+id+'"]'),v=n=>card.querySelector('[data-p="'+n+'"]');try{await api('/api/admin/products/'+id,{method:'PATCH',body:JSON.stringify({name:v('name').value,category:v('category').value,description:v('description').value,stars_price:Number(v('stars_price').value),sort_order:Number(v('sort_order').value||0),active:v('active').checked})});alert('Товар сохранён')}catch(e){alert(e.message)}}));
- const pc=document.getElementById('promoCreateBtn');if(pc)pc.addEventListener('click',async()=>{try{await api('/api/admin/promos',{method:'POST',body:JSON.stringify({code:document.getElementById('promoCodeNew').value,promo_type:document.getElementById('promoTypeNew').value,discount_percent:Number(document.getElementById('promoDiscountNew').value||0),spin_tickets:Number(document.getElementById('promoSpinNew').value||0),max_uses:Number(document.getElementById('promoUsesNew').value||0),expires_at:document.getElementById('promoExpiryNew').value})});alert('Промокод создан');refreshAdmin()}catch(e){alert(e.message)}});
+ document.querySelectorAll('[data-case-save]').forEach(b=>b.addEventListener('click',async()=>{
+  const card=document.querySelector('[data-case-admin="'+b.dataset.caseSave+'"]'),v=n=>card.querySelector('[data-ca="'+n+'"]');
+  const tiers=[...card.querySelectorAll('[data-case-tier-enabled]')].filter(x=>x.checked).map(x=>({tier:x.dataset.caseTierEnabled,chance:Number(card.querySelector('[data-case-tier-chance="'+x.dataset.caseTierEnabled+'"]').value||0)}));
+  const items=[...card.querySelectorAll('[data-case-item]:checked')].map(x=>x.dataset.caseItem);
+  try{
+   await api('/api/admin/cases/'+encodeURIComponent(b.dataset.caseSave),{method:'PATCH',body:JSON.stringify({name:v('name').value,description:v('description').value,price_stars:Number(v('price_stars').value||0),is_free:v('is_free').checked,active:v('active').checked,icon:v('icon').value,sort_order:Number(v('sort_order').value||0),tiers,items})});
+   alert('Кейс сохранён');refreshAdmin()
+  }catch(e){alert(e.message)}
+ }));
+ const pc=document.getElementById('promoCreateBtn');if(pc)pc.addEventListener('click',async()=>{try{await api('/api/admin/promos',{method:'POST',body:JSON.stringify({code:document.getElementById('promoCodeNew').value,promo_type:document.getElementById('promoTypeNew').value,discount_percent:Number(document.getElementById('promoDiscountNew').value||0),spin_tickets:Number(document.getElementById('promoSpinNew').value||0),donation_tickets:Number(document.getElementById('promoDonationNew').value||0),donation_case_id:document.getElementById('promoDonationCaseNew').value,max_uses:Number(document.getElementById('promoUsesNew').value||0),expires_at:document.getElementById('promoExpiryNew').value})});alert('Промокод создан');refreshAdmin()}catch(e){alert(e.message)}});
  document.querySelectorAll('[data-promo-toggle]').forEach(b=>b.addEventListener('click',async()=>{try{await api('/api/admin/promos/'+b.dataset.promoToggle,{method:'PATCH',body:JSON.stringify({active:!(Number(b.dataset.active)===1)})});refreshAdmin()}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-promo-del]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Удалить промокод?'))return;try{await api('/api/admin/promos/'+b.dataset.promoDel,{method:'DELETE'});refreshAdmin()}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-ticket-reply]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.ticketReply;try{await api('/api/admin/tickets/'+id+'/reply',{method:'POST',body:JSON.stringify({message:document.getElementById('tr'+id).value})});alert('Ответ отправлен');refreshAdmin()}catch(e){alert(e.message)}}));
