@@ -943,7 +943,7 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
             await conn.commit()
             state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
             history = await (await conn.execute(
-                "SELECT reward_name,reward_tier,points,source,created_at FROM spin_history WHERE telegram_id=? ORDER BY id DESC LIMIT 12",
+                "SELECT reward_name,reward_tier,points,source,created_at FROM spin_history WHERE telegram_id=? ORDER BY id DESC LIMIT 5",
                 (uid,)
             )).fetchall()
             used_row = await (await conn.execute(
@@ -972,6 +972,69 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "tier_chances":SPIN_TIER_CHANCES,
       "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS]
     }
+
+
+@app.get("/api/spin/history")
+async def spin_history_full(
+    period: str = "all",
+    tier: str = "ALL",
+    from_at: str = "",
+    to_at: str = "",
+    x_telegram_init_data: str | None = Header(default=None)
+):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    period = (period or "all").strip().lower()
+    tier = (tier or "ALL").strip().upper()
+    allowed_periods = {"all","24h","7d","30d","90d","custom"}
+    allowed_tiers = {"ALL","COMMON","RARE","EPIC","LEGENDARY","MYTHIC"}
+    if period not in allowed_periods:
+        raise HTTPException(400,"Некорректный период")
+    if tier not in allowed_tiers:
+        raise HTTPException(400,"Некорректная редкость")
+
+    where = ["telegram_id=?"]
+    args = [uid]
+    if tier != "ALL":
+        where.append("reward_tier=?")
+        args.append(tier)
+
+    period_sql = {"24h":"-24 hours","7d":"-7 days","30d":"-30 days","90d":"-90 days"}
+    if period in period_sql:
+        where.append("created_at >= datetime('now', ?)")
+        args.append(period_sql[period])
+    elif period == "custom":
+        def normalize_dt(value: str) -> str:
+            value = (value or "").strip()
+            if not value:
+                return ""
+            value = value.replace("T"," ")
+            if len(value) == 16:
+                value += ":00"
+            try:
+                datetime.strptime(value,"%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                raise HTTPException(400,"Неверный формат даты")
+            return value
+        start = normalize_dt(from_at)
+        end = normalize_dt(to_at)
+        if start:
+            where.append("created_at >= ?")
+            args.append(start)
+        if end:
+            where.append("created_at <= ?")
+            args.append(end)
+
+    conn = await db()
+    try:
+        rows = await (await conn.execute(
+            "SELECT id,reward_name,reward_tier,points,source,created_at FROM spin_history WHERE "
+            + " AND ".join(where) + " ORDER BY id DESC LIMIT 500",
+            tuple(args)
+        )).fetchall()
+    finally:
+        await conn.close()
+    return {"items":[dict(x) for x in rows],"count":len(rows),"period":period,"tier":tier}
 
 
 @app.post("/api/spin/free")
@@ -1648,6 +1711,13 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .spin-options-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
 .spin-options-grid .spin-options{margin-top:0;min-height:58px}
 @media(max-width:430px){.spin-options-grid{grid-template-columns:1fr}.settings-grid{grid-template-columns:1fr}}
+.history-filters{background:#111418;border:1px solid #2a3036;border-radius:18px;padding:12px;margin-bottom:12px}
+.history-filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.history-filter-grid>*{min-width:0}
+.history-periods{display:flex;gap:6px;overflow-x:auto;padding:8px 0 3px;scrollbar-width:none}.history-periods::-webkit-scrollbar{display:none}
+.history-periods button{white-space:nowrap;background:#1c2127;color:#aeb5bd;border:1px solid #30363d;padding:8px 10px}.history-periods button.active{background:#33290c;color:#ffd45b;border-color:#6d5719}
+.history-result-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:12px 0 8px}
+.history-time{font-size:11px;font-weight:850;color:#d0d6dc;margin-top:7px}
+@media(max-width:430px){.history-filter-grid{grid-template-columns:1fr}}
 
 /* live big wins */
 .wins{height:42px;border:1px solid #2a2f35;background:#0d1013;border-radius:14px;overflow:hidden;margin:0 0 16px;display:flex;align-items:center;position:relative}
@@ -1825,7 +1895,7 @@ const headers={'Content-Type':'application/json','X-Telegram-Init-Data':initData
 let products=[],me=null,spinState=null,lastSpinReward=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
 let adminSection='overview',adminData=null;
 
-let audioCtx=null,spinSoundTimer=null,spinSoundStarted=0;
+let audioCtx=null,spinSoundTimer=null,spinSoundStarted=0,spinSoundStep=0;
 function soundsEnabled(){return localStorage.getItem('shx_sound_enabled')!=='0'}
 function getAudio(){
  if(!soundsEnabled())return null;
@@ -1851,20 +1921,24 @@ function noiseBurst(dur=.08,vol=.025,delay=0){
 function playSpinTick(progress=0){
  if(!soundsEnabled())return;
  const p=Math.max(0,Math.min(1,progress));
- const body=178-p*58;
- noiseBurst(.025,.011+p*.004);
- tone(body,.055,.024,'triangle');
- tone(620-p*240,.032,.010,'sine',.008);
- if(p>.72)tone(118-p*28,.07,.014,'sine',.018)
+ const melody=[392,523,659,784,659,523];
+ const base=melody[spinSoundStep%melody.length];
+ const pitch=base*(1-p*.16);
+ noiseBurst(.022,.007+p*.003);
+ tone(pitch,.075,.022,'triangle');
+ tone(pitch*1.5,.055,.011,'sine',.018);
+ if(spinSoundStep%6===3)tone(pitch*2,.09,.014,'sine',.035);
+ if(p>.78&&spinSoundStep%2===0)tone(246-p*35,.08,.010,'triangle',.025);
+ spinSoundStep++
 }
 function startSpinSound(totalMs=30000){
  stopSpinSound();if(!soundsEnabled())return;
- spinSoundStarted=performance.now();
+ spinSoundStarted=performance.now();spinSoundStep=0;
  const loop=()=>{
   const p=Math.min(1,(performance.now()-spinSoundStarted)/totalMs);
   playSpinTick(p);
   if(p<1){
-   const gap=Math.round(135 + Math.pow(p,2.35)*760);
+   const gap=Math.round(175 + Math.pow(p,2.25)*850);
    spinSoundTimer=setTimeout(loop,gap)
   }
  };
@@ -1935,7 +2009,8 @@ function sticker(title,sub,icon,cls,attrs){
   chat:'<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg>',
   promo:'<svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="m6 18 12-12"/></svg>',
   support:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M4 12v5h4v-6H4M20 12v5h-4v-6h4"/><path d="M16 19c-1 1-2 2-4 2"/></svg>',
-  settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a8 8 0 0 0-1.7 1L5 6.1 3 9.5 5 11a7 7 0 0 0 0 2l-2 1.5L5 18l2.4-1a8 8 0 0 0 1.7 1l.4 3h5l.4-3a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1Z"/></svg>'
+  settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a8 8 0 0 0-1.7 1L5 6.1 3 9.5 5 11a7 7 0 0 0 0 2l-2 1.5L5 18l2.4-1a8 8 0 0 0 1.7 1l.4 3h5l.4-3a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1Z"/></svg>',
+  history:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6"/><path d="M4 4v4.6h4.6"/><path d="M12 7v5l3 2"/></svg>'
  };
  return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon">'+(icons[icon]||icons.shop)+'</span><div class="sticker-copy"><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div></div>'
 }
@@ -2011,6 +2086,20 @@ function showDropFx(reward){
  for(let i=0;i<total;i++){const s=document.createElement('i');s.className='spark';const a=Math.PI*2*i/total,d=90+Math.random()*170;s.style.left=(45+Math.random()*10)+'%';s.style.top=(45+Math.random()*10)+'%';s.style.setProperty('--x',(Math.cos(a)*d)+'px');s.style.setProperty('--y',(Math.sin(a)*d)+'px');s.style.color=reward.tier==='MYTHIC'?(i%2?'#ff4bd8':'#8b62ff'):'#ffad25';card.appendChild(s)}
  fx.querySelector('#closeDrop').addEventListener('click',()=>fx.remove())
 }
+function formatDropDate(value){
+ if(!value)return '—';
+ let raw=String(value).trim();
+ if(!/[zZ]|[+-]\d\d:\d\d$/.test(raw))raw=raw.replace(' ','T')+'Z';
+ const d=new Date(raw);
+ if(Number.isNaN(d.getTime()))return esc(value);
+ return d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})
+}
+function utcFilterValue(value){
+ if(!value)return '';
+ const d=new Date(value);
+ if(Number.isNaN(d.getTime()))return '';
+ return d.toISOString().slice(0,19).replace('T',' ')
+}
 function tierLabel(tier){
  const labels={COMMON:'COMMON',RARE:'RARE',EPIC:'EPIC',LEGENDARY:'LEGENDARY',MYTHIC:'MYTHIC'};
  return labels[String(tier||'').toUpperCase()]||String(tier||'')
@@ -2044,7 +2133,7 @@ function bindRarityCatalog(){
 
 async function spinHtml(){
  spinState=await api('/api/spin/state');
- const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR • '+esc(x.created_at)+'</div></div>').join('');
+ const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0);
  const buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
@@ -2056,7 +2145,7 @@ async function spinHtml(){
  '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
  rarityCatalogHtml()+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
- '<h3>SHR MARKET</h3><div class="card"><div class="muted">SHR можно получить за продажу выпавших предметов и обменять на гарантированные награды.</div>'+claims+'</div><h3>История</h3>'+(history||'<div class="empty">История пока пустая.</div>')
+ '<h3>SHR MARKET</h3><div class="card"><div class="muted">SHR можно получить за продажу выпавших предметов и обменять на гарантированные награды.</div>'+claims+'</div><h3>Последние 5 выпадений</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
@@ -2245,13 +2334,51 @@ function supportHtml(){return '<div class="hero"><div class="cat">ПОДДЕРЖ
 async function sendTicket(){try{const d=await api('/api/support',{method:'POST',body:JSON.stringify({category:document.getElementById('tc').value,message:document.getElementById('tm').value})});alert('Обращение #'+d.id+' создано');document.getElementById('tm').value=''}catch(e){alert(e.message)}}
 function bindSupport(){document.getElementById('ticketBtn').addEventListener('click',sendTicket);bindSocials()}
 
+let dropHistoryPeriod='all';
+async function dropHistoryHtml(){
+ const period=dropHistoryPeriod||'all';
+ const tier=(document.getElementById('historyTier')?.value)||'ALL';
+ const from=utcFilterValue(document.getElementById('historyFrom')?.value||'');
+ const to=utcFilterValue(document.getElementById('historyTo')?.value||'');
+ const q=new URLSearchParams({period,tier});
+ if(period==='custom'&&from)q.set('from_at',from);
+ if(period==='custom'&&to)q.set('to_at',to);
+ const d=await api('/api/spin/history?'+q.toString());
+ const items=(d.items||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
+ return '<section class="hero"><div class="cat">ИСТОРИЯ ДРОПОВ</div><h1>Все выпадения</h1><div class="muted">Фильтруйте историю по времени и качеству кубика.</div></section>'+
+ '<div class="history-filters"><div class="history-filter-grid"><select id="historyTier"><option value="ALL">Все редкости</option><option value="COMMON">Common</option><option value="RARE">Rare</option><option value="EPIC">Epic</option><option value="LEGENDARY">Legendary</option><option value="MYTHIC">Mythic</option></select><button class="secondary" id="historyApply">Применить фильтр</button><input id="historyFrom" type="datetime-local" aria-label="С даты"><input id="historyTo" type="datetime-local" aria-label="По дату"></div>'+
+ '<div class="history-periods"><button data-hperiod="all">Всё время</button><button data-hperiod="24h">24 часа</button><button data-hperiod="7d">7 дней</button><button data-hperiod="30d">30 дней</button><button data-hperiod="90d">90 дней</button><button data-hperiod="custom">Свой период</button></div></div>'+
+ '<div class="history-result-head"><h3 style="margin:0">Найдено: '+d.count+'</h3><div class="mini">до 500 записей</div></div>'+
+ (items||'<div class="empty">По выбранным фильтрам выпадений нет.</div>')
+}
+async function refreshDropHistory(){
+ const oldTier=document.getElementById('historyTier')?.value||'ALL';
+ const oldFrom=document.getElementById('historyFrom')?.value||'';
+ const oldTo=document.getElementById('historyTo')?.value||'';
+ app.innerHTML=await dropHistoryHtml();addHomeExit();
+ const tier=document.getElementById('historyTier'),from=document.getElementById('historyFrom'),to=document.getElementById('historyTo');
+ if(tier)tier.value=oldTier;if(from)from.value=oldFrom;if(to)to.value=oldTo;
+ bindDropHistory()
+}
+function bindDropHistory(){
+ document.querySelectorAll('[data-hperiod]').forEach(b=>{
+  b.classList.toggle('active',b.dataset.hperiod===dropHistoryPeriod);
+  b.addEventListener('click',async()=>{dropHistoryPeriod=b.dataset.hperiod;await refreshDropHistory()})
+ });
+ const apply=document.getElementById('historyApply');if(apply)apply.addEventListener('click',async()=>{
+  const hasDates=!!(document.getElementById('historyFrom')?.value||document.getElementById('historyTo')?.value);
+  if(hasDates)dropHistoryPeriod='custom';
+  await refreshDropHistory()
+ })
+}
+
 function settingsHtml(){
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  const sound=soundsEnabled();
  return '<section class="hero"><div class="cat">НАСТРОЙКИ</div><h1>Шрексич</h1><div class="muted">Управляйте анимацией, звуками и быстрыми разделами.</div></section>'+
  '<div class="settings-grid"><div class="setting-card"><h3>Анимация SPIN</h3><div class="muted">Обычный прокрут длится 30 секунд: быстрый старт и плавное замедление до полной остановки.</div><label class="switch-row"><span>Пропускать анимацию</span><input type="checkbox" id="settingsSkip" '+(skip?'checked':'')+'></label></div>'+
  '<div class="setting-card"><h3>Звуки эффектов</h3><div class="muted">Прокрут, остановка, выпадение, продажа и сохранение. SFX генерируются внутри приложения.</div><label class="switch-row"><span>Звуки включены</span><input type="checkbox" id="settingsSound" '+(sound?'checked':'')+'></label></div></div>'+
- '<div class="sticker-grid">'+sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+sticker('Поддержка','Обращения и помощь','support','st-blue','data-go="support"')+'</div>'
+ '<div class="sticker-grid">'+sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+sticker('История дропов','Фильтр по времени и редкости','history','st-purple','data-go="drop-history"')+sticker('Поддержка','Обращения и помощь','support','st-blue','data-go="support"')+'</div>'
 }
 function bindSettings(){
  const a=document.getElementById('settingsSkip');if(a)a.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',a.checked?'1':'0'));
@@ -2342,6 +2469,7 @@ async function render(){
   else if(tab==='referral'){app.innerHTML=await referralHtml();bindReferral()}
   else if(tab==='support'){app.innerHTML=supportHtml();bindSupport()}
   else if(tab==='settings'){app.innerHTML=settingsHtml();bindSettings()}
+  else if(tab==='drop-history'){app.innerHTML=await dropHistoryHtml();bindDropHistory()}
   addHomeExit()
  }catch(e){showFatal(e.message)}
 }
