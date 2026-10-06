@@ -1610,6 +1610,11 @@ async def spin_case_open(body: CaseStartIn, x_telegram_init_data: str | None = H
                 announce_reward = result["reward"]
                 mode = "ticket" if payment_method == "Donation Ticket" else "free"
             else:
+                await conn.execute(
+                    "UPDATE case_openings SET status='cancelled' "
+                    "WHERE telegram_id=? AND status='awaiting_payment' AND telegram_charge_id=''",
+                    (uid,)
+                )
                 cur = await conn.execute(
                     "INSERT INTO case_openings(telegram_id,case_id,case_name,stars_amount,payment_method,status,snapshot_json) "
                     "VALUES(?,?,?,?,?,'awaiting_payment',?)",
@@ -3048,8 +3053,7 @@ function rarityCatalogHtml(){
 function openRarityModal(tier){
  const modal=document.getElementById('rarityModal'),sheet=document.getElementById('raritySheet');
  if(!modal||!sheet)return;
- const allowed=new Set(cfg.contents||[]);
- const items=(spinState.rewards||[]).filter(x=>x.tier===tier&&allowed.has(x.name)).slice().sort((a,b)=>Number(a.value_stars||0)-Number(b.value_stars||0));
+ const items=(spinState.rewards||[]).filter(x=>x.tier===tier).slice().sort((a,b)=>Number(a.value_stars||0)-Number(b.value_stars||0));
  sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div><div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+tierLabel(tier)+'</h3><div class="muted">Шанс качества: '+tierChance(tier)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="rarityClose">Закрыть</button></div>'+
  items.map(x=>'<div class="rarity-item-row"><div class="rarity-item-name">'+esc(x.name)+'</div><div class="rarity-item-price">🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+'</div></div>').join('');
  modal.classList.remove('hide');
@@ -3075,10 +3079,11 @@ function caseIconMarkup(icon){
 function spinSourceLabel(source){
  const s=String(source||'');
  if(s==='ticket')return '🎟 Бонусный билет';
- if(s.startsWith('donation_ticket:'))return '<span class="blue-ticket">🎫 Donation Ticket</span>';
- if(s.startsWith('case_stars:'))return '⭐ Stars-кейс';
- if(s.startsWith('case_free:'))return '🎁 Бесплатный кейс';
- return '🕐 Бесплатный SPIN'
+ if(s==='free')return '🕐 Бесплатный SPIN';
+ if(s==='donation_ticket'||s.startsWith('donation_ticket:'))return '<span class="blue-ticket">🎫 Donation Ticket</span>';
+ if(s==='case_stars'||s.startsWith('case_stars:'))return '⭐ Stars-кейс';
+ if(s==='case_free'||s.startsWith('case_free:'))return '🎁 Бесплатный кейс';
+ return '🎰 Кейс'
 }
 
 function selectedCase(){
@@ -3181,8 +3186,8 @@ async function applySpinPromo(){
  const b=document.getElementById('spinPromoBtn');b.disabled=true;b.textContent='Проверяем…';
  try{
   const d=await api('/api/spin/promo',{method:'POST',body:JSON.stringify({code})});
-  if(d.kind==='donation_ticket'){
-   const target=d.case_id==='*'?'все донат-кейсы':d.case_id;
+  if(d.promo_type==='donation'||Number(d.donation_tickets_added||0)>0){
+   const target=d.donation_case_id==='*'?'все донат-кейсы':d.donation_case_id;
    info.innerHTML='<span class="blue-ticket">🎫 +'+d.donation_tickets_added+' Donation Ticket • '+esc(target)+' • всего '+d.donation_tickets_total+'</span>'
   }else{
    info.innerHTML='<span class="ok">+'+d.tickets_added+' SPIN-билет(а). Теперь у вас 🎟 '+d.bonus_tickets+'</span>'
@@ -3300,27 +3305,16 @@ async function requestSpinResult(){
  if(!cfg||cfg.id==='FREE')return await api('/api/spin/free',{method:'POST'});
  const d=await api('/api/spin/case/open',{method:'POST',body:JSON.stringify({case_id:cfg.id})});
  if(d.mode!=='invoice')return d;
- if(!(tg&&tg.openInvoice)){location.href=d.url;throw Object.assign(new Error('Счёт открыт'),{silent:true})}
- const status=await new Promise(resolve=>tg.openInvoice(d.url,s=>resolve(s||'cancelled')));
- if(status!=='paid')throw Object.assign(new Error(status==='cancelled'?'Оплата отменена':'Оплата не завершена'),{silent:true});
- return await claimPaidCase(d.opening_id)
-}
-function openCaseInvoice(url){
- return new Promise(resolve=>{
-  try{
-   if(tg&&tg.openInvoice){tg.openInvoice(url,status=>resolve(String(status||'')));return}
-   location.href=url;resolve('pending')
-  }catch(_){location.href=url;resolve('pending')}
- })
-}
-async function waitCasePaid(id){
- for(let i=0;i<28;i++){
-  const s=await api('/api/spin/case/opening/'+id);
-  if(s.status==='paid'||s.status==='opened')return s;
-  if(['cancelled','expired'].includes(s.status))throw new Error('Счёт кейса отменён или устарел');
-  await sleep(450)
+ if(!(tg&&tg.openInvoice)){
+  location.href=d.url;
+  throw Object.assign(new Error('Счёт открыт во внешнем окне. После оплаты вернитесь в рулетку.'),{silent:true})
  }
- throw new Error('Платёж ещё обрабатывается. Откройте рулетку снова — оплаченный кейс сохранён.')
+ const status=await new Promise(resolve=>tg.openInvoice(d.url,s=>resolve(String(s||'cancelled'))));
+ if(status!=='paid'){
+  try{await api('/api/spin/case/opening/'+d.opening_id+'/cancel',{method:'POST'})}catch(_){}
+  throw Object.assign(new Error(status==='cancelled'?'Оплата отменена':'Оплата не завершена'),{silent:true})
+ }
+ return await claimPaidCase(d.opening_id)
 }
 async function animateObtainedDrop(d,b,track,windowEl,result,skip,audioReady){
  await audioReady;
@@ -3344,40 +3338,15 @@ async function spinOnce(){
  const track=document.getElementById('reelTrack'),windowEl=document.getElementById('reelWindow'),result=document.getElementById('spinResult');
  const skip=!!document.getElementById('skipSpinAnimation')?.checked;
  const audioReady=ensureAudioReady();
- b.disabled=true;if(result)result.textContent='';
+ b.disabled=true;b.textContent='ПОДГОТАВЛИВАЕМ…';if(result)result.textContent='';
+ setSpinNavigationLocked(true);
  try{
-  let d=null;
-  const ready=spinState&&spinState.paid_case_opening;
-  if(cfg.id==='FREE'){
-   setSpinNavigationLocked(true);b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
-   d=await api('/api/spin/free',{method:'POST'})
-  }else if(ready&&ready.case_id===cfg.id){
-   setSpinNavigationLocked(true);b.textContent='ОТКРЫВАЕМ ОПЛАЧЕННЫЙ КЕЙС…';
-   d=await api('/api/spin/case/opening/'+ready.id+'/resolve',{method:'POST'})
-  }else{
-   b.textContent='ПОДГОТАВЛИВАЕМ КЕЙС…';
-   const start=await api('/api/spin/case/start',{method:'POST',body:JSON.stringify({case_id:cfg.id})});
-   if(start.mode==='stars'){
-    b.textContent='ОПЛАТИТЬ '+Number(start.stars_price||0)+' ⭐';
-    setSpinNavigationLocked(false);
-    const status=await openCaseInvoice(start.url);
-    if(status==='cancelled'||status==='failed'){
-     try{await api('/api/spin/case/opening/'+start.opening_id+'/cancel',{method:'POST'})}catch(_){}
-     b.disabled=false;b.textContent='ОТКРЫТЬ ЗА '+Number(start.stars_price||0)+' ⭐';return
-    }
-    setSpinNavigationLocked(true);b.textContent='ПРОВЕРЯЕМ ОПЛАТУ…';
-    await waitCasePaid(start.opening_id);
-    d=await api('/api/spin/case/opening/'+start.opening_id+'/resolve',{method:'POST'})
-   }else{
-    setSpinNavigationLocked(true);b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';d=start
-   }
-  }
+  const d=await requestSpinResult();
   await animateObtainedDrop(d,b,track,windowEl,result,skip,audioReady)
  }catch(e){
-  stopSpinSound();setSpinNavigationLocked(false);b.disabled=false;
-  const donation=Number(cfg.donation_tickets||0);
-  b.textContent=cfg.id==='FREE'?'КРУТИТЬ SPIN':cfg.is_free?'ОТКРЫТЬ БЕСПЛАТНО':donation>0?'ОТКРЫТЬ ЗА DONATION TICKET':'ОТКРЫТЬ ЗА '+Number(cfg.stars_price||0)+' ⭐';
-  alert(e.message)
+  stopSpinSound();setSpinNavigationLocked(false);
+  if(!e.silent)alert(e.message);
+  app.innerHTML=await spinHtml();bindSpin();addHomeExit()
  }
 }
 async function claimUpgrade(points){try{const d=await api('/api/upgrade/claim',{method:'POST',body:JSON.stringify({points})});alert('Заявка создана: '+d.reward.name);app.innerHTML=await spinHtml();bindSpin()}catch(e){alert(e.message)}}
