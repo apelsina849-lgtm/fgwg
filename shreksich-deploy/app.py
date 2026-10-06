@@ -1639,6 +1639,15 @@ input:focus,textarea:focus,select:focus{border-color:#80651d;box-shadow:0 0 0 3p
 textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1}.empty{text-align:center;padding:38px 10px;color:#89919a;white-space:pre-line}.hide{display:none!important}
 .nav{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;width:min(710px,calc(100% - 20px));background:#111418ef;backdrop-filter:blur(18px);border:1px solid #2a2e33;border-radius:20px;padding:8px;display:flex;gap:4px;z-index:20}
 .nav button{flex:1;background:transparent;color:#8f969e;font-size:12px;padding:10px 3px}.nav button.active{background:#24200f;color:#ffd24b}
+.page-home{display:inline-flex;align-items:center;gap:7px;margin:0 0 12px;background:#171b20;color:#dce1e6;border:1px solid #30363d;padding:9px 12px;border-radius:13px;box-shadow:inset 0 1px #ffffff0a}
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.setting-card{background:#111418;border:1px solid #2a3036;border-radius:18px;padding:14px}
+.setting-card h3{margin:0 0 5px;font-size:15px}.setting-card .muted{font-size:11px}
+.switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
+.switch-row input{width:22px;height:22px;accent-color:#ffc21c}
+.spin-options-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.spin-options-grid .spin-options{margin-top:0;min-height:58px}
+@media(max-width:430px){.spin-options-grid{grid-template-columns:1fr}.settings-grid{grid-template-columns:1fr}}
 
 /* live big wins */
 .wins{height:42px;border:1px solid #2a2f35;background:#0d1013;border-radius:14px;overflow:hidden;margin:0 0 16px;display:flex;align-items:center;position:relative}
@@ -1772,7 +1781,7 @@ body.keyboard-open .wrap{padding-bottom:30px}
   <main id="app"><div class="empty">Загрузка магазина…</div></main>
 </div>
 <div class="nav" id="nav">
-  <button data-tab="home">Главная</button><button data-tab="catalog">Каталог</button><button data-tab="spin">SPIN</button><button data-tab="orders">Заказы</button><button data-tab="support">Поддержка</button>
+  <button data-tab="home">Главная</button><button data-tab="catalog">Каталог</button><button data-tab="spin">SPIN</button><button data-tab="orders">Заказы</button><button data-tab="settings">Настройки</button>
 </div>
 <script>
 (function(){
@@ -1814,6 +1823,59 @@ const initData=tg?(tg.initData||''):'';
 const headers={'Content-Type':'application/json','X-Telegram-Init-Data':initData};
 let products=[],me=null,spinState=null,lastSpinReward=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
 let adminSection='overview',adminData=null;
+
+let audioCtx=null,spinSoundTimer=null,spinSoundStarted=0;
+function soundsEnabled(){return localStorage.getItem('shx_sound_enabled')!=='0'}
+function getAudio(){
+ if(!soundsEnabled())return null;
+ const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;
+ if(!audioCtx)audioCtx=new AC();
+ if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
+ return audioCtx
+}
+function tone(freq,dur=.08,vol=.035,type='sine',delay=0){
+ const ac=getAudio();if(!ac)return;
+ const t=ac.currentTime+delay,o=ac.createOscillator(),g=ac.createGain();
+ o.type=type;o.frequency.setValueAtTime(freq,t);
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(Math.max(.0002,vol),t+.008);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+ o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+dur+.03)
+}
+function noiseBurst(dur=.08,vol=.025,delay=0){
+ const ac=getAudio();if(!ac)return;
+ const len=Math.max(1,Math.floor(ac.sampleRate*dur)),buf=ac.createBuffer(1,len,ac.sampleRate),d=buf.getChannelData(0);
+ for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*(1-i/len);
+ const s=ac.createBufferSource(),g=ac.createGain(),f=ac.createBiquadFilter();s.buffer=buf;f.type='highpass';f.frequency.value=900;
+ g.gain.value=vol;s.connect(f);f.connect(g);g.connect(ac.destination);s.start(ac.currentTime+delay)
+}
+function playSpinTick(progress=0){
+ if(!soundsEnabled())return;
+ const p=Math.max(0,Math.min(1,progress));
+ tone(520-p*250,.035,.018,'square'); if(p>.82)tone(330-p*100,.045,.012,'triangle',.008)
+}
+function startSpinSound(totalMs=20000){
+ stopSpinSound();if(!soundsEnabled())return;
+ spinSoundStarted=performance.now();
+ const loop=()=>{
+  const p=Math.min(1,(performance.now()-spinSoundStarted)/totalMs);
+  playSpinTick(p);
+  if(p<1){const gap=45+Math.pow(p,3)*320;spinSoundTimer=setTimeout(loop,gap)}
+ };
+ loop()
+}
+function stopSpinSound(){if(spinSoundTimer){clearTimeout(spinSoundTimer);spinSoundTimer=null}}
+function sfxStop(){if(!soundsEnabled())return;noiseBurst(.09,.035);tone(150,.16,.05,'sine');tone(82,.22,.035,'triangle',.035)}
+function sfxDrop(tier){
+ if(!soundsEnabled())return;
+ const t=String(tier||'COMMON').toUpperCase();
+ if(t==='COMMON'){tone(520,.12,.035,'sine');tone(660,.12,.025,'sine',.08)}
+ else if(t==='RARE'){tone(520,.13,.035,'triangle');tone(720,.16,.04,'triangle',.08);tone(920,.18,.035,'sine',.16)}
+ else if(t==='EPIC'){[440,660,880,1100].forEach((f,i)=>tone(f,.22,.045,'triangle',i*.07))}
+ else if(t==='LEGENDARY'){noiseBurst(.18,.035);[392,523,659,784,1047].forEach((f,i)=>tone(f,.32,.055,'sine',i*.085))}
+ else {noiseBurst(.28,.055);tone(110,.5,.06,'sawtooth');[440,554,659,880,1108,1320].forEach((f,i)=>tone(f,.28,.055,i%2?'square':'triangle',.08+i*.065))}
+}
+function sfxSell(){if(!soundsEnabled())return;[660,880,1100,1320].forEach((f,i)=>tone(f,.13,.04,'triangle',i*.055))}
+function sfxSave(){if(!soundsEnabled())return;noiseBurst(.08,.018);tone(420,.13,.035,'sine');tone(630,.18,.035,'sine',.08);tone(840,.2,.03,'sine',.14)}
+function setSoundEnabled(on){localStorage.setItem('shx_sound_enabled',on?'1':'0');if(!on)stopSpinSound();else getAudio()}
 
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function stars(n){return Number(n||0).toLocaleString('ru-RU')+' ⭐'}
@@ -1864,7 +1926,8 @@ function sticker(title,sub,icon,cls,attrs){
   news:'<svg viewBox="0 0 24 24"><path d="m4 13 12-6v10L4 13Z"/><path d="M16 10c2 0 4-1 4-3v10c0-2-2-3-4-3"/><path d="m6 14 1 5h4l-2-4"/></svg>',
   chat:'<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg>',
   promo:'<svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="m6 18 12-12"/></svg>',
-  support:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M4 12v5h4v-6H4M20 12v5h-4v-6h4"/><path d="M16 19c-1 1-2 2-4 2"/></svg>'
+  support:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M4 12v5h4v-6H4M20 12v5h-4v-6h4"/><path d="M16 19c-1 1-2 2-4 2"/></svg>',
+  settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a8 8 0 0 0-1.7 1L5 6.1 3 9.5 5 11a7 7 0 0 0 0 2l-2 1.5L5 18l2.4-1a8 8 0 0 0 1.7 1l.4 3h5l.4-3a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1Z"/></svg>'
  };
  return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon">'+(icons[icon]||icons.shop)+'</span><div class="sticker-copy"><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div></div>'
 }
@@ -1879,6 +1942,7 @@ function home(){
  sticker('Рефералы','Билеты и бонусы','referral','st-red','data-go="referral"')+
  sticker('Новости','@shreksi4PubgNEWS','news','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+
  sticker('Наш чат','@chatshreksi4','chat','st-cyan','data-tg="https://t.me/chatshreksi4"')+
+ sticker('Настройки','Звук, анимация, помощь','settings','st-blue','data-go="settings"')+
  '</div><h3>Популярное</h3>'+cards(products.slice(0,4))
 }
 function bindHome(){
@@ -1980,7 +2044,7 @@ async function spinHtml(){
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
  '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
- '<label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию и сразу показать награду</span></label>'+
+ '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label><label class="spin-options"><input type="checkbox" id="spinSoundToggle" '+(soundsEnabled()?'checked':'')+'><span>Звуки эффектов</span></label></div>'+
  '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
  rarityCatalogHtml()+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
@@ -1990,6 +2054,7 @@ function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
+ const snd=document.getElementById('spinSoundToggle');if(snd)snd.addEventListener('change',()=>setSoundEnabled(snd.checked));
  bindRarityCatalog();
  document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
 }
@@ -2025,8 +2090,8 @@ function idleCubeStrip(){
  return tiers.map(t=>cubeHtml(t)).join('')
 }
 function buildSpinStrip(reward){
- const count=34;
- const targetIndex=28;
+ const count=125;
+ const targetIndex=60;
  const tiers=[];
  for(let i=0;i<count;i++)tiers.push(i===targetIndex?reward.tier:visualTier());
  return {html:tiers.map((t,i)=>cubeHtml(t,i===targetIndex?'target-cube':'')).join(''),targetIndex}
@@ -2039,21 +2104,22 @@ function centerTrackOnTarget(track,windowEl,targetIndex,animate){
   track.style.transform='translate3d('+finalX+'px,-50%,0)';
   return Promise.resolve()
  }
- const travel=Math.max(980,windowEl.clientWidth*3.1);
+ const travel=Math.max(5500,windowEl.clientWidth*14);
  const startX=finalX-travel;
  track.style.transform='translate3d('+startX+'px,-50%,0)';
  void track.offsetWidth;
  if(track.animate){
   const anim=track.animate([
    {transform:'translate3d('+startX+'px,-50%,0)',offset:0},
-   {transform:'translate3d('+(finalX-610)+'px,-50%,0)',offset:.36},
-   {transform:'translate3d('+(finalX-285)+'px,-50%,0)',offset:.64},
-   {transform:'translate3d('+(finalX-105)+'px,-50%,0)',offset:.82},
-   {transform:'translate3d('+(finalX-34)+'px,-50%,0)',offset:.94},
+   {transform:'translate3d('+(finalX-2850)+'px,-50%,0)',offset:.26},
+   {transform:'translate3d('+(finalX-1450)+'px,-50%,0)',offset:.50},
+   {transform:'translate3d('+(finalX-620)+'px,-50%,0)',offset:.70},
+   {transform:'translate3d('+(finalX-250)+'px,-50%,0)',offset:.84},
+   {transform:'translate3d('+(finalX-78)+'px,-50%,0)',offset:.94},
    {transform:'translate3d('+finalX+'px,-50%,0)',offset:1}
   ],{
-   duration:7000,
-   easing:'cubic-bezier(.05,.82,.12,1)',
+   duration:20000,
+   easing:'cubic-bezier(.04,.76,.10,1)',
    fill:'forwards'
   });
   return anim.finished.catch(()=>{}).then(()=>{
@@ -2061,9 +2127,9 @@ function centerTrackOnTarget(track,windowEl,targetIndex,animate){
    anim.cancel()
   })
  }
- track.style.transition='transform 7s cubic-bezier(.05,.82,.12,1)';
+ track.style.transition='transform 20s cubic-bezier(.04,.76,.10,1)';
  track.style.transform='translate3d('+finalX+'px,-50%,0)';
- return sleep(7050).then(()=>{track.style.transition=''})
+ return sleep(20050).then(()=>{track.style.transition=''})
 }
 async function animateSpinRight(track,windowEl,reward){
  const strip=buildSpinStrip(reward);
@@ -2092,10 +2158,11 @@ async function resolveDrop(itemId,action,btn){
  if(btn)btn.disabled=true;
  try{
   const d=await api('/api/inventory/'+itemId+'/resolve',{method:'POST',body:JSON.stringify({action})});
-  if(action==='save'){tab='inventory';await render()}
+  if(action==='save'){sfxSave();tab='inventory';await render()}
   else{
+   sfxSell();
    alert('Продано. Баланс: '+d.shr+' SHR');
-   app.innerHTML=await spinHtml();bindSpin();loadWinsFeed()
+   app.innerHTML=await spinHtml();bindSpin();addHomeExit();loadWinsFeed()
   }
  }catch(e){if(btn)btn.disabled=false;alert(e.message)}
 }
@@ -2110,11 +2177,16 @@ async function spinOnce(){
   lastSpinReward=d.reward;
   if(skip){
    showFinalCube(track,windowEl,d.reward);
+   sfxDrop(d.reward.tier);
    revealReward(result,d);
    try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
    showDropFx(d.reward)
   }else{
+   startSpinSound(20000);
    await animateSpinRight(track,windowEl,d.reward);
+   stopSpinSound();sfxStop();
+   await sleep(220);
+   sfxDrop(d.reward.tier);
    revealReward(result,d);
    try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
    await sleep(500);
@@ -2149,8 +2221,8 @@ async function resolveInventory(id,action,btn){
  if(btn)btn.disabled=true;
  try{
   const d=await api('/api/inventory/'+id+'/resolve',{method:'POST',body:JSON.stringify({action})});
-  if(action==='sell')alert('Предмет продан. Баланс: '+d.shr+' SHR');
-  app.innerHTML=await inventoryHtml();bindInventory()
+  if(action==='sell'){sfxSell();alert('Предмет продан. Баланс: '+d.shr+' SHR')}else{sfxSave()}
+  app.innerHTML=await inventoryHtml();bindInventory();addHomeExit()
  }catch(e){if(btn)btn.disabled=false;alert(e.message)}
 }
 
@@ -2165,6 +2237,25 @@ function bindReferral(){const b=document.getElementById('copyRef');if(b)b.addEve
 function supportHtml(){return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Обращения попадают в Owner Panel. Бот не спамит автоматическими сообщениями.</div></div><div class="sticker-grid">'+sticker('Новости','@shreksi4PubgNEWS','news','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+sticker('Наш чат','@chatshreksi4','chat','st-cyan','data-tg="https://t.me/chatshreksi4"')+'</div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>'}
 async function sendTicket(){try{const d=await api('/api/support',{method:'POST',body:JSON.stringify({category:document.getElementById('tc').value,message:document.getElementById('tm').value})});alert('Обращение #'+d.id+' создано');document.getElementById('tm').value=''}catch(e){alert(e.message)}}
 function bindSupport(){document.getElementById('ticketBtn').addEventListener('click',sendTicket);bindSocials()}
+
+function settingsHtml(){
+ const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
+ const sound=soundsEnabled();
+ return '<section class="hero"><div class="cat">НАСТРОЙКИ</div><h1>Шрексич</h1><div class="muted">Управляйте анимацией, звуками и быстрыми разделами.</div></section>'+
+ '<div class="settings-grid"><div class="setting-card"><h3>Анимация SPIN</h3><div class="muted">Обычный прокрут длится 20 секунд и плавно останавливается.</div><label class="switch-row"><span>Пропускать анимацию</span><input type="checkbox" id="settingsSkip" '+(skip?'checked':'')+'></label></div>'+
+ '<div class="setting-card"><h3>Звуки эффектов</h3><div class="muted">Прокрут, остановка, выпадение, продажа и сохранение. SFX генерируются внутри приложения.</div><label class="switch-row"><span>Звуки включены</span><input type="checkbox" id="settingsSound" '+(sound?'checked':'')+'></label></div></div>'+
+ '<div class="sticker-grid">'+sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+sticker('Поддержка','Обращения и помощь','support','st-blue','data-go="support"')+'</div>'
+}
+function bindSettings(){
+ const a=document.getElementById('settingsSkip');if(a)a.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',a.checked?'1':'0'));
+ const s=document.getElementById('settingsSound');if(s)s.addEventListener('change',()=>setSoundEnabled(s.checked));
+ document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)))
+}
+function addHomeExit(){
+ if(ADMIN||tab==='home'||document.getElementById('pageHomeBtn'))return;
+ app.insertAdjacentHTML('afterbegin','<button id="pageHomeBtn" class="page-home">← На главную</button>');
+ document.getElementById('pageHomeBtn').addEventListener('click',()=>go('home'))
+}
 
 /* OWNER PANEL */
 async function loadAdminData(){
@@ -2243,6 +2334,8 @@ async function render(){
   else if(tab==='inventory'){app.innerHTML=await inventoryHtml();bindInventory()}
   else if(tab==='referral'){app.innerHTML=await referralHtml();bindReferral()}
   else if(tab==='support'){app.innerHTML=supportHtml();bindSupport()}
+  else if(tab==='settings'){app.innerHTML=settingsHtml();bindSettings()}
+  addHomeExit()
  }catch(e){showFatal(e.message)}
 }
 document.querySelectorAll('#nav button').forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.tab;render()}));
