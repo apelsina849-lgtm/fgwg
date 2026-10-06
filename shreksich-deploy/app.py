@@ -977,6 +977,8 @@ class AdminGrantIn(BaseModel):
 class AdminRewardIn(BaseModel):
     token: str = Field(min_length=4, max_length=32)
     tickets: int = Field(default=0, ge=0, le=100)
+    donation_tickets: int = Field(default=0, ge=0, le=100)
+    donation_case_id: str = Field(default="*", max_length=32)
     upgrade_points: int = Field(default=0, ge=0, le=10000)
 
 
@@ -986,15 +988,33 @@ class BroadcastIn(BaseModel):
 
 class PromoCreateIn(BaseModel):
     code: str = Field(min_length=3, max_length=32)
-    promo_type: str = Field(default="discount", max_length=16)
+    promo_type: str = Field(default="discount", max_length=24)
     discount_percent: int = Field(default=0, ge=0, le=90)
     spin_tickets: int = Field(default=0, ge=0, le=100)
+    donation_tickets: int = Field(default=0, ge=0, le=100)
+    case_id: str = Field(default="", max_length=32)
     max_uses: int = Field(default=0, ge=0, le=100000)
     expires_at: str = Field(default="", max_length=32)
 
 
 class SpinPromoIn(BaseModel):
     code: str = Field(min_length=3, max_length=32)
+
+
+class CaseStartIn(BaseModel):
+    case_id: str = Field(min_length=2, max_length=32)
+
+
+class CaseAdminIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=500)
+    icon: str = Field(default="crate", max_length=32)
+    stars_price: int = Field(default=0, ge=0, le=1000000)
+    is_free: bool = False
+    active: bool = True
+    sort_order: int = Field(default=0, ge=0, le=10000)
+    tiers: dict[str, float]
+    contents: list[str]
 
 
 class InventoryResolveIn(BaseModel):
