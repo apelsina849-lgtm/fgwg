@@ -3299,6 +3299,26 @@ function bindRarityCatalog(){
  document.querySelectorAll('[data-rarity-open]').forEach(b=>b.addEventListener('click',()=>openRarityModal(b.dataset.rarityOpen)))
 }
 
+function caseIconMarkup(icon){
+ const k=String(icon||'crate').toLowerCase();
+ const paths={
+  crate:'<path d="M5 10h22v16H5z"/><path d="M8 10l3-5h10l3 5M5 15h22M11 15v11M21 15v11"/><path d="M14 19h4"/>',
+  helmet:'<path d="M6 18c0-7 4.7-12 11-12s11 5 11 12v3H16l-4 5H8v-5H6z"/><path d="M16 21v-5h12M11 10h12"/>',
+  airdrop:'<path d="M6 11c3-7 19-7 22 0M8 11l7 8M26 11l-7 8"/><rect x="11" y="19" width="12" height="9" rx="2"/><path d="M11 23h12M17 19v9"/>',
+  vault:'<rect x="5" y="5" width="24" height="24" rx="4"/><circle cx="17" cy="17" r="6"/><path d="M17 11v3M17 20v3M11 17h3M20 17h3M14 14l2 2M20 20l-2-2"/>',
+  crown:'<path d="M6 24l2-14 7 7 5-10 5 10 7-7 2 14z"/><path d="M8 24h24v5H8z"/><circle cx="8" cy="10" r="1.4"/><circle cx="20" cy="7" r="1.4"/><circle cx="32" cy="10" r="1.4"/>'
+ };
+ return '<div class="case-icon case-icon-'+esc(k)+'"><svg viewBox="0 0 40 34" aria-hidden="true">'+(paths[k]||paths.crate)+'</svg></div>'
+}
+function spinSourceLabel(source){
+ const s=String(source||'');
+ if(s==='ticket')return '🎟 Бонусный билет';
+ if(s.startsWith('donation_ticket:'))return '<span class="blue-ticket">🎫 Donation Ticket</span>';
+ if(s.startsWith('case_stars:'))return '⭐ Stars-кейс';
+ if(s.startsWith('case_free:'))return '🎁 Бесплатный кейс';
+ return '🕐 Бесплатный SPIN'
+}
+
 function selectedCase(){
  const cases=(spinState&&spinState.case_catalog)||[];
  let cfg=cases.find(x=>x.id===selectedCaseId);
@@ -3316,8 +3336,12 @@ function spinCasePickerHtml(){
  return '<section class="spin-case-picker"><h3>Выберите кейс</h3><div class="spin-case-scroll">'+cases.map(c=>{
   const active=c.id===selectedCaseId;
   const odds=(c.tiers||[]).map(t=>'<span class="'+tierClass(t.tier)+'">'+tierLabel(t.tier)+' '+Number(t.chance||0)+'%</span>').join('');
-  return '<button type="button" class="spin-case-card '+(active?'active':'')+'" data-spin-case="'+esc(c.id)+'" '+(spinState.pending_drop?'disabled':'')+'><div class="spin-case-top">'+caseIcon(c.icon)+'<div><div class="spin-case-title">'+esc(c.name)+'</div><div class="spin-case-price">'+esc(c.price_label)+'</div></div></div><div class="spin-case-desc">'+esc(c.description||'')+'</div><div class="spin-case-odds">'+odds+'</div>'+(!c.is_free&&Number(c.donation_tickets||0)>0?'<div class="spin-case-ticket">🎟️ Синих тикетов: '+Number(c.donation_tickets||0)+'</div>':'')+'</button>'
- }).join('')+'</div><div class="spin-case-note">Донат-кейсы открываются за Telegram Stars или синие Donation Tickets. Бесплатность, цена, проценты и содержимое задаются в Owner Panel.</div></section>'
+  const ticket=Number(c.donation_tickets||0);
+  return '<button type="button" class="spin-case-card '+(active?'active':'')+'" data-spin-case="'+esc(c.id)+'" '+(spinState.pending_drop?'disabled':'')+'>'+
+   '<div class="spin-case-top">'+caseIconMarkup(c.icon)+'<div class="spin-case-copy"><div class="spin-case-title">'+esc(c.name)+'</div><div class="spin-case-price">'+esc(c.price_label)+'</div></div></div>'+
+   '<div class="spin-case-desc">'+esc(c.description||'Metro Royale кейс')+'</div><div class="spin-case-odds">'+odds+'</div>'+
+   (ticket>0&&c.id!=='FREE'?'<div class="spin-case-ticket">🎫 '+ticket+' Donation Ticket</div>':'')+'</button>'
+ }).join('')+'</div><div class="spin-case-note">Платные кейсы открываются за Telegram Stars. Синий Donation Ticket открывает донат-кейс без списания Stars.</div></section>'
 }
 function bindSpinCasePicker(){
  document.querySelectorAll('[data-spin-case]').forEach(b=>b.addEventListener('click',async()=>{
@@ -3342,38 +3366,35 @@ function selectedCaseIdleStrip(){
 
 async function spinHtml(){
  spinState=await api('/api/spin/state');
- const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+historySourceLabel(x.source)+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
+ const paidReady=spinState.paid_case_opening||null;
+ if(paidReady){selectedCaseId=paidReady.case_id;localStorage.setItem('shx_selected_case',selectedCaseId)}
+ const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
- const total=Number(spinState.remaining_spins||0);
- const pending=spinState.pending_drop||null;
- const cfg=selectedCase();
- const baseFree=!cfg||cfg.id==='FREE';
- let disabled=!!pending;
- let buttonText='ОТКРЫТЬ КЕЙС';
- let statusText='';
- if(pending){buttonText='СНАЧАЛА РАЗБЕРИТЕ ДРОП';statusText='Сначала сохраните или продайте текущий предмет'}
- else if(baseFree){
-  disabled=total<=0;
-  buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
-  statusText=spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован обычный бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds)
- }else if(cfg.is_free){
-  buttonText='ОТКРЫТЬ БЕСПЛАТНО';
-  statusText='Администратор сделал этот кейс бесплатным'
- }else if(Number(cfg.donation_tickets||0)>0){
-  buttonText='ОТКРЫТЬ ЗА СИНИЙ ТИКЕТ';
-  statusText='Stars не спишутся — будет использован Donation Ticket'
- }else{
-  buttonText='ОТКРЫТЬ ЗА '+Number(cfg.stars_price||0)+' ⭐';
-  statusText='После нажатия откроется официальный счёт Telegram Stars'
- }
+ const total=Number(spinState.remaining_spins||0),pending=spinState.pending_drop||null,cfg=selectedCase();
+ const baseFree=!cfg||cfg.id==='FREE',adminFree=!!(cfg&&!baseFree&&cfg.is_free),donation=Number(cfg&&cfg.donation_tickets||0);
+ const paidForSelected=!!(paidReady&&cfg&&paidReady.case_id===cfg.id);
+ let buttonText='КРУТИТЬ',canOpen=!pending&&!!cfg;
+ if(pending){buttonText='СНАЧАЛА РАЗБЕРИТЕ ДРОП';canOpen=false}
+ else if(paidForSelected){buttonText='ОТКРЫТЬ ОПЛАЧЕННЫЙ КЕЙС'}
+ else if(baseFree){buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';canOpen=total>0}
+ else if(adminFree){buttonText='ОТКРЫТЬ БЕСПЛАТНО'}
+ else if(donation>0){buttonText='ОТКРЫТЬ ЗА DONATION TICKET'}
+ else if(Number(cfg.stars_price||0)>0){buttonText='ОТКРЫТЬ ЗА '+Number(cfg.stars_price)+' ⭐'}
+ else{buttonText='КЕЙС НЕДОСТУПЕН';canOpen=false}
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
- return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">Бесплатный SPIN, донат-кейсы за Stars и отдельные синие Donation Tickets из промокодов.</div></section>'+
+ let modeNote='';
+ if(baseFree)modeNote=spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован обычный бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds);
+ else if(paidForSelected)modeNote='Оплата уже подтверждена. Нажмите кнопку, чтобы прокрутить кейс.';
+ else if(adminFree)modeNote='Этот кейс отмечен бесплатным в админ-панели.';
+ else if(donation>0)modeNote='Будет использован синий Donation Ticket. Stars не спишутся.';
+ else modeNote='Стоимость открытия: '+Number(cfg&&cfg.stars_price||0)+' Telegram Stars.';
+ return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">'+Number(spinState.max_free_spins||1)+' бесплатное(ых) вращение(я) за 24 часа. Донат-кейсы — Stars или синие Donation Tickets.</div></section>'+
  spinCasePickerHtml()+
- '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / '+spinState.max_free_spins+'</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION</div><div class="price blue-ticket">🎟️ '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(disabled?'disabled':'')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
+ '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / '+Number(spinState.max_free_spins||1)+'</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION</div><div class="price blue-ticket">🎫 '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
+ '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(canOpen?'':'disabled')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
- '<div class="muted" style="margin-top:10px">'+statusText+'</div></div>'+
- '<div class="card"><div class="cat">ПРОМОКОД</div><div class="muted">Здесь активируются обычные SPIN-билеты и синие Donation Tickets для Stars-кейсов.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
+ '<div class="muted" style="margin-top:10px">'+modeNote+'</div></div>'+
+ '<div class="card"><div class="cat">ПРОМОКОД НА ПРОКРУТКИ</div><div class="muted">Промокод может выдать обычные SPIN-билеты или отдельные синие Donation Tickets для донат-кейсов.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<h3>SHR MARKET</h3><div class="card"><div class="muted">SHR можно получить за продажу выпавших предметов и обменять на гарантированные награды.</div>'+claims+'</div><h3>Последние 5 выпадений</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
