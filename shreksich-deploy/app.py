@@ -2106,10 +2106,17 @@ function unlockAudio(){
  if(!soundsEnabled())return null;
  const ac=getAudio();if(!ac)return null;
  try{
+  if(ac.state==='suspended')ac.resume().catch(()=>{});
   const o=ac.createOscillator(),g=ac.createGain();
   o.frequency.value=32;g.gain.value=.000001;
-  o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.02)
+  o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.025)
  }catch(_){}
+ return ac
+}
+async function ensureAudioReady(){
+ if(!soundsEnabled())return null;
+ const ac=unlockAudio();if(!ac)return null;
+ try{if(ac.state!=='running')await ac.resume()}catch(_){}
  return ac
 }
 function beginAudioHold(){
@@ -2148,14 +2155,15 @@ function playSpinMelody(progress=0){
  const note=melody[spinSoundStep%melody.length]*(1-p*.08);
  const root=roots[Math.floor(spinSoundStep/3)%roots.length]*(1-p*.05);
  const dur=.44+p*.34;
- tone(note,dur,.026,'sine');
- tone(note/2,dur+.10,.013,'triangle',.015);
- if(spinSoundStep%3===0)tone(root,dur+.24,.016,'sine',.025);
- if(spinSoundStep%6===4)tone(note*1.25,dur*.8,.010,'sine',.08);
+ tone(note,dur,.042,'sine');
+ tone(note/2,dur+.10,.021,'triangle',.015);
+ if(spinSoundStep%3===0)tone(root,dur+.24,.024,'sine',.025);
+ if(spinSoundStep%6===4)tone(note*1.25,dur*.8,.017,'sine',.08);
  spinSoundStep++
 }
 function startSpinSound(totalMs=30000){
- stopSpinSound();if(!soundsEnabled())return;
+ if(spinSoundTimer){clearTimeout(spinSoundTimer);spinSoundTimer=null}
+ if(!soundsEnabled()){endAudioHold();return}
  unlockAudio();
  spinSoundTotalMs=totalMs;spinSoundStarted=performance.now();spinSoundStep=0;spinSoundActive=true;
  const loop=()=>{
@@ -2165,7 +2173,7 @@ function startSpinSound(totalMs=30000){
   if(p<1){
    const gap=Math.round(300 + Math.pow(p,2.1)*650);
    spinSoundTimer=setTimeout(loop,gap)
-  }else{spinSoundActive=false;spinSoundTimer=null}
+  }else{spinSoundActive=false;spinSoundTimer=null;endAudioHold()}
  };
  loop()
 }
@@ -2206,12 +2214,12 @@ function sfxDrop(tier){
 }
 function sfxSell(){if(!soundsEnabled())return;[660,880,1100,1320].forEach((f,i)=>tone(f,.13,.04,'triangle',i*.055))}
 function sfxSave(){if(!soundsEnabled())return;noiseBurst(.08,.018);tone(420,.13,.035,'sine');tone(630,.18,.035,'sine',.08);tone(840,.2,.03,'sine',.14)}
-function setSoundEnabled(on){
+async function setSoundEnabled(on){
  localStorage.setItem('shx_sound_enabled',on?'1':'0');
  if(!on){stopSpinSound();return}
- unlockAudio();
+ await ensureAudioReady();
  resumeSpinSoundIfNeeded();
- tone(523.25,.10,.018,'sine');tone(659.25,.12,.014,'sine',.07)
+ tone(523.25,.12,.030,'sine');tone(659.25,.15,.026,'sine',.07)
 }
 
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
@@ -2449,6 +2457,7 @@ async function spinHtml(){
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0);
  const pending=spinState.pending_drop||null;
+ if(pending&&selectedCaseId!=='FREE'){selectedCaseId='FREE';localStorage.setItem('shx_selected_case','FREE')}
  const cfg=selectedCase();
  const isFree=!cfg||cfg.id==='FREE';
  const buttonText=pending?'СНАЧАЛА РАЗБЕРИТЕ ДРОП':!isFree?'СЛУЧАЙНОЕ ОТКРЫТИЕ ЗА STARS НЕДОСТУПНО':spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
@@ -2590,11 +2599,12 @@ async function spinOnce(){
  if(result)result.textContent='';
  setSpinNavigationLocked(true);
  // Start audio from the user's tap so Telegram/iOS cannot suspend it while the request is in flight.
- unlockAudio();
+ const audioReady=ensureAudioReady();
  if(!skip)beginAudioHold();
- else tone(523.25,.09,.018,'sine');
+ else tone(523.25,.09,.024,'sine');
  try{
   const d=await api('/api/spin/free',{method:'POST'});
+  await audioReady;
   lastSpinReward=d.reward;
   if(skip){
    showFinalCube(track,windowEl,d.reward);
@@ -2838,6 +2848,10 @@ document.querySelectorAll('#nav button').forEach(b=>b.addEventListener('click',(
 
 async function boot(){
  try{
+  if(localStorage.getItem('shx_sound_repair_v5')!=='1'){
+   localStorage.setItem('shx_sound_enabled','1');
+   localStorage.setItem('shx_sound_repair_v5','1')
+  }
   products=await api('/api/catalog');
   me=await api('/api/me');
   if(ADMIN&&!me.owner)throw new Error('Нет доступа');
