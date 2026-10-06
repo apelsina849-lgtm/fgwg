@@ -1,0 +1,51 @@
+name: Validate Shreksich Live Candidate
+
+on:
+  push:
+    branches:
+      - shreksich-validation-live
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r shreksich-deploy/requirements.txt
+      - name: Python syntax
+        run: python -m py_compile shreksich-deploy/app.py
+      - name: SQLite init smoke
+        env:
+          BOT_TOKEN: "123456:TEST_TOKEN_FOR_IMPORT_ONLY"
+          OWNER_TELEGRAM_ID: "1"
+          DB_PATH: "/tmp/shreksich-live-validation.db"
+          WEBAPP_URL: "https://example.invalid"
+        run: |
+          python - <<'PY'
+          import asyncio, importlib.util
+          spec=importlib.util.spec_from_file_location("shreksich_app","shreksich-deploy/app.py")
+          mod=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          asyncio.run(mod.init_db())
+          print("DB_INIT_OK")
+          PY
+      - name: Extract Mini App JS
+        run: |
+          python - <<'PY'
+          import re
+          src=open("shreksich-deploy/app.py",encoding="utf-8").read()
+          m=re.search(r'tpl = r"""(.*?)"""\n\s*return tpl\.replace',src,re.S)
+          if not m:
+              raise SystemExit("HTML template not found")
+          html=m.group(1).replace("__ADMIN__","false").replace("__APP_NAME__","Shreksich")
+          scripts=re.findall(r"<script[^>]*>(.*?)</script>",html,re.S)
+          if not scripts:
+              raise SystemExit("No script blocks found")
+          open("/tmp/shreksich.js","w",encoding="utf-8").write("\n".join(scripts))
+          PY
+      - name: Mini App JavaScript syntax
+        run: node --check /tmp/shreksich.js
