@@ -30,7 +30,7 @@ poll_offset = 0
 bot_username = ""
 db_write_lock = asyncio.Lock()
 
-MAX_FREE_SPINS_24H = 1
+MAX_FREE_SPINS_24H = 3
 
 SPIN_TIER_CHANCES = {
     "GRAY": 60.0,
@@ -793,7 +793,7 @@ async def send_faq(chat_id: int):
         "<b>Частые вопросы</b>\n\n"
         "⭐ <b>Оплата:</b> покупки оплачиваются Telegram Stars прямо внутри Mini App.\n"
         "📦 <b>Заказы:</b> статус смотрите в разделе «Заказы».\n"
-        "🎰 <b>SPIN:</b> 1 бесплатное вращение за 24 часа + бонусные билеты от админа и рефералов.\n"
+        "🎰 <b>SPIN:</b> до 3 бесплатных вращений за 24 часа + бонусные билеты от админа и рефералов.\n"
         "🎟 <b>Промокоды:</b> вводятся при оформлении заказа и уменьшают цену в Stars.\n"
         "👥 <b>Рефералы:</b> после первой оплаченной покупки приглашённого вы получаете 1 бонусный SPIN-билет и 3 SHR.\n"
         "💬 <b>Поддержка:</b> создайте обращение в Mini App или напишите в нашем чате."
@@ -817,7 +817,7 @@ async def answer_question(chat_id: int, text: str):
     elif any(x in q for x in ("заказ", "статус", "где мой")):
         answer = "📦 Все ваши заказы и их статусы находятся в Mini App → «Заказы»."
     elif any(x in q for x in ("спин", "рулет", "билет")):
-        answer = "🎰 Доступно 1 бесплатный SPIN за 24 часа. Дополнительные бонусные билеты можно получить от администратора или за рефералов."
+        answer = "🎰 Доступно до 3 бесплатных SPIN за 24 часа. Дополнительные бонусные билеты можно получить от администратора или за рефералов."
     elif any(x in q for x in ("промо", "скидк", "купон")):
         answer = "🎟 Промокод вводится перед созданием заказа. Если он активен, цена в Stars пересчитается автоматически."
     elif any(x in q for x in ("рефер", "приглас", "друг")):
@@ -1341,7 +1341,12 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
                 "FROM case_openings WHERE telegram_id=? AND status='paid' ORDER BY id ASC LIMIT 1",
                 (uid,)
             )).fetchone()
-            case_catalog = await load_case_catalog(conn,uid)
+            all_cases = await load_case_catalog(conn,uid,True)
+            case_catalog = [x for x in all_cases if x.get("active")]
+            if paid_case and not any(x["id"] == paid_case["case_id"] for x in case_catalog):
+                paid_cfg = next((x for x in all_cases if x["id"] == paid_case["case_id"]), None)
+                if paid_cfg:
+                    case_catalog.append(paid_cfg)
             donation_rows = await (await conn.execute(
                 "SELECT case_id,tickets FROM donation_ticket_balances WHERE telegram_id=? AND tickets>0",
                 (uid,)
@@ -3371,7 +3376,7 @@ async function dropHistoryHtml(){
  if(period==='custom'&&from)q.set('from_at',from);
  if(period==='custom'&&to)q.set('to_at',to);
  const d=await api('/api/spin/history?'+q.toString());
- const items=(d.items||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
+ const items=(d.items||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  return '<section class="hero"><div class="cat">ИСТОРИЯ ДРОПОВ</div><h1>Все выпадения</h1><div class="muted">Фильтруйте историю по времени и качеству кубика.</div></section>'+
  '<div class="history-filters"><div class="history-filter-grid"><select id="historyTier"><option value="ALL">Все редкости</option><option value="GRAY">Серый</option><option value="CYAN">Голубой</option><option value="BLUE">Синий</option><option value="PURPLE">Фиолетовый</option><option value="PINK">Розовый</option><option value="RED">Красный</option><option value="GOLD">Золотой</option></select><button class="secondary" id="historyApply">Применить фильтр</button><input id="historyFrom" type="datetime-local" aria-label="С даты"><input id="historyTo" type="datetime-local" aria-label="По дату"></div>'+
  '<div class="history-periods"><button data-hperiod="all">Всё время</button><button data-hperiod="24h">24 часа</button><button data-hperiod="7d">7 дней</button><button data-hperiod="30d">30 дней</button><button data-hperiod="90d">90 дней</button><button data-hperiod="custom">Свой период</button></div></div>'+
