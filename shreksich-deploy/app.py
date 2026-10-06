@@ -1662,6 +1662,60 @@ async def spin_case_claim(opening_id: int, x_telegram_init_data: str | None = He
     return {"mode":"ready",**result}
 
 
+@app.post("/api/spin/case/start")
+async def spin_case_start(body: CaseStartIn, x_telegram_init_data: str | None = Header(default=None)):
+    result = await spin_case_open(body,x_telegram_init_data)
+    if result.get("mode") == "invoice":
+        return {
+            "mode":"stars",
+            "opening_id":int(result["opening_id"]),
+            "url":result["url"],
+            "stars_price":int(result["stars_amount"])
+        }
+    return result
+
+
+@app.get("/api/spin/case/opening/{opening_id}")
+async def spin_case_opening_status(opening_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    conn = await db()
+    try:
+        row = await (await conn.execute(
+            "SELECT id,case_id,case_name,stars_amount,payment_method,status,created_at,paid_at,opened_at "
+            "FROM case_openings WHERE id=? AND telegram_id=?",
+            (opening_id,uid)
+        )).fetchone()
+    finally:
+        await conn.close()
+    if not row:
+        raise HTTPException(404,"Открытие кейса не найдено")
+    return dict(row)
+
+
+@app.post("/api/spin/case/opening/{opening_id}/resolve")
+async def spin_case_opening_resolve(opening_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    return await spin_case_claim(opening_id,x_telegram_init_data)
+
+
+@app.post("/api/spin/case/opening/{opening_id}/cancel")
+async def spin_case_opening_cancel(opening_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    async with db_write_lock:
+        conn = await db()
+        try:
+            cur = await conn.execute(
+                "UPDATE case_openings SET status='cancelled' "
+                "WHERE id=? AND telegram_id=? AND status='awaiting_payment' AND telegram_charge_id=''",
+                (opening_id,uid)
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"cancelled":bool(cur.rowcount)}
+
+
 @app.post("/api/spin/promo")
 async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
