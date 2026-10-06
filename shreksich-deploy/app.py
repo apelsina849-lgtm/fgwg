@@ -169,26 +169,6 @@ def pick_free_spin_reward():
     pool = [x for x in SPIN_REWARDS if x["tier"] == tier]
     return random.choice(pool)
 
-PREMIUM_CASES = {
-    "TACTICAL": {
-        "id":"TACTICAL","name":"Tactical Case","stars":29,"product_id":-2901,
-        "tiers":["BLUE"],"subtitle":"Гарантированный синий предмет"
-    },
-    "ELITE": {
-        "id":"ELITE","name":"Elite Case","stars":79,"product_id":-7901,
-        "tiers":["PURPLE"],"subtitle":"Гарантированный фиолетовый предмет"
-    },
-    "APEX": {
-        "id":"APEX","name":"Apex Case","stars":199,"product_id":-19901,
-        "tiers":["RED","GOLD"],"subtitle":"Гарантированный красный или золотой предмет"
-    },
-    "MYTHIC": {
-        "id":"MYTHIC","name":"Mythic Case","stars":499,"product_id":-49901,
-        "tiers":["RED","GOLD"],"min_value":230,
-        "subtitle":"Гарантированный выбор из топовых красных и золотых предметов"
-    },
-}
-
 SHR_REWARDS = [
     {"points":5,"name":"Набор расходников"},
     {"points":10,"name":"Metro Starter Kit"},
@@ -719,38 +699,6 @@ async def process_update(update: dict):
                         "UPDATE orders SET status='Оплачен',payment_method='Telegram Stars',telegram_charge_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
                         (charge_id, int(oid))
                     )
-                    case_meta = None
-                    try:
-                        parsed = json.loads(row["comment"] or "{}")
-                        if isinstance(parsed, dict) and parsed.get("kind") == "guaranteed_case":
-                            case_meta = parsed
-                    except Exception:
-                        case_meta = None
-                    if case_meta:
-                        reward_name = str(case_meta.get("reward_name") or "")
-                        reward_tier = str(case_meta.get("reward_tier") or "")
-                        sell_shr = int(case_meta.get("sell_shr") or 0)
-                        value_stars = int(case_meta.get("value_stars") or sell_shr)
-                        valid_reward = next(
-                            (x for x in SPIN_REWARDS if x["name"] == reward_name and x["tier"] == reward_tier),
-                            None
-                        )
-                        if valid_reward:
-                            await conn.execute(
-                                "INSERT INTO inventory_items(telegram_id,reward_name,reward_tier,sell_shr,value_stars,status,source,resolved_at) "
-                                "VALUES(?,?,?,?,?,'saved',? ,CURRENT_TIMESTAMP)",
-                                (
-                                    int(uid),reward_name,reward_tier,sell_shr,value_stars,
-                                    "case:" + str(case_meta.get("case_id") or "")
-                                )
-                            )
-                            await conn.execute(
-                                "INSERT INTO spin_history(telegram_id,reward_name,reward_tier,points,source) VALUES(?,?,?,?,?)",
-                                (
-                                    int(uid),reward_name,reward_tier,sell_shr,
-                                    "case:" + str(case_meta.get("case_id") or "")
-                                )
-                            )
                     if row["promo_code"]:
                         promo = await (await conn.execute(
                             "SELECT id FROM promos WHERE code=? AND COALESCE(discount_percent,0)>0",
@@ -842,11 +790,6 @@ class OrderIn(BaseModel):
     nickname: str = Field(default="", max_length=64)
     comment: str = Field(default="", max_length=1000)
     promo_code: str = Field(default="", max_length=32)
-
-
-class CaseOrderIn(BaseModel):
-    case_id: str = Field(min_length=3, max_length=24)
-    reward_name: str = Field(min_length=1, max_length=160)
 
 
 class TicketIn(BaseModel):
@@ -1017,60 +960,6 @@ async def promo_check(body: OrderIn, x_telegram_init_data: str | None = Header(d
     return {"code":code,"discount_percent":discount,"original_stars":int(p["stars_price"]),"final_stars":final_stars}
 
 
-@app.post("/api/cases/order")
-async def create_case_order(body: CaseOrderIn, x_telegram_init_data: str | None = Header(default=None)):
-    u = await current_user(x_telegram_init_data)
-    case_id = body.case_id.strip().upper()
-    cfg = PREMIUM_CASES.get(case_id)
-    if not cfg:
-        raise HTTPException(404,"Кейс не найден")
-    reward = next(
-        (
-            x for x in SPIN_REWARDS
-            if x["name"] == body.reward_name
-            and x["tier"] in cfg["tiers"]
-            and int(x["value_stars"]) >= int(cfg.get("min_value",0))
-        ),
-        None
-    )
-    if not reward:
-        raise HTTPException(400,"Этот предмет недоступен в выбранном кейсе")
-    meta = {
-        "kind":"guaranteed_case",
-        "case_id":case_id,
-        "reward_name":reward["name"],
-        "reward_tier":reward["tier"],
-        "sell_shr":int(reward["value_stars"]),
-        "value_stars":int(reward["value_stars"])
-    }
-    async with db_write_lock:
-        conn = await db()
-        try:
-            await conn.execute("BEGIN IMMEDIATE")
-            last = await (await conn.execute("SELECT COALESCE(MAX(number),10499) n FROM orders")).fetchone()
-            number = int(last["n"]) + 1
-            cur = await conn.execute(
-                "INSERT INTO orders(number,telegram_id,product_id,product_name,amount,stars_amount,uid,nickname,comment,promo_code,discount_percent) "
-                "VALUES(?,?,?,?,?,?,?,?,?,'',0)",
-                (
-                    number,int(u["id"]),int(cfg["product_id"]),
-                    f'{cfg["name"]} • {reward["name"]}',0,int(cfg["stars"]),
-                    "CASE",str(u.get("username") or u.get("first_name") or ""),
-                    json.dumps(meta,ensure_ascii=False)
-                )
-            )
-            oid = cur.lastrowid
-            await conn.commit()
-        finally:
-            await conn.close()
-    return {
-        "id":oid,"number":number,"status":"Ожидает оплаты",
-        "stars_amount":int(cfg["stars"]),"original_stars_amount":int(cfg["stars"]),
-        "promo_code":"","discount_percent":0,
-        "case_id":case_id,"reward":reward
-    }
-
-
 @app.get("/api/orders")
 async def orders(x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
@@ -1161,14 +1050,7 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "history":[dict(x) for x in history],
       "upgrade_rewards":SHR_REWARDS,
       "tier_chances":SPIN_TIER_CHANCES,
-      "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS],
-      "cases":[
-        {
-          "id":cfg["id"],"name":cfg["name"],"stars":cfg["stars"],"tiers":cfg["tiers"],"subtitle":cfg["subtitle"],
-          "items":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS if x["tier"] in cfg["tiers"] and int(x["value_stars"]) >= int(cfg.get("min_value",0))]
-        }
-        for cfg in PREMIUM_CASES.values()
-      ]
+      "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS]
     }
 
 
@@ -2022,15 +1904,6 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .spin-options span{font-size:13px;font-weight:800;color:#d7dbe0}
 .spin-result{min-height:22px;margin-top:10px;font-size:13px;font-weight:850;text-align:center}
 .spin-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:11px}.spin-stat .price{font-size:17px}
-.case-shelf{margin:14px 0 18px}.case-shelf h3{margin:0 0 10px}
-.case-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
-.case-card{position:relative;overflow:hidden;min-height:176px;padding:13px 10px;border-radius:20px;background:#111418;border:1px solid #2b3036;text-align:center;cursor:pointer}
-.case-card:active{transform:scale(.975)}.case-card:before{content:"";position:absolute;inset:auto -30% -55% -30%;height:120px;background:radial-gradient(circle,currentColor 0%,transparent 70%);opacity:.16;pointer-events:none}
-.case-card .loot-cube{width:58px;height:58px;border-radius:15px;font-size:27px;margin:2px auto 10px}
-.case-name{font-size:13px;font-weight:950;line-height:1.1}.case-price{font-size:19px;font-weight:1000;margin:7px 0 3px}.case-desc{font-size:9.5px;color:#aeb5bd;line-height:1.25}
-.case-card.tactical{color:#65a9ff;border-color:#265caa}.case-card.elite{color:#c982ff;border-color:#7434a6}.case-card.apex{color:#ffd65a;border-color:#9a6d00;box-shadow:0 0 24px #ffc40022}.case-card.mythic{color:#ff6b6b;border-color:#c32626;box-shadow:0 0 32px #ff262644,inset 0 0 30px #6b090922;animation:caseMythicPulse 1.15s ease-in-out infinite}@keyframes caseMythicPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
-.case-buy-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-top:1px solid #252a30}.case-buy-info{min-width:0}.case-buy-name{font-weight:900;line-height:1.25}.case-buy-price{font-size:11px;color:#9299a1;margin-top:3px}.case-buy-btn{flex:0 0 auto;padding:9px 11px;background:linear-gradient(135deg,#ffd12d,#f5a900);color:#181000}
-@media(max-width:760px){.case-grid{grid-template-columns:1fr}.case-card{min-height:116px;display:grid;grid-template-columns:70px 1fr;grid-template-rows:auto auto auto;column-gap:8px;text-align:left;align-items:center}.case-card .loot-cube{grid-row:1/4;margin:auto}.case-name,.case-price,.case-desc{margin-left:0}.case-price{margin:0}}
 .rarity-catalog{margin:18px 0 8px}
 .rarity-catalog-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:10px}
 .rarity-catalog-head h3{margin:0}.rarity-catalog-head .mini{text-align:right}
@@ -2414,55 +2287,14 @@ function bindRarityCatalog(){
  document.querySelectorAll('[data-rarity-open]').forEach(b=>b.addEventListener('click',()=>openRarityModal(b.dataset.rarityOpen)))
 }
 
-function premiumCasesHtml(){
- const cases=spinState.cases||[];
- if(!cases.length)return '';
- return '<section class="case-shelf"><h3>Премиум-кейсы</h3><div class="case-grid">'+cases.map(c=>{
-  const cls=c.id==='TACTICAL'?'tactical':c.id==='ELITE'?'elite':c.id==='MYTHIC'?'mythic':'apex';
-  const visual=c.id==='TACTICAL'?'BLUE':c.id==='ELITE'?'PURPLE':c.id==='MYTHIC'?'RED':'GOLD';
-  return '<button type="button" class="case-card '+cls+'" data-case-open="'+c.id+'"><div class="loot-cube '+cubeClass(visual)+'"><span>?</span></div><div class="case-name">'+esc(c.name)+'</div><div class="case-price">'+c.stars+' ⭐</div><div class="case-desc">'+esc(c.subtitle)+'</div></button>'
- }).join('')+'</div><div class="mini" style="margin-top:8px">Платные кейсы без случайной ставки: предмет выбирается до оплаты.</div></section>'+
- '<div class="rarity-modal hide" id="caseModal"><div class="rarity-sheet" id="caseSheet"></div></div>'
-}
-function openPremiumCase(caseId){
- const cfg=(spinState.cases||[]).find(x=>x.id===caseId),modal=document.getElementById('caseModal'),sheet=document.getElementById('caseSheet');
- if(!cfg||!modal||!sheet)return;
- const visual=cfg.id==='TACTICAL'?'BLUE':cfg.id==='ELITE'?'PURPLE':cfg.id==='MYTHIC'?'RED':'GOLD';
- sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(visual)+'"><span>?</span></div><div class="rarity-sheet-title"><h3>'+esc(cfg.name)+' • '+cfg.stars+' ⭐</h3><div class="muted">'+esc(cfg.subtitle)+' • выберите предмет</div></div><button type="button" class="rarity-close" id="caseClose">Закрыть</button></div>'+
- (cfg.items||[]).map(x=>'<div class="case-buy-row"><div class="case-buy-info"><div class="case-buy-name '+tierClass(x.tier)+'">'+esc(x.name)+'</div><div class="case-buy-price">'+tierLabel(x.tier)+' • оценка 🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+'</div></div><button class="case-buy-btn" data-case-buy="'+cfg.id+'" data-case-item="'+esc(x.name)+'">Купить '+cfg.stars+' ⭐</button></div>').join('');
- modal.classList.remove('hide');
- const close=()=>modal.classList.add('hide');
- document.getElementById('caseClose').addEventListener('click',close);
- modal.addEventListener('click',e=>{if(e.target===modal)close()},{once:true});
- sheet.querySelectorAll('[data-case-buy]').forEach(b=>b.addEventListener('click',()=>buyPremiumCase(b.dataset.caseBuy,b.dataset.caseItem,b)))
-}
-function bindPremiumCases(){
- document.querySelectorAll('[data-case-open]').forEach(b=>b.addEventListener('click',()=>openPremiumCase(b.dataset.caseOpen)))
-}
-async function buyPremiumCase(caseId,rewardName,btn){
- if(btn)btn.disabled=true;
- try{
-  const o=await api('/api/cases/order',{method:'POST',body:JSON.stringify({case_id:caseId,reward_name:rewardName})});
-  const d=await api('/api/orders/'+o.id+'/stars',{method:'POST'});
-  if(tg&&tg.openInvoice){
-   tg.openInvoice(d.url,status=>{
-    if(status==='paid'){
-     setTimeout(()=>{tab='inventory';render()},1500)
-    }else if(btn){btn.disabled=false}
-   })
-  }else location.href=d.url
- }catch(e){if(btn)btn.disabled=false;alert(e.message)}
-}
-
 async function spinHtml(){
  spinState=await api('/api/spin/state');
- const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(String(x.source||'').startsWith('case:')?'📦 Премиум-кейс':x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
+ const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0);
  const buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
- premiumCasesHtml()+
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
  '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
@@ -2476,7 +2308,6 @@ function bindSpin(){
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
  bindRarityCatalog();
- bindPremiumCases();
  document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
 }
 async function applySpinPromo(){
@@ -2667,7 +2498,7 @@ async function dropHistoryHtml(){
  if(period==='custom'&&from)q.set('from_at',from);
  if(period==='custom'&&to)q.set('to_at',to);
  const d=await api('/api/spin/history?'+q.toString());
- const items=(d.items||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(String(x.source||'').startsWith('case:')?'📦 Премиум-кейс':x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
+ const items=(d.items||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  return '<section class="hero"><div class="cat">ИСТОРИЯ ДРОПОВ</div><h1>Все выпадения</h1><div class="muted">Фильтруйте историю по времени и качеству кубика.</div></section>'+
  '<div class="history-filters"><div class="history-filter-grid"><select id="historyTier"><option value="ALL">Все редкости</option><option value="GRAY">Серый</option><option value="CYAN">Голубой</option><option value="BLUE">Синий</option><option value="PURPLE">Фиолетовый</option><option value="PINK">Розовый</option><option value="RED">Красный</option><option value="GOLD">Золотой</option></select><button class="secondary" id="historyApply">Применить фильтр</button><input id="historyFrom" type="datetime-local" aria-label="С даты"><input id="historyTo" type="datetime-local" aria-label="По дату"></div>'+
  '<div class="history-periods"><button data-hperiod="all">Всё время</button><button data-hperiod="24h">24 часа</button><button data-hperiod="7d">7 дней</button><button data-hperiod="30d">30 дней</button><button data-hperiod="90d">90 дней</button><button data-hperiod="custom">Свой период</button></div></div>'+
