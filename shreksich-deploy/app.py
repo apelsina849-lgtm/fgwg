@@ -1770,14 +1770,15 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
             await conn.execute("BEGIN IMMEDIATE")
             promo = await (await conn.execute(
                 "SELECT * FROM promos WHERE code=? AND active=1 "
-                "AND (lower(COALESCE(promo_type,''))='spin' OR COALESCE(spin_tickets,0)>0) "
+                "AND (lower(COALESCE(promo_type,'')) IN ('spin','donation_spin') "
+                "OR COALESCE(spin_tickets,0)>0 OR COALESCE(donation_tickets,0)>0) "
                 "AND (max_uses=0 OR uses<max_uses) "
                 "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
                 (code,)
             )).fetchone()
             if not promo:
                 await conn.rollback()
-                raise HTTPException(400,"SPIN-промокод недействителен, закончился или истёк")
+                raise HTTPException(400,"Промокод на прокрутки недействителен, закончился или истёк")
             redeemed = await (await conn.execute(
                 "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
                 (promo["id"],uid)
@@ -1785,20 +1786,58 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
             if redeemed:
                 await conn.rollback()
                 raise HTTPException(409,"Вы уже активировали этот промокод")
-            tickets = int(promo["spin_tickets"] or 0)
-            if tickets <= 0 and str(promo["promo_type"] or "").lower()=="spin":
-                tickets = 1
+
+            promo_type = str(promo["promo_type"] or "").lower()
+            donation_count = int(promo["donation_tickets"] or 0)
+            spin_count = int(promo["spin_tickets"] or 0)
+
+            if promo_type == "donation_spin" or donation_count > 0:
+                if donation_count <= 0:
+                    donation_count = 1
+                target_case = str(promo["case_id"] or "").strip().upper() or "*"
+                if target_case != "*":
+                    exists = await (await conn.execute(
+                        "SELECT 1 FROM case_configs WHERE id=?",
+                        (target_case,)
+                    )).fetchone()
+                    if not exists:
+                        await conn.rollback()
+                        raise HTTPException(409,"Кейс, к которому привязан промокод, больше не существует")
+                await conn.execute(
+                    "INSERT INTO donation_ticket_balances(telegram_id,case_id,tickets) VALUES(?,?,?) "
+                    "ON CONFLICT(telegram_id,case_id) DO UPDATE SET tickets=tickets+excluded.tickets",
+                    (uid,target_case,donation_count)
+                )
+                await conn.execute(
+                    "INSERT INTO promo_redemptions(promo_id,telegram_id) VALUES(?,?)",
+                    (promo["id"],uid)
+                )
+                await conn.execute("UPDATE promos SET uses=uses+1 WHERE id=?",(promo["id"],))
+                await conn.commit()
+                wallet_rows = await (await conn.execute(
+                    "SELECT case_id,tickets FROM donation_ticket_balances WHERE telegram_id=? AND tickets>0",
+                    (uid,)
+                )).fetchall()
+                wallet = {str(x["case_id"]):int(x["tickets"] or 0) for x in wallet_rows}
+                return {
+                    "ok":True,"code":code,"kind":"donation_ticket",
+                    "donation_tickets_added":donation_count,"case_id":target_case,
+                    "donation_tickets_total":sum(wallet.values()),"donation_ticket_wallet":wallet
+                }
+
+            if spin_count <= 0 and promo_type == "spin":
+                spin_count = 1
                 await conn.execute("UPDATE promos SET spin_tickets=1 WHERE id=?",(promo["id"],))
-            if tickets <= 0:
+            if spin_count <= 0:
                 await conn.rollback()
-                raise HTTPException(400,"Этот промокод не выдаёт SPIN-билеты")
+                raise HTTPException(400,"Этот промокод не выдаёт прокрутки")
             await conn.execute(
                 "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
                 (uid,)
             )
             await conn.execute(
                 "UPDATE spin_state SET tickets=tickets+? WHERE telegram_id=?",
-                (tickets,uid)
+                (spin_count,uid)
             )
             await conn.execute(
                 "INSERT INTO promo_redemptions(promo_id,telegram_id) VALUES(?,?)",
@@ -1809,7 +1848,10 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
             state = await (await conn.execute("SELECT tickets FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
         finally:
             await conn.close()
-    return {"ok":True,"code":code,"tickets_added":tickets,"bonus_tickets":int(state["tickets"] or 0)}
+    return {
+        "ok":True,"code":code,"kind":"spin_ticket",
+        "tickets_added":spin_count,"bonus_tickets":int(state["tickets"] or 0)
+    }
 
 
 @app.get("/api/inventory")
