@@ -3252,6 +3252,26 @@ function tierLabel(tier){
  const labels={GRAY:'СЕРЫЙ',CYAN:'ГОЛУБОЙ',BLUE:'СИНИЙ',PURPLE:'ФИОЛЕТОВЫЙ',PINK:'РОЗОВЫЙ',RED:'КРАСНЫЙ',GOLD:'ЗОЛОТОЙ',COMMON:'COMMON',RARE:'RARE',EPIC:'EPIC',LEGENDARY:'LEGENDARY',MYTHIC:'MYTHIC'};
  return labels[String(tier||'').toUpperCase()]||String(tier||'')
 }
+function caseIcon(kind){
+ const k=String(kind||'crate').toLowerCase();
+ const icons={
+  crate:'<svg viewBox="0 0 32 32"><path d="M5 8h22v18H5z"/><path d="M5 13h22M10 8v18M22 8v18"/><path d="M10 13l12 13M22 13L10 26"/></svg>',
+  helmet:'<svg viewBox="0 0 32 32"><path d="M6 17c0-7 4-12 10-12s10 5 10 12v6H15l-4-4H6z"/><path d="M15 23v4h8l3-4"/><path d="M10 10h12"/></svg>',
+  airdrop:'<svg viewBox="0 0 32 32"><path d="M7 20h18v8H7z"/><path d="M10 20v8M22 20v8"/><path d="M16 4v16"/><path d="M6 10c2.2-4 5.6-6 10-6s7.8 2 10 6"/><path d="M6 10l10 4 10-4"/></svg>',
+  vault:'<svg viewBox="0 0 32 32"><rect x="5" y="5" width="22" height="22" rx="3"/><circle cx="16" cy="16" r="6"/><path d="M16 10v4M16 18v4M10 16h4M18 16h4"/><path d="M8 9h3M21 9h3M8 23h3M21 23h3"/></svg>',
+  crown:'<svg viewBox="0 0 32 32"><path d="M5 11l6 5 5-9 5 9 6-5-3 14H8z"/><path d="M8 25h16"/></svg>'
+ };
+ return '<div class="case-icon case-icon-'+esc(k)+'">'+(icons[k]||icons.crate)+'</div>'
+}
+function historySourceLabel(src){
+ const s=String(src||'');
+ if(s==='ticket')return '🎟 Бонусный билет';
+ if(s==='free')return '🕐 Бесплатный SPIN';
+ if(s==='donation_ticket')return '🎟️ Donation Ticket';
+ if(s==='case_stars')return '⭐ Telegram Stars';
+ if(s==='case_free')return '🎁 Бесплатный кейс';
+ return '🎰 Кейс'
+}
 function tierChance(tier){
  const v=spinState&&spinState.tier_chances?spinState.tier_chances[String(tier||'').toUpperCase()]:0;
  return Number(v||0)
@@ -3295,10 +3315,9 @@ function spinCasePickerHtml(){
  if(!cases.length)return '';
  return '<section class="spin-case-picker"><h3>Выберите кейс</h3><div class="spin-case-scroll">'+cases.map(c=>{
   const active=c.id===selectedCaseId;
-  const visual=caseVisualTier(c);
   const odds=(c.tiers||[]).map(t=>'<span class="'+tierClass(t.tier)+'">'+tierLabel(t.tier)+' '+Number(t.chance||0)+'%</span>').join('');
-  return '<button type="button" class="spin-case-card '+(active?'active':'')+'" data-spin-case="'+esc(c.id)+'" '+(spinState.pending_drop?'disabled':'')+'><div class="spin-case-top"><div class="loot-cube '+cubeClass(visual)+'"><span>?</span></div><div><div class="spin-case-title">'+esc(c.name)+'</div><div class="spin-case-price">'+esc(c.price_label)+'</div></div></div><div class="spin-case-odds">'+odds+'</div></button>'
- }).join('')+'</div><div class="spin-case-note">Нажмите на кейс, чтобы выбрать его. Бесплатный кейс открывается здесь; платные случайные открытия за Stars не подключены.</div></section>'
+  return '<button type="button" class="spin-case-card '+(active?'active':'')+'" data-spin-case="'+esc(c.id)+'" '+(spinState.pending_drop?'disabled':'')+'><div class="spin-case-top">'+caseIcon(c.icon)+'<div><div class="spin-case-title">'+esc(c.name)+'</div><div class="spin-case-price">'+esc(c.price_label)+'</div></div></div><div class="spin-case-desc">'+esc(c.description||'')+'</div><div class="spin-case-odds">'+odds+'</div>'+(!c.is_free&&Number(c.donation_tickets||0)>0?'<div class="spin-case-ticket">🎟️ Синих тикетов: '+Number(c.donation_tickets||0)+'</div>':'')+'</button>'
+ }).join('')+'</div><div class="spin-case-note">Донат-кейсы открываются за Telegram Stars или синие Donation Tickets. Бесплатность, цена, проценты и содержимое задаются в Owner Panel.</div></section>'
 }
 function bindSpinCasePicker(){
  document.querySelectorAll('[data-spin-case]').forEach(b=>b.addEventListener('click',async()=>{
@@ -3323,22 +3342,38 @@ function selectedCaseIdleStrip(){
 
 async function spinHtml(){
  spinState=await api('/api/spin/state');
- const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
+ const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+historySourceLabel(x.source)+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0);
  const pending=spinState.pending_drop||null;
- if(pending&&selectedCaseId!=='FREE'){selectedCaseId='FREE';localStorage.setItem('shx_selected_case','FREE')}
  const cfg=selectedCase();
- const isFree=!cfg||cfg.id==='FREE';
- const buttonText=pending?'СНАЧАЛА РАЗБЕРИТЕ ДРОП':!isFree?'СЛУЧАЙНОЕ ОТКРЫТИЕ ЗА STARS НЕДОСТУПНО':spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
+ const baseFree=!cfg||cfg.id==='FREE';
+ let disabled=!!pending;
+ let buttonText='ОТКРЫТЬ КЕЙС';
+ let statusText='';
+ if(pending){buttonText='СНАЧАЛА РАЗБЕРИТЕ ДРОП';statusText='Сначала сохраните или продайте текущий предмет'}
+ else if(baseFree){
+  disabled=total<=0;
+  buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
+  statusText=spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован обычный бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds)
+ }else if(cfg.is_free){
+  buttonText='ОТКРЫТЬ БЕСПЛАТНО';
+  statusText='Администратор сделал этот кейс бесплатным'
+ }else if(Number(cfg.donation_tickets||0)>0){
+  buttonText='ОТКРЫТЬ ЗА СИНИЙ ТИКЕТ';
+  statusText='Stars не спишутся — будет использован Donation Ticket'
+ }else{
+  buttonText='ОТКРЫТЬ ЗА '+Number(cfg.stars_price||0)+' ⭐';
+  statusText='После нажатия откроется официальный счёт Telegram Stars'
+ }
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
- return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
+ return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">Бесплатный SPIN, донат-кейсы за Stars и отдельные синие Donation Tickets из промокодов.</div></section>'+
  spinCasePickerHtml()+
- '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0||pending||!isFree?'disabled':'')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
+ '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / '+spinState.max_free_spins+'</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION</div><div class="price blue-ticket">🎟️ '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
+ '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(disabled?'disabled':'')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
- '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
- '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
+ '<div class="muted" style="margin-top:10px">'+statusText+'</div></div>'+
+ '<div class="card"><div class="cat">ПРОМОКОД</div><div class="muted">Здесь активируются обычные SPIN-билеты и синие Donation Tickets для Stars-кейсов.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<h3>SHR MARKET</h3><div class="card"><div class="muted">SHR можно получить за продажу выпавших предметов и обменять на гарантированные награды.</div>'+claims+'</div><h3>Последние 5 выпадений</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
@@ -3363,8 +3398,12 @@ async function applySpinPromo(){
  const b=document.getElementById('spinPromoBtn');b.disabled=true;b.textContent='Проверяем…';
  try{
   const d=await api('/api/spin/promo',{method:'POST',body:JSON.stringify({code})});
-  info.innerHTML='<span class="ok">+'+d.tickets_added+' SPIN-билет(а). Теперь у вас 🎟 '+d.bonus_tickets+'</span>';
-  setTimeout(async()=>{app.innerHTML=await spinHtml();bindSpin()},650)
+  if(d.promo_type==='donation'){
+   info.innerHTML='<span class="blue-ticket">🎟️ +'+d.donation_tickets_added+' Donation Ticket. Всего: '+d.donation_tickets_total+'</span>'
+  }else{
+   info.innerHTML='<span class="ok">+'+d.tickets_added+' SPIN-билет(а). Теперь у вас 🎟 '+d.bonus_tickets+'</span>'
+  }
+  setTimeout(async()=>{app.innerHTML=await spinHtml();bindSpin();addHomeExit()},650)
  }catch(e){info.innerHTML='<span class="warn">'+esc(e.message)+'</span>';b.disabled=false;b.textContent='Активировать'}
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
@@ -3461,22 +3500,39 @@ async function resolveDrop(itemId,action,btn){
   }
  }catch(e){if(btn)btn.disabled=false;alert(e.message)}
 }
+async function claimPaidCase(openingId){
+ let lastErr=null;
+ for(let i=0;i<30;i++){
+  try{return await api('/api/spin/case/'+openingId+'/claim',{method:'POST'})}
+  catch(e){lastErr=e;await sleep(500)}
+ }
+ throw lastErr||new Error('Платёж принят, но выдача ещё не завершена')
+}
+async function requestSpinResult(){
+ const cfg=selectedCase();
+ if(!cfg||cfg.id==='FREE')return await api('/api/spin/free',{method:'POST'});
+ const d=await api('/api/spin/case/open',{method:'POST',body:JSON.stringify({case_id:cfg.id})});
+ if(d.mode!=='invoice')return d;
+ if(!(tg&&tg.openInvoice)){location.href=d.url;throw Object.assign(new Error('Счёт открыт'),{silent:true})}
+ const status=await new Promise(resolve=>tg.openInvoice(d.url,s=>resolve(s||'cancelled')));
+ if(status!=='paid')throw Object.assign(new Error(status==='cancelled'?'Оплата отменена':'Оплата не завершена'),{silent:true});
+ return await claimPaidCase(d.opening_id)
+}
 async function spinOnce(){
  const b=document.getElementById('spinBtn');if(!b||b.disabled)return;
  const track=document.getElementById('reelTrack'),windowEl=document.getElementById('reelWindow'),result=document.getElementById('spinResult');
  const skip=!!document.getElementById('skipSpinAnimation')?.checked;
- b.disabled=true;b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
+ b.disabled=true;b.textContent='ПОДГОТАВЛИВАЕМ…';
  if(result)result.textContent='';
  setSpinNavigationLocked(true);
- // Start audio from the user's tap so Telegram/iOS cannot suspend it while the request is in flight.
  const audioReady=ensureAudioReady();
- if(!skip)beginAudioHold();
- else tone(523.25,.09,.024,'sine');
  try{
-  const d=await api('/api/spin/free',{method:'POST'});
+  const d=await requestSpinResult();
   await audioReady;
   lastSpinReward=d.reward;
+  b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
   if(skip){
+   tone(523.25,.09,.024,'sine');
    showFinalCube(track,windowEl,d.reward);
    sfxDrop(d.reward.tier);
    revealReward(result,d);
@@ -3484,6 +3540,7 @@ async function spinOnce(){
    showDropFx(d.reward);
    setSpinNavigationLocked(false)
   }else{
+   beginAudioHold();
    startSpinSound(30000);
    await animateSpinRight(track,windowEl,d.reward);
    stopSpinSound();sfxStop();
@@ -3499,8 +3556,8 @@ async function spinOnce(){
  }catch(e){
   stopSpinSound();
   setSpinNavigationLocked(false);
-  b.disabled=false;b.textContent='КРУТИТЬ SPIN';
-  alert(e.message)
+  if(!e.silent)alert(e.message);
+  app.innerHTML=await spinHtml();bindSpin();addHomeExit()
  }
 }
 async function claimUpgrade(points){try{const d=await api('/api/upgrade/claim',{method:'POST',body:JSON.stringify({points})});alert('Заявка создана: '+d.reward.name);app.innerHTML=await spinHtml();bindSpin()}catch(e){alert(e.message)}}
@@ -3585,12 +3642,14 @@ async function caseCatalogHtml(){
  spinState=await api('/api/spin/state');
  const cases=spinState.case_catalog||[];
  const html=cases.map(c=>{
-  const tiers=(c.tiers||[]).filter(t=>(spinState.rewards||[]).some(x=>x.tier===t.tier));
-  return '<div class="case-guide-card"><div class="case-guide-head"><div><div class="case-guide-name">'+esc(c.name)+'</div><div class="mini">'+tiers.length+' качеств</div></div><div class="case-guide-price">'+esc(c.price_label)+'</div></div>'+
+  const allowed=new Set(c.contents||[]);
+  const tiers=(c.tiers||[]).filter(t=>(spinState.rewards||[]).some(x=>x.tier===t.tier&&allowed.has(x.name)));
+  return '<div class="case-guide-card"><div class="case-guide-head">'+caseIcon(c.icon)+'<div><div class="case-guide-name">'+esc(c.name)+'</div><div class="mini">'+tiers.length+' качеств • '+allowed.size+' предметов</div></div><div class="case-guide-price">'+esc(c.price_label)+'</div></div>'+
+   '<div class="case-guide-desc">'+esc(c.description||'')+'</div>'+
    '<div class="case-tier-row">'+tiers.map(t=>'<button type="button" class="case-tier-btn" data-case-tier="'+esc(c.id)+'" data-tier="'+esc(t.tier)+'"><div class="loot-cube '+cubeClass(t.tier)+'"><span>?</span></div><div class="rarity-card-title '+tierClass(t.tier)+'">'+tierLabel(t.tier)+'</div><div class="rarity-card-chance">'+Number(t.chance||0)+'%</div></button>').join('')+'</div>'+
-   '<div class="case-guide-note">Нажмите на качество, чтобы посмотреть предметы и цены по возрастанию.</div></div>'
+   '<div class="case-guide-note">Нажмите на качество, чтобы посмотреть только предметы этого кейса и цены по возрастанию.</div></div>'
  }).join('');
- return '<section class="hero"><div class="cat">КУБИКИ И ПРЕДМЕТЫ</div><h1>Каталог кейсов</h1><div class="muted">В каждом кейсе показаны только доступные ему качества. Цены предметов отсортированы от меньшей к большей.</div></section>'+
+ return '<section class="hero"><div class="cat">КЕЙСЫ И ПРЕДМЕТЫ</div><h1>Каталог кейсов</h1><div class="muted">Карточки выровнены, а у каждого кейса своя иконка. Показаны только реально включённые предметы.</div></section>'+
  '<div class="case-guide">'+html+'</div><div class="rarity-modal hide" id="caseTierModal"><div class="rarity-sheet" id="caseTierSheet"></div></div>'
 }
 function openCaseTier(caseId,tier){
@@ -3598,7 +3657,8 @@ function openCaseTier(caseId,tier){
  const tierCfg=cfg&&(cfg.tiers||[]).find(x=>x.tier===tier);
  const modal=document.getElementById('caseTierModal'),sheet=document.getElementById('caseTierSheet');
  if(!cfg||!tierCfg||!modal||!sheet)return;
- const items=(spinState.rewards||[]).filter(x=>x.tier===tier).slice().sort((a,b)=>Number(a.value_stars||0)-Number(b.value_stars||0));
+ const allowed=new Set(cfg.contents||[]);
+ const items=(spinState.rewards||[]).filter(x=>x.tier===tier&&allowed.has(x.name)).slice().sort((a,b)=>Number(a.value_stars||0)-Number(b.value_stars||0));
  sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div><div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+tierLabel(tier)+'</h3><div class="muted">'+esc(cfg.name)+' • шанс '+Number(tierCfg.chance||0)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="caseTierClose">Закрыть</button></div>'+
  items.map(x=>'<div class="rarity-item-row"><div class="rarity-item-name">'+esc(x.name)+'</div><div class="rarity-item-price">🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+' / '+Number(x.value_stars||0).toLocaleString('ru-RU')+' SHR</div></div>').join('');
  modal.classList.remove('hide');
