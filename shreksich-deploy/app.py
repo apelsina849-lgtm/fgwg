@@ -1638,7 +1638,7 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .wins{height:42px;border:1px solid #2a2f35;background:#0d1013;border-radius:14px;overflow:hidden;margin:0 0 16px;display:flex;align-items:center;position:relative}
 .wins:before{content:"LIVE";position:absolute;z-index:3;left:0;top:0;bottom:0;display:flex;align-items:center;padding:0 10px;font-size:10px;font-weight:950;color:#111;background:linear-gradient(135deg,#ffd431,#f4a900);box-shadow:7px 0 18px #000}
 .wins-track{display:flex;align-items:center;gap:28px;white-space:nowrap;width:max-content;padding-left:65px;animation:ticker 12s linear infinite}
-.win-item{font-size:12px;font-weight:800}.win-item.legendary{color:#ffc15a;text-shadow:0 0 12px #ff970055}.win-item.mythic{color:#ff7ee5;text-shadow:0 0 14px #ff40da77}
+.win-item{font-size:12px;font-weight:800}.win-item.legendary{color:#ffc15a;text-shadow:0 0 12px #ff970055}.win-item.mythic{color:#ff6262;text-shadow:0 0 14px #ff202088}
 @keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 
 /* Bright vector 3D tiles — no raster images, no gray cards */
@@ -1671,7 +1671,7 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .tier-rare{color:#67b7ff;background:#0b2136;border-color:#1e72b8;box-shadow:0 0 14px #1e72b833}
 .tier-epic{color:#c985ff;background:#261034;border-color:#8b3fc7;box-shadow:0 0 16px #8b3fc744}
 .tier-legendary{color:#ffbd4a;background:#362109;border-color:#ff9900;box-shadow:0 0 22px #ff990055}
-.tier-mythic{color:#ff79df;background:linear-gradient(135deg,#3b0b34,#21113d);border-color:#ff4bd8;box-shadow:0 0 26px #ff4bd866}
+.tier-mythic{color:#ff6262;background:linear-gradient(135deg,#3d0808,#1e0707);border-color:#ff2d2d;box-shadow:0 0 26px #ff2d2d77}
 .rarity-row{margin-top:10px}.rarity-label{font-size:10px;font-weight:950;letter-spacing:1px;margin-bottom:5px}
 .rarity-bar{height:5px;border-radius:999px;position:relative;overflow:hidden;background:#252a30}
 .rarity-bar:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#fff8,transparent);transform:translateX(-120%);animation:raritySweep 2.2s linear infinite}
@@ -1679,7 +1679,7 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .rb-rare{background:linear-gradient(90deg,#146bb0,#5fc0ff);box-shadow:0 0 10px #2fa8ff66}
 .rb-epic{background:linear-gradient(90deg,#6b28a4,#d071ff);box-shadow:0 0 13px #b349ff77}
 .rb-legendary{background:linear-gradient(90deg,#8c5000,#ff9d00,#ffe27a,#ff9d00);background-size:220% 100%;animation:legendaryFlow 1.8s linear infinite;box-shadow:0 0 12px #ff9d00,0 0 25px #ff9d0077}
-.rb-mythic{background:linear-gradient(90deg,#64185f,#ff39d0,#8a5cff,#ff39d0,#64185f);background-size:260% 100%;animation:mythicFlow 1.25s linear infinite;box-shadow:0 0 14px #ff39d0,0 0 30px #8a5cffaa}
+.rb-mythic{background:linear-gradient(90deg,#5b0505,#ff1f1f,#ff7777,#ff1f1f,#5b0505);background-size:260% 100%;animation:mythicFlow 1.05s linear infinite;box-shadow:0 0 14px #ff2424,0 0 30px #ff0000aa}
 @keyframes raritySweep{to{transform:translateX(120%)}}@keyframes legendaryFlow{to{background-position:220% 0}}@keyframes mythicFlow{to{background-position:260% 0}}
 
 /* spin */
@@ -1698,8 +1698,11 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .cube-rare{background:linear-gradient(145deg,#42adff,#0a4b86);border-color:#6ec1ff;box-shadow:inset 0 3px 2px #ffffff45,inset 0 -16px 24px #001a35aa,0 0 24px #249cff88,0 16px 22px #0008}
 .cube-epic{background:linear-gradient(145deg,#c060ff,#5a178a);border-color:#d391ff;box-shadow:inset 0 3px 2px #ffffff45,inset 0 -16px 24px #25003daa,0 0 28px #a84cff99,0 16px 22px #0008}
 .cube-legendary{background:linear-gradient(145deg,#ffd35a,#c66a00);border-color:#ffe49a;box-shadow:inset 0 3px 2px #ffffff66,inset 0 -16px 24px #5a2400aa,0 0 32px #ff9d00bb,0 16px 22px #0008;animation:legendaryCube 1.2s ease-in-out infinite}
-.cube-mythic{background:linear-gradient(145deg,#ff58db,#713cff 58%,#351060);border-color:#ffb1ef;box-shadow:inset 0 3px 2px #ffffff66,inset 0 -16px 24px #2b0640aa,0 0 36px #ff39d0cc,0 0 58px #7547ff88,0 16px 22px #0008;animation:mythicCube .9s ease-in-out infinite}
-@keyframes legendaryCube{0%,100%{filter:brightness(1)}50%{filter:brightness(1.25)}}@keyframes mythicCube{0%,100%{filter:brightness(1)}50%{filter:brightness(1.38)}}
+.cube-mythic{background:linear-gradient(145deg,#ff4a4a,#a60000 55%,#360000);border-color:#ffb0b0;box-shadow:inset 0 3px 2px #ffffff70,inset 0 -16px 24px #4a0000bb,0 0 34px #ff2020dd,0 0 62px #ff000099,0 16px 22px #0008;animation:mythicCube .8s ease-in-out infinite;overflow:visible}
+.cube-mythic:after{content:"⚡";position:absolute;z-index:3;left:50%;top:50%;font-size:25px;color:#fff;opacity:0;transform:translate(-50%,-50%) rotate(-18deg) scale(.45);text-shadow:-28px 15px 0 #ff3b3b,28px -15px 0 #fff,18px 25px 0 #ff1d1d;animation:mythicLightning 1.15s steps(1,end) infinite;pointer-events:none}
+@keyframes legendaryCube{0%,100%{filter:brightness(1)}50%{filter:brightness(1.25)}}
+@keyframes mythicCube{0%,100%{filter:brightness(1)}45%{filter:brightness(1.5)}52%{filter:brightness(2)}58%{filter:brightness(1.2)}}
+@keyframes mythicLightning{0%,18%,24%,57%,63%,100%{opacity:0}19%,22%,58%,61%{opacity:1;transform:translate(-50%,-50%) rotate(-18deg) scale(1.08)}20%,60%{opacity:.35;transform:translate(-46%,-54%) rotate(9deg) scale(.82)}}
 .reveal-name{font-size:18px;font-weight:950;line-height:1.25;margin-top:10px;animation:revealName .42s cubic-bezier(.2,1.2,.3,1)}
 @keyframes revealName{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
 .spin-options{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;border-radius:14px;background:#111418;border:1px solid #252a30;cursor:pointer;user-select:none}
@@ -1732,9 +1735,9 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .drop-card{width:min(520px,100%);border-radius:28px;padding:34px 22px;text-align:center;background:#101318;border:1px solid #343941;transform:scale(.72);animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards;position:relative;overflow:hidden}
 .drop-card h2{font-size:32px;margin:10px 0}.drop-name{font-size:23px;font-weight:950;margin:15px 0}
 .drop-fx.legendary .drop-card{border-color:#ff9d00;box-shadow:0 0 60px #ff9d0088,0 0 120px #ff6a0033;animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards,legendaryPulse .85s ease-in-out 2}
-.drop-fx.mythic{background:radial-gradient(circle at 50% 40%,#5c175c99,#000e 58%)}
-.drop-fx.mythic .drop-card{border-color:#ff4bd8;box-shadow:0 0 80px #ff4bd899,0 0 140px #7547ff66;animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards,mythicPulse .7s ease-in-out 3}
-.drop-fx.mythic .drop-card:before{content:"";position:absolute;inset:-70%;background:conic-gradient(from 0deg,transparent,#ff4bd844,transparent,#7d45ff55,transparent);animation:mythicSpin 2s linear infinite}
+.drop-fx.mythic{background:radial-gradient(circle at 50% 40%,#7a090999,#000e 58%)}
+.drop-fx.mythic .drop-card{border-color:#ff3131;box-shadow:0 0 80px #ff202099,0 0 140px #a8000066;animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards,mythicPulse .7s ease-in-out 3}
+.drop-fx.mythic .drop-card:before{content:"";position:absolute;inset:-70%;background:conic-gradient(from 0deg,transparent,#ff242455,transparent,#ff7a7a44,transparent);animation:mythicSpin 2s linear infinite}.drop-fx.mythic .drop-card:after{content:"⚡";position:absolute;left:12%;top:14%;font-size:64px;color:#fff;z-index:1;text-shadow:210px 35px 0 #ff3434,110px 180px 0 #fff;animation:dropLightning .9s steps(1,end) infinite;opacity:0}@keyframes dropLightning{0%,32%,40%,75%,83%,100%{opacity:0}33%,37%,76%,80%{opacity:1;filter:drop-shadow(0 0 16px #ff2020)}}
 .drop-content{position:relative;z-index:2}.spark{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 14px currentColor;animation:sparkFly 1.2s ease-out forwards}
 @keyframes fxFade{from{opacity:0}to{opacity:1}}@keyframes dropPop{to{transform:scale(1)}}@keyframes legendaryPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}@keyframes mythicPulse{0%,100%{filter:brightness(1);transform:scale(1)}50%{filter:brightness(1.55);transform:scale(1.06)}}@keyframes mythicSpin{to{transform:rotate(360deg)}}@keyframes sparkFly{from{transform:translate(0,0) scale(1);opacity:1}to{transform:translate(var(--x),var(--y)) scale(0);opacity:0}}
 
@@ -1941,7 +1944,7 @@ function openRarityModal(tier){
  if(!modal||!sheet)return;
  const items=(spinState.rewards||[]).filter(x=>x.tier===tier);
  sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div><div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+tierLabel(tier)+'</h3><div class="muted">Шанс качества: '+tierChance(tier)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="rarityClose">Закрыть</button></div>'+
- items.map(x=>'<div class="rarity-item-row"><div class="rarity-item-name">'+esc(x.name)+'</div><div class="rarity-item-price">'+stars(x.value_stars)+'</div></div>').join('');
+ items.map(x=>'<div class="rarity-item-row"><div class="rarity-item-name">'+esc(x.name)+'</div><div class="rarity-item-price">🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+'</div></div>').join('');
  modal.classList.remove('hide');
  const close=()=>modal.classList.add('hide');
  document.getElementById('rarityClose').addEventListener('click',close);
@@ -1991,10 +1994,14 @@ function cubeHtml(tier,extra=''){
 }
 function visualTier(){
  const r=Math.random()*100;
- if(r<68)return 'COMMON';
- if(r<84)return 'RARE';
- if(r<94)return 'EPIC';
- if(r<98.5)return 'LEGENDARY';
+ const common=tierChance('COMMON');
+ const rare=common+tierChance('RARE');
+ const epic=rare+tierChance('EPIC');
+ const legendary=epic+tierChance('LEGENDARY');
+ if(r<common)return 'COMMON';
+ if(r<rare)return 'RARE';
+ if(r<epic)return 'EPIC';
+ if(r<legendary)return 'LEGENDARY';
  return 'MYTHIC'
 }
 function idleCubeStrip(){
@@ -2016,47 +2023,31 @@ function centerTrackOnTarget(track,windowEl,targetIndex,animate){
   track.style.transform='translate3d('+finalX+'px,-50%,0)';
   return Promise.resolve()
  }
- const travel=Math.max(760,windowEl.clientWidth*2.2);
+ const travel=Math.max(980,windowEl.clientWidth*3.1);
  const startX=finalX-travel;
  track.style.transform='translate3d('+startX+'px,-50%,0)';
  void track.offsetWidth;
  if(track.animate){
-  const fastEnd=finalX-250;
-  const main=track.animate([
-   {transform:'translate3d('+startX+'px,-50%,0)'},
-   {transform:'translate3d('+fastEnd+'px,-50%,0)'}
+  const anim=track.animate([
+   {transform:'translate3d('+startX+'px,-50%,0)',offset:0},
+   {transform:'translate3d('+(finalX-610)+'px,-50%,0)',offset:.36},
+   {transform:'translate3d('+(finalX-285)+'px,-50%,0)',offset:.64},
+   {transform:'translate3d('+(finalX-105)+'px,-50%,0)',offset:.82},
+   {transform:'translate3d('+(finalX-34)+'px,-50%,0)',offset:.94},
+   {transform:'translate3d('+finalX+'px,-50%,0)',offset:1}
   ],{
-   duration:5000,
-   easing:'cubic-bezier(.12,.62,.18,1)',
+   duration:7000,
+   easing:'cubic-bezier(.05,.82,.12,1)',
    fill:'forwards'
   });
-  return main.finished.catch(()=>{}).then(()=>{
-   track.style.transform='translate3d('+fastEnd+'px,-50%,0)';
-   main.cancel();
-   const brake=track.animate([
-    {transform:'translate3d('+fastEnd+'px,-50%,0)'},
-    {transform:'translate3d('+(finalX-92)+'px,-50%,0)',offset:.62},
-    {transform:'translate3d('+(finalX-24)+'px,-50%,0)',offset:.88},
-    {transform:'translate3d('+finalX+'px,-50%,0)'}
-   ],{
-    duration:2000,
-    easing:'cubic-bezier(.08,.78,.12,1)',
-    fill:'forwards'
-   });
-   return brake.finished.catch(()=>{}).then(()=>{
-    track.style.transform='translate3d('+finalX+'px,-50%,0)';
-    brake.cancel()
-   })
+  return anim.finished.catch(()=>{}).then(()=>{
+   track.style.transform='translate3d('+finalX+'px,-50%,0)';
+   anim.cancel()
   })
  }
- const fastEnd=finalX-250;
- track.style.transition='transform 5s cubic-bezier(.12,.62,.18,1)';
- track.style.transform='translate3d('+fastEnd+'px,-50%,0)';
- return sleep(5050).then(()=>{
-  track.style.transition='transform 2s cubic-bezier(.08,.78,.12,1)';
-  track.style.transform='translate3d('+finalX+'px,-50%,0)';
-  return sleep(2050)
- }).then(()=>{track.style.transition=''})
+ track.style.transition='transform 7s cubic-bezier(.05,.82,.12,1)';
+ track.style.transform='translate3d('+finalX+'px,-50%,0)';
+ return sleep(7050).then(()=>{track.style.transition=''})
 }
 async function animateSpinRight(track,windowEl,reward){
  const strip=buildSpinStrip(reward);
