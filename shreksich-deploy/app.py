@@ -169,9 +169,10 @@ def pick_free_spin_reward():
     pool = [x for x in SPIN_REWARDS if x["tier"] == tier]
     return random.choice(pool)
 
-CASE_CATALOG = [
+DEFAULT_CASE_CATALOG = [
     {
-        "id":"FREE","name":"Бесплатный кейс","price_label":"БЕСПЛАТНО",
+        "id":"FREE","name":"Бесплатный кейс","description":"Базовый бесплатный Metro-кейс.",
+        "icon":"crate","stars_price":0,"is_free":True,"active":True,"sort_order":0,
         "tiers":[
             {"tier":"GRAY","chance":60.0},
             {"tier":"CYAN","chance":30.0},
@@ -179,38 +180,105 @@ CASE_CATALOG = [
         ],
     },
     {
-        "id":"CASE29","name":"Кейс 29","price_label":"29 ⭐",
+        "id":"CASE29","name":"Кейс 29","description":"Стартовый донат-кейс с улучшенным Metro-лутом.",
+        "icon":"helmet","stars_price":29,"is_free":False,"active":True,"sort_order":10,
         "tiers":[
             {"tier":"BLUE","chance":65.0},
             {"tier":"PURPLE","chance":25.0},
-            {"tier":"PINK","chance":3.0},
+            {"tier":"PINK","chance":10.0},
         ],
     },
     {
-        "id":"CASE79","name":"Кейс 79","price_label":"79 ⭐",
+        "id":"CASE79","name":"Кейс 79","description":"Продвинутый кейс с высоким шансом редкого лута.",
+        "icon":"airdrop","stars_price":79,"is_free":False,"active":True,"sort_order":20,
         "tiers":[
             {"tier":"PURPLE","chance":55.0},
-            {"tier":"PINK","chance":20.0},
-            {"tier":"RED","chance":5.0},
+            {"tier":"PINK","chance":30.0},
+            {"tier":"RED","chance":15.0},
         ],
     },
     {
-        "id":"CASE199","name":"Кейс 199","price_label":"199 ⭐",
+        "id":"CASE199","name":"Кейс 199","description":"Премиальный Metro-кейс с красными и золотыми наградами.",
+        "icon":"vault","stars_price":199,"is_free":False,"active":True,"sort_order":30,
         "tiers":[
             {"tier":"PURPLE","chance":40.0},
-            {"tier":"PINK","chance":25.0},
-            {"tier":"RED","chance":15.0},
-            {"tier":"GOLD","chance":1.0},
+            {"tier":"PINK","chance":30.0},
+            {"tier":"RED","chance":25.0},
+            {"tier":"GOLD","chance":5.0},
         ],
     },
     {
-        "id":"CASE499","name":"Mythic Case","price_label":"499 ⭐",
+        "id":"CASE499","name":"Mythic Case","description":"Топовый кейс: только мифические и легендарные награды.",
+        "icon":"crown","stars_price":499,"is_free":False,"active":True,"sort_order":40,
         "tiers":[
             {"tier":"RED","chance":70.0},
             {"tier":"GOLD","chance":30.0},
         ],
     },
 ]
+
+TIER_ORDER = ("GRAY","CYAN","BLUE","PURPLE","PINK","RED","GOLD")
+
+def case_default_contents(case_cfg: dict) -> list[str]:
+    allowed = {str(x.get("tier","")).upper() for x in case_cfg.get("tiers", []) if float(x.get("chance",0) or 0) > 0}
+    return [x["name"] for x in SPIN_REWARDS if x["tier"] in allowed]
+
+def parse_case_row(row) -> dict:
+    tiers = json.loads(row["tiers_json"] or "[]")
+    contents = json.loads(row["contents_json"] or "[]")
+    return {
+        "id":row["id"],"name":row["name"],"description":row["description"],"icon":row["icon"],
+        "stars_price":int(row["stars_price"] or 0),"is_free":bool(row["is_free"]),
+        "active":bool(row["active"]),"sort_order":int(row["sort_order"] or 0),
+        "price_label":"БЕСПЛАТНО" if bool(row["is_free"]) else f"{int(row['stars_price'] or 0)} ⭐",
+        "tiers":tiers,"contents":contents
+    }
+
+async def load_case_catalog(conn, telegram_id: int | None = None, include_inactive: bool = False) -> list[dict]:
+    where = "" if include_inactive else "WHERE active=1"
+    rows = await (await conn.execute(
+        f"SELECT * FROM case_configs {where} ORDER BY sort_order,id"
+    )).fetchall()
+    wallet = {}
+    if telegram_id is not None:
+        wrows = await (await conn.execute(
+            "SELECT case_id,tickets FROM donation_ticket_balances WHERE telegram_id=?",
+            (telegram_id,)
+        )).fetchall()
+        wallet = {str(x["case_id"]):int(x["tickets"] or 0) for x in wrows}
+    generic = int(wallet.get("*",0))
+    result = []
+    reward_by_name = {x["name"]:x for x in SPIN_REWARDS}
+    for row in rows:
+        cfg = parse_case_row(row)
+        valid_contents = [n for n in cfg["contents"] if n in reward_by_name]
+        cfg["contents"] = valid_contents
+        cfg["donation_tickets"] = generic + int(wallet.get(cfg["id"],0))
+        cfg["available_tiers"] = [
+            t for t in cfg["tiers"]
+            if float(t.get("chance",0) or 0) > 0
+            and any(reward_by_name[n]["tier"] == str(t.get("tier","")).upper() for n in valid_contents)
+        ]
+        cfg["tiers"] = cfg["available_tiers"]
+        result.append(cfg)
+    return result
+
+def pick_case_reward(case_cfg: dict) -> dict:
+    contents = set(case_cfg.get("contents") or [])
+    by_tier = {}
+    for reward in SPIN_REWARDS:
+        if reward["name"] in contents:
+            by_tier.setdefault(reward["tier"], []).append(reward)
+    tiers, weights = [], []
+    for t in case_cfg.get("tiers") or []:
+        tier = str(t.get("tier","")).upper()
+        chance = float(t.get("chance",0) or 0)
+        if chance > 0 and by_tier.get(tier):
+            tiers.append(tier); weights.append(chance)
+    if not tiers or sum(weights) <= 0:
+        raise HTTPException(409,"В кейсе нет доступных наград. Проверьте его настройки.")
+    tier = random.choices(tiers, weights=weights, k=1)[0]
+    return random.choice(by_tier[tier])
 
 SHR_REWARDS = [
     {"points":5,"name":"Набор расходников"},
