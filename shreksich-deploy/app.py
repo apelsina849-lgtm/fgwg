@@ -1595,6 +1595,26 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .spin-options span{font-size:13px;font-weight:800;color:#d7dbe0}
 .spin-result{min-height:22px;margin-top:10px;font-size:13px;font-weight:850;text-align:center}
 .spin-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:11px}.spin-stat .price{font-size:17px}
+.rarity-catalog{margin:18px 0 8px}
+.rarity-catalog-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:10px}
+.rarity-catalog-head h3{margin:0}.rarity-catalog-head .mini{text-align:right}
+.rarity-scroll{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 10px;scrollbar-width:none;scroll-snap-type:x proximity}
+.rarity-scroll::-webkit-scrollbar{display:none}
+.rarity-card{flex:0 0 122px;scroll-snap-align:start;border-radius:18px;padding:12px 10px;background:#111418;border:1px solid #2b3036;text-align:center;cursor:pointer;box-shadow:inset 0 1px #ffffff0a;transition:transform .16s ease,border-color .16s ease}
+.rarity-card:active{transform:scale(.965)}
+.rarity-card .loot-cube{width:58px;height:58px;border-radius:15px;font-size:28px;margin:0 auto 9px;transform:perspective(150px) rotateX(6deg) rotateY(-7deg)}
+.rarity-card-title{font-size:12px;font-weight:950;letter-spacing:.6px}
+.rarity-card-chance{font-size:18px;font-weight:1000;margin-top:4px}
+.rarity-card-count{font-size:10px;color:#9299a1;margin-top:4px}
+.rarity-modal{position:fixed;inset:0;z-index:110;background:#000c;backdrop-filter:blur(8px);display:flex;align-items:flex-end;justify-content:center;padding:12px}
+.rarity-modal.hide{display:none!important}
+.rarity-sheet{width:min(720px,100%);max-height:78%;overflow:auto;background:#111418;border:1px solid #30353b;border-radius:26px 26px 20px 20px;padding:17px;box-shadow:0 -18px 50px #0008}
+.rarity-sheet-head{display:flex;align-items:center;gap:12px;margin-bottom:14px;position:sticky;top:-17px;background:#111418;padding:10px 0 12px;z-index:2}
+.rarity-sheet-head .loot-cube{width:58px;height:58px;border-radius:15px;font-size:28px;flex:0 0 58px}
+.rarity-sheet-title{min-width:0;flex:1}.rarity-sheet-title h3{margin:0 0 4px}.rarity-close{flex:0 0 auto;background:#252a30;color:#fff;padding:10px 12px}
+.rarity-item-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-top:1px solid #252a30}
+.rarity-item-name{font-weight:850;min-width:0;line-height:1.3}
+.rarity-item-price{flex:0 0 auto;font-size:15px;font-weight:950;color:#ffd35a;white-space:nowrap}
 .claim{width:100%;margin-top:8px;background:#20252b;color:#fff}.claim:disabled{opacity:.4}
 .drop-fx{position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:24px;background:#000c;backdrop-filter:blur(7px);animation:fxFade .25s ease-out}
 .drop-card{width:min(520px,100%);border-radius:28px;padding:34px 22px;text-align:center;background:#101318;border:1px solid #343941;transform:scale(.72);animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards;position:relative;overflow:hidden}
@@ -1788,6 +1808,37 @@ function showDropFx(reward){
  for(let i=0;i<total;i++){const s=document.createElement('i');s.className='spark';const a=Math.PI*2*i/total,d=90+Math.random()*170;s.style.left=(45+Math.random()*10)+'%';s.style.top=(45+Math.random()*10)+'%';s.style.setProperty('--x',(Math.cos(a)*d)+'px');s.style.setProperty('--y',(Math.sin(a)*d)+'px');s.style.color=reward.tier==='MYTHIC'?(i%2?'#ff4bd8':'#8b62ff'):'#ffad25';card.appendChild(s)}
  fx.querySelector('#closeDrop').addEventListener('click',()=>fx.remove())
 }
+function tierLabel(tier){
+ const labels={COMMON:'COMMON',RARE:'RARE',EPIC:'EPIC',LEGENDARY:'LEGENDARY',MYTHIC:'MYTHIC'};
+ return labels[String(tier||'').toUpperCase()]||String(tier||'')
+}
+function tierChance(tier){
+ const v=spinState&&spinState.tier_chances?spinState.tier_chances[String(tier||'').toUpperCase()]:0;
+ return Number(v||0)
+}
+function rarityCatalogHtml(){
+ const tiers=['COMMON','RARE','EPIC','LEGENDARY','MYTHIC'];
+ return '<section class="rarity-catalog"><div class="rarity-catalog-head"><h3>Качество кубиков</h3><div class="mini">Нажмите на кубик<br>чтобы посмотреть содержимое</div></div><div class="rarity-scroll">'+
+ tiers.map(t=>{
+   const count=(spinState.rewards||[]).filter(x=>x.tier===t).length;
+   return '<button type="button" class="rarity-card" data-rarity-open="'+t+'"><div class="loot-cube '+cubeClass(t)+'"><span>?</span></div><div class="rarity-card-title '+tierClass(t)+'">'+tierLabel(t)+'</div><div class="rarity-card-chance">'+tierChance(t)+'%</div><div class="rarity-card-count">'+count+' предметов</div></button>'
+ }).join('')+'</div></section><div class="rarity-modal hide" id="rarityModal"><div class="rarity-sheet" id="raritySheet"></div></div>'
+}
+function openRarityModal(tier){
+ const modal=document.getElementById('rarityModal'),sheet=document.getElementById('raritySheet');
+ if(!modal||!sheet)return;
+ const items=(spinState.rewards||[]).filter(x=>x.tier===tier);
+ sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div><div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+tierLabel(tier)+'</h3><div class="muted">Шанс качества: '+tierChance(tier)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="rarityClose">Закрыть</button></div>'+
+ items.map(x=>'<div class="rarity-item-row"><div class="rarity-item-name">'+esc(x.name)+'</div><div class="rarity-item-price">'+stars(x.value_stars)+'</div></div>').join('');
+ modal.classList.remove('hide');
+ const close=()=>modal.classList.add('hide');
+ document.getElementById('rarityClose').addEventListener('click',close);
+ modal.addEventListener('click',e=>{if(e.target===modal)close()},{once:true})
+}
+function bindRarityCatalog(){
+ document.querySelectorAll('[data-rarity-open]').forEach(b=>b.addEventListener('click',()=>openRarityModal(b.dataset.rarityOpen)))
+}
+
 async function spinHtml(){
  spinState=await api('/api/spin/state');
  const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • +'+x.points+' pts • '+esc(x.created_at)+'</div></div>').join('');
@@ -1799,7 +1850,8 @@ async function spinHtml(){
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">UPGRADE</div><div class="price">'+spinState.upgrade_points+'</div></div></div>'+
  '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
  '<label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию и сразу показать награду</span></label>'+
- '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div><div class="mini" style="margin-top:8px">Common 97.5% • Rare 1.8% • Epic 0.5% • Legendary 0.15% • Mythic 0.05%</div></div>'+
+ '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
+ rarityCatalogHtml()+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<h3>Upgrade Lab</h3><div class="card"><div class="muted">Upgrade pts обмениваются на гарантированную награду — без случайной ставки.</div>'+claims+'</div><h3>История</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
@@ -1807,6 +1859,7 @@ function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
+ bindRarityCatalog();
  document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
 }
 async function applySpinPromo(){
@@ -1856,24 +1909,42 @@ function centerTrackOnTarget(track,windowEl,targetIndex,animate){
  track.style.transform='translate3d('+startX+'px,-50%,0)';
  void track.offsetWidth;
  if(track.animate){
-  const anim=track.animate([
+  const fastEnd=finalX-250;
+  const main=track.animate([
    {transform:'translate3d('+startX+'px,-50%,0)'},
-   {transform:'translate3d('+(finalX-240)+'px,-50%,0)',offset:.66},
-   {transform:'translate3d('+(finalX-72)+'px,-50%,0)',offset:.88},
-   {transform:'translate3d('+finalX+'px,-50%,0)'}
+   {transform:'translate3d('+fastEnd+'px,-50%,0)'}
   ],{
-   duration:6800,
-   easing:'cubic-bezier(.08,.72,.16,1)',
+   duration:5000,
+   easing:'cubic-bezier(.12,.62,.18,1)',
    fill:'forwards'
   });
-  return anim.finished.catch(()=>{}).then(()=>{
-   track.style.transform='translate3d('+finalX+'px,-50%,0)';
-   anim.cancel()
+  return main.finished.catch(()=>{}).then(()=>{
+   track.style.transform='translate3d('+fastEnd+'px,-50%,0)';
+   main.cancel();
+   const brake=track.animate([
+    {transform:'translate3d('+fastEnd+'px,-50%,0)'},
+    {transform:'translate3d('+(finalX-92)+'px,-50%,0)',offset:.62},
+    {transform:'translate3d('+(finalX-24)+'px,-50%,0)',offset:.88},
+    {transform:'translate3d('+finalX+'px,-50%,0)'}
+   ],{
+    duration:2000,
+    easing:'cubic-bezier(.08,.78,.12,1)',
+    fill:'forwards'
+   });
+   return brake.finished.catch(()=>{}).then(()=>{
+    track.style.transform='translate3d('+finalX+'px,-50%,0)';
+    brake.cancel()
+   })
   })
  }
- track.style.transition='transform 6.8s cubic-bezier(.08,.72,.16,1)';
- track.style.transform='translate3d('+finalX+'px,-50%,0)';
- return sleep(6900).then(()=>{track.style.transition=''})
+ const fastEnd=finalX-250;
+ track.style.transition='transform 5s cubic-bezier(.12,.62,.18,1)';
+ track.style.transform='translate3d('+fastEnd+'px,-50%,0)';
+ return sleep(5050).then(()=>{
+  track.style.transition='transform 2s cubic-bezier(.08,.78,.12,1)';
+  track.style.transform='translate3d('+finalX+'px,-50%,0)';
+  return sleep(2050)
+ }).then(()=>{track.style.transition=''})
 }
 async function animateSpinRight(track,windowEl,reward){
  const strip=buildSpinStrip(reward);
