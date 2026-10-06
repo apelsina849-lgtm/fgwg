@@ -1565,16 +1565,12 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .spin-shell{background:linear-gradient(145deg,#12151a,#090b0d);border:1px solid #3a2c0a;border-radius:22px;padding:16px;margin:14px 0;overflow:hidden}
 .reel-window{position:relative;height:118px;border:1px solid #2b3036;background:#0b0d10;border-radius:18px;overflow:hidden;display:flex;align-items:center;justify-content:center}
 .reel-window:after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:#ffc21c;box-shadow:0 0 18px #ffc21c;transform:translateX(-50%)}
-.reel-item{font-size:20px;font-weight:950;text-align:center;padding:0 28px;transition:transform .18s,opacity .18s;will-change:transform,opacity}
-.reel-item.spinning{animation:spinRight .18s linear infinite}
+.reel-item{font-size:20px;font-weight:950;text-align:center;padding:0 28px;will-change:transform,opacity}
 .reel-item.tier-common{color:#d1d6dc}.reel-item.tier-rare{color:#67b7ff;text-shadow:0 0 18px #249cff}.reel-item.tier-epic{color:#c985ff;text-shadow:0 0 20px #a84cff}.reel-item.tier-legendary{color:#ffc250;text-shadow:0 0 24px #ff9800}.reel-item.tier-mythic{color:#ff79df;text-shadow:0 0 26px #ff37d2,0 0 44px #7d45ff}
-@keyframes spinRight{
-  0%{transform:translateX(-105px) scale(.94);opacity:0}
-  24%{opacity:.55}
-  50%{transform:translateX(0) scale(1);opacity:1}
-  76%{opacity:.58}
-  100%{transform:translateX(105px) scale(.94);opacity:0}
-}
+.spin-options{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 12px;border-radius:14px;background:#111418;border:1px solid #252a30;cursor:pointer;user-select:none}
+.spin-options input{width:20px;height:20px;margin:0;accent-color:#ffc21c;flex:0 0 20px}
+.spin-options span{font-size:13px;font-weight:800;color:#d7dbe0}
+.spin-result{min-height:22px;margin-top:10px;font-size:13px;font-weight:850;text-align:center}
 .spin-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:11px}.spin-stat .price{font-size:17px}
 .claim{width:100%;margin-top:8px;background:#20252b;color:#fff}.claim:disabled{opacity:.4}
 .drop-fx{position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:24px;background:#000c;backdrop-filter:blur(7px);animation:fxFade .25s ease-out}
@@ -1775,15 +1771,19 @@ async function spinHtml(){
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.upgrade_points)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' pts</button>').join('');
  const total=Number(spinState.remaining_spins||0);
  const buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
+ const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">UPGRADE</div><div class="price">'+spinState.upgrade_points+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button><div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div><div class="mini" style="margin-top:8px">Common 97.5% • Rare 1.8% • Epic 0.5% • Legendary 0.15% • Mythic 0.05%</div></div>'+
+ '<div class="spin-shell"><div class="reel-window"><div class="reel-item tier-common" id="reelItem">Нажмите SPIN</div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
+ '<label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию и сразу показать награду</span></label>'+
+ '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div><div class="mini" style="margin-top:8px">Common 97.5% • Rare 1.8% • Epic 0.5% • Legendary 0.15% • Mythic 0.05%</div></div>'+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<h3>Upgrade Lab</h3><div class="card"><div class="muted">Upgrade pts обмениваются на гарантированную награду — без случайной ставки.</div>'+claims+'</div><h3>История</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
+ const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
  document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
 }
 async function applySpinPromo(){
@@ -1796,14 +1796,62 @@ async function applySpinPromo(){
   setTimeout(async()=>{app.innerHTML=await spinHtml();bindSpin()},650)
  }catch(e){info.innerHTML='<span class="warn">'+esc(e.message)+'</span>';b.disabled=false;b.textContent='Активировать'}
 }
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+function showReelItem(reel,item,duration){
+ reel.textContent=item.name;
+ reel.className='reel-item '+tierClass(item.tier);
+ const old=reel.getAnimations?reel.getAnimations():[];
+ old.forEach(a=>a.cancel());
+ if(reel.animate){
+  reel.animate([
+   {transform:'translateX(-125px) scale(.93)',opacity:0},
+   {transform:'translateX(0) scale(1)',opacity:1,offset:.48},
+   {transform:'translateX(125px) scale(.94)',opacity:.1}
+  ],{duration:Math.max(150,duration),easing:'cubic-bezier(.22,.72,.28,1)'});
+ }
+}
+async function animateSpinRight(reel,pool,reward){
+ const steps=34;
+ for(let i=0;i<steps;i++){
+  const p=i/(steps-1);
+  const eased=p*p*p;
+  const delay=Math.round(85 + eased*360);
+  const item=i===steps-1?reward:pool[Math.floor(Math.random()*pool.length)];
+  showReelItem(reel,item,Math.min(420,delay+80));
+  await sleep(delay);
+ }
+ if(reel.getAnimations)reel.getAnimations().forEach(a=>a.cancel());
+ reel.textContent=reward.name;
+ reel.className='reel-item '+tierClass(reward.tier);
+ reel.style.transform='translateX(0)';
+ reel.style.opacity='1';
+}
 async function spinOnce(){
- const b=document.getElementById('spinBtn');if(!b||b.disabled)return;b.disabled=true;b.textContent='КРУТИМ…';
- const reel=document.getElementById('reelItem'),pool=spinState.rewards||[];let i=0;if(reel)reel.classList.add('spinning');
- const timer=setInterval(()=>{if(reel&&pool.length){const x=pool[i%pool.length];i++;reel.textContent=x.name;reel.className='reel-item spinning '+tierClass(x.tier)}},80);
+ const b=document.getElementById('spinBtn');if(!b||b.disabled)return;
+ const reel=document.getElementById('reelItem'),pool=spinState.rewards||[],result=document.getElementById('spinResult');
+ const skip=!!document.getElementById('skipSpinAnimation')?.checked;
+ b.disabled=true;b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
+ if(result)result.textContent='';
  try{
   const d=await api('/api/spin/free',{method:'POST'});
-  setTimeout(async()=>{clearInterval(timer);lastSpinReward=d.reward;if(reel){reel.className='reel-item '+tierClass(d.reward.tier);reel.textContent=d.reward.name}await new Promise(r=>setTimeout(r,650));showDropFx(d.reward);app.innerHTML=await spinHtml();bindSpin();loadWinsFeed()},1800)
- }catch(e){clearInterval(timer);if(reel)reel.classList.remove('spinning');b.disabled=false;b.textContent='КРУТИТЬ SPIN';alert(e.message)}
+  lastSpinReward=d.reward;
+  if(skip){
+   if(reel){reel.textContent=d.reward.name;reel.className='reel-item '+tierClass(d.reward.tier)}
+   if(result)result.innerHTML='<span class="'+tierClass(d.reward.tier)+'">Выпало: '+esc(d.reward.name)+' • +'+d.reward.points+' pts</span>';
+   try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
+   await sleep(850);
+  }else{
+   await animateSpinRight(reel,pool,d.reward);
+   if(result)result.innerHTML='<span class="'+tierClass(d.reward.tier)+'">Выпало: '+esc(d.reward.name)+' • +'+d.reward.points+' pts</span>';
+   await sleep(700);
+   showDropFx(d.reward);
+   await sleep(d.reward.tier==='LEGENDARY'||d.reward.tier==='MYTHIC'?350:250);
+  }
+  app.innerHTML=await spinHtml();bindSpin();loadWinsFeed()
+ }catch(e){
+  b.disabled=false;b.textContent='КРУТИТЬ SPIN';
+  alert(e.message)
+ }
 }
 async function claimUpgrade(points){try{const d=await api('/api/upgrade/claim',{method:'POST',body:JSON.stringify({points})});alert('Заявка создана: '+d.reward.name);app.innerHTML=await spinHtml();bindSpin()}catch(e){alert(e.message)}}
 
