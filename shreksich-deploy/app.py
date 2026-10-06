@@ -32,53 +32,61 @@ db_write_lock = asyncio.Lock()
 
 MAX_FREE_SPINS_24H = 1
 
+SPIN_TIER_CHANCES = {
+    "COMMON": 97.5,
+    "RARE": 1.8,
+    "EPIC": 0.5,
+    "LEGENDARY": 0.15,
+    "MYTHIC": 0.05,
+}
+
 SPIN_REWARDS = [
     # COMMON — total 97.5%
-    {"name":"250K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"500K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Набор патронов","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Набор аптечек","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Набор ремонта","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Ящик базовых ресурсов","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Тактический ремкомплект","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Полевой медпак","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Комплект дымовых гранат","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Комплект осколочных гранат","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Набор пластин брони","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Ящик стандартных модулей","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"750K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1},
-    {"name":"Набор энергетиков","tier":"COMMON","weight":6.9642857143,"points":1},
+    {"name":"250K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":5},
+    {"name":"500K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":7},
+    {"name":"Набор патронов","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":6},
+    {"name":"Набор аптечек","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":6},
+    {"name":"Набор ремонта","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":7},
+    {"name":"Ящик базовых ресурсов","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":8},
+    {"name":"Тактический ремкомплект","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":9},
+    {"name":"Полевой медпак","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":8},
+    {"name":"Комплект дымовых гранат","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":6},
+    {"name":"Комплект осколочных гранат","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":7},
+    {"name":"Набор пластин брони","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":9},
+    {"name":"Ящик стандартных модулей","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":10},
+    {"name":"750K Metro Cash","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":10},
+    {"name":"Набор энергетиков","tier":"COMMON","weight":6.9642857143,"points":1,"value_stars":6},
 
     # RARE — total 1.8%
-    {"name":"1M Metro Cash","tier":"RARE","weight":0.2,"points":2},
-    {"name":"Усиленный набор патронов","tier":"RARE","weight":0.2,"points":2},
-    {"name":"Набор брони","tier":"RARE","weight":0.2,"points":2},
-    {"name":"Набор модулей оружия","tier":"RARE","weight":0.2,"points":2},
-    {"name":"Тактический Supply Case","tier":"RARE","weight":0.2,"points":2},
-    {"name":"2M Metro Cash","tier":"RARE","weight":0.2,"points":2},
-    {"name":"Набор улучшенной брони","tier":"RARE","weight":0.2,"points":2},
-    {"name":"Rare Weapon Parts Pack","tier":"RARE","weight":0.2,"points":2},
-    {"name":"Metro Utility Pack","tier":"RARE","weight":0.2,"points":2},
+    {"name":"1M Metro Cash","tier":"RARE","weight":0.2,"points":2,"value_stars":14},
+    {"name":"Усиленный набор патронов","tier":"RARE","weight":0.2,"points":2,"value_stars":15},
+    {"name":"Набор брони","tier":"RARE","weight":0.2,"points":2,"value_stars":16},
+    {"name":"Набор модулей оружия","tier":"RARE","weight":0.2,"points":2,"value_stars":18},
+    {"name":"Тактический Supply Case","tier":"RARE","weight":0.2,"points":2,"value_stars":20},
+    {"name":"2M Metro Cash","tier":"RARE","weight":0.2,"points":2,"value_stars":22},
+    {"name":"Набор улучшенной брони","tier":"RARE","weight":0.2,"points":2,"value_stars":24},
+    {"name":"Rare Weapon Parts Pack","tier":"RARE","weight":0.2,"points":2,"value_stars":25},
+    {"name":"Metro Utility Pack","tier":"RARE","weight":0.2,"points":2,"value_stars":26},
 
     # EPIC — total 0.5%
-    {"name":"3M Metro Cash","tier":"EPIC","weight":0.0714285714,"points":3},
-    {"name":"Metro Starter Kit+","tier":"EPIC","weight":0.0714285714,"points":3},
-    {"name":"Elite Supply Pack","tier":"EPIC","weight":0.0714285714,"points":3},
-    {"name":"5M Metro Cash","tier":"EPIC","weight":0.0714285714,"points":3},
-    {"name":"Elite Armor Pack","tier":"EPIC","weight":0.0714285714,"points":3},
-    {"name":"Black Zone Supply Case","tier":"EPIC","weight":0.0714285714,"points":3},
-    {"name":"Advanced Weapon Kit","tier":"EPIC","weight":0.0714285714,"points":3},
+    {"name":"3M Metro Cash","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":35},
+    {"name":"Metro Starter Kit+","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":39},
+    {"name":"Elite Supply Pack","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":42},
+    {"name":"5M Metro Cash","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":48},
+    {"name":"Elite Armor Pack","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":50},
+    {"name":"Black Zone Supply Case","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":55},
+    {"name":"Advanced Weapon Kit","tier":"EPIC","weight":0.0714285714,"points":3,"value_stars":59},
 
     # LEGENDARY — total 0.15%
-    {"name":"Premium Metro Pack","tier":"LEGENDARY","weight":0.0375,"points":6},
-    {"name":"Буст 3 квестов","tier":"LEGENDARY","weight":0.0375,"points":6},
-    {"name":"Legendary Supply Vault","tier":"LEGENDARY","weight":0.0375,"points":6},
-    {"name":"10M Metro Cash","tier":"LEGENDARY","weight":0.0375,"points":6},
+    {"name":"Premium Metro Pack","tier":"LEGENDARY","weight":0.0375,"points":6,"value_stars":79},
+    {"name":"Буст 3 квестов","tier":"LEGENDARY","weight":0.0375,"points":6,"value_stars":89},
+    {"name":"Legendary Supply Vault","tier":"LEGENDARY","weight":0.0375,"points":6,"value_stars":99},
+    {"name":"10M Metro Cash","tier":"LEGENDARY","weight":0.0375,"points":6,"value_stars":109},
 
     # MYTHIC — total 0.05%
-    {"name":"Black Market Pack","tier":"MYTHIC","weight":0.0166666667,"points":10},
-    {"name":"Ultimate Metro Bundle","tier":"MYTHIC","weight":0.0166666667,"points":10},
-    {"name":"Mythic Contraband Vault","tier":"MYTHIC","weight":0.0166666666,"points":10},
+    {"name":"Black Market Pack","tier":"MYTHIC","weight":0.0166666667,"points":10,"value_stars":149},
+    {"name":"Ultimate Metro Bundle","tier":"MYTHIC","weight":0.0166666667,"points":10,"value_stars":179},
+    {"name":"Mythic Contraband Vault","tier":"MYTHIC","weight":0.0166666666,"points":10,"value_stars":199},
 ]
 
 UPGRADE_REWARDS = [
@@ -925,7 +933,8 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "next_reset_seconds":next_reset,
       "history":[dict(x) for x in history],
       "upgrade_rewards":UPGRADE_REWARDS,
-      "rewards":[{"name":x["name"],"tier":x["tier"]} for x in SPIN_REWARDS]
+      "tier_chances":SPIN_TIER_CHANCES,
+      "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS]
     }
 
 
