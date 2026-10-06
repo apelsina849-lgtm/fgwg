@@ -1759,6 +1759,137 @@ async def case_opening_resolve(opening_id: int, x_telegram_init_data: str | None
     return result
 
 
+@app.post("/api/spin/case/open")
+async def spin_case_open(body: CaseStartIn, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    case_id = body.case_id.strip().upper()
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            pending = await (await conn.execute(
+                "SELECT id FROM inventory_items WHERE telegram_id=? AND status='pending' ORDER BY id DESC LIMIT 1",
+                (uid,)
+            )).fetchone()
+            if pending:
+                await conn.rollback()
+                raise HTTPException(409,"Сначала сохраните или продайте предыдущий выпавший предмет")
+            existing_paid = await (await conn.execute(
+                "SELECT * FROM case_openings WHERE telegram_id=? AND status='paid' ORDER BY id ASC LIMIT 1",
+                (uid,)
+            )).fetchone()
+            if existing_paid:
+                result = await complete_case_opening(conn,existing_paid)
+                await conn.commit()
+                return {"mode":"ready",**result}
+            cases = await load_case_catalog(conn,uid,include_inactive=True)
+            cfg = next((x for x in cases if x["id"] == case_id),None)
+            if not cfg or not cfg["active"]:
+                await conn.rollback()
+                raise HTTPException(404,"Кейс недоступен")
+            snapshot = {
+                "id":cfg["id"],"name":cfg["name"],"description":cfg["description"],"icon":cfg["icon"],
+                "stars_price":int(cfg["stars_price"]),"tiers":cfg["tiers"],"contents":cfg["contents"]
+            }
+            snapshot_json = json.dumps(snapshot,ensure_ascii=False,separators=(",",":"))
+
+            payment_method = ""
+            stars_amount = int(cfg["stars_price"] or 0)
+            is_free = bool(cfg["is_free"]) or stars_amount <= 0
+            if is_free:
+                payment_method = "Бесплатно"
+                stars_amount = 0
+            else:
+                exact = await (await conn.execute(
+                    "SELECT tickets FROM donation_ticket_balances WHERE telegram_id=? AND case_id=?",
+                    (uid,case_id)
+                )).fetchone()
+                generic = await (await conn.execute(
+                    "SELECT tickets FROM donation_ticket_balances WHERE telegram_id=? AND case_id='*'",
+                    (uid,)
+                )).fetchone()
+                if exact and int(exact["tickets"] or 0) > 0:
+                    await conn.execute(
+                        "UPDATE donation_ticket_balances SET tickets=tickets-1 WHERE telegram_id=? AND case_id=?",
+                        (uid,case_id)
+                    )
+                    payment_method = "Donation Ticket"
+                    stars_amount = 0
+                elif generic and int(generic["tickets"] or 0) > 0:
+                    await conn.execute(
+                        "UPDATE donation_ticket_balances SET tickets=tickets-1 WHERE telegram_id=? AND case_id='*'",
+                        (uid,)
+                    )
+                    payment_method = "Donation Ticket"
+                    stars_amount = 0
+
+            if payment_method:
+                cur = await conn.execute(
+                    "INSERT INTO case_openings(telegram_id,case_id,case_name,stars_amount,payment_method,status,snapshot_json,paid_at) "
+                    "VALUES(?,?,?,?,?,'paid',?,CURRENT_TIMESTAMP)",
+                    (uid,case_id,cfg["name"],stars_amount,payment_method,snapshot_json)
+                )
+                opening = await (await conn.execute(
+                    "SELECT * FROM case_openings WHERE id=?",(int(cur.lastrowid),)
+                )).fetchone()
+                result = await complete_case_opening(conn,opening)
+                await conn.commit()
+                announce_reward = result["reward"]
+                mode = "ticket" if payment_method == "Donation Ticket" else "free"
+            else:
+                cur = await conn.execute(
+                    "INSERT INTO case_openings(telegram_id,case_id,case_name,stars_amount,payment_method,status,snapshot_json) "
+                    "VALUES(?,?,?,?,?,'awaiting_payment',?)",
+                    (uid,case_id,cfg["name"],stars_amount,"Telegram Stars",snapshot_json)
+                )
+                opening_id = int(cur.lastrowid)
+                await conn.commit()
+                announce_reward = None
+                mode = "invoice"
+        finally:
+            await conn.close()
+
+    if mode in ("free","ticket"):
+        if announce_reward["tier"] in ("RED","GOLD","LEGENDARY","MYTHIC"):
+            asyncio.create_task(announce_top_drop(uid,announce_reward))
+        return {"mode":mode,**result}
+
+    link = await tg("createInvoiceLink", {
+        "title":cfg["name"],
+        "description":f"Открытие кейса {cfg['name']}",
+        "payload":f"case:{opening_id}:{uid}",
+        "provider_token":"",
+        "currency":"XTR",
+        "prices":[{"label":cfg["name"],"amount":stars_amount}]
+    })
+    return {"mode":"invoice","opening_id":opening_id,"url":link,"stars_amount":stars_amount}
+
+
+@app.post("/api/spin/case/{opening_id}/claim")
+async def spin_case_claim(opening_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            opening = await (await conn.execute(
+                "SELECT * FROM case_openings WHERE id=? AND telegram_id=?",
+                (opening_id,uid)
+            )).fetchone()
+            if not opening:
+                await conn.rollback()
+                raise HTTPException(404,"Открытие кейса не найдено")
+            result = await complete_case_opening(conn,opening)
+            await conn.commit()
+        finally:
+            await conn.close()
+    if result["reward"]["tier"] in ("RED","GOLD","LEGENDARY","MYTHIC"):
+        asyncio.create_task(announce_top_drop(uid,result["reward"]))
+    return {"mode":"ready",**result}
+
+
 @app.post("/api/spin/promo")
 async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
