@@ -1901,15 +1901,14 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
             await conn.execute("BEGIN IMMEDIATE")
             promo = await (await conn.execute(
                 "SELECT * FROM promos WHERE code=? AND active=1 "
-                "AND (lower(COALESCE(promo_type,'')) IN ('spin','donation_spin') "
-                "OR COALESCE(spin_tickets,0)>0 OR COALESCE(donation_tickets,0)>0) "
+                "AND (lower(COALESCE(promo_type,'')) IN ('spin','donation') OR COALESCE(spin_tickets,0)>0 OR COALESCE(donation_tickets,0)>0) "
                 "AND (max_uses=0 OR uses<max_uses) "
                 "AND (expires_at='' OR datetime(expires_at)>datetime('now'))",
                 (code,)
             )).fetchone()
             if not promo:
                 await conn.rollback()
-                raise HTTPException(400,"Промокод на прокрутки недействителен, закончился или истёк")
+                raise HTTPException(400,"Промокод недействителен, закончился или истёк")
             redeemed = await (await conn.execute(
                 "SELECT 1 FROM promo_redemptions WHERE promo_id=? AND telegram_id=?",
                 (promo["id"],uid)
@@ -1918,70 +1917,63 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
                 await conn.rollback()
                 raise HTTPException(409,"Вы уже активировали этот промокод")
 
-            promo_type = str(promo["promo_type"] or "").lower()
-            donation_count = int(promo["donation_tickets"] or 0)
-            spin_count = int(promo["spin_tickets"] or 0)
+            ptype = str(promo["promo_type"] or "").lower()
+            spin_added = int(promo["spin_tickets"] or 0)
+            donation_added = int(promo["donation_tickets"] or 0)
+            target_case = str(promo["case_id"] or "").strip().upper() or "*"
+            if ptype == "spin" and spin_added <= 0:
+                spin_added = 1
+            if ptype == "donation" and donation_added <= 0:
+                donation_added = 1
 
-            if promo_type == "donation_spin" or donation_count > 0:
-                if donation_count <= 0:
-                    donation_count = 1
-                target_case = str(promo["case_id"] or "").strip().upper() or "*"
+            if ptype == "donation":
                 if target_case != "*":
-                    exists = await (await conn.execute(
-                        "SELECT 1 FROM case_configs WHERE id=?",
-                        (target_case,)
+                    case_row = await (await conn.execute(
+                        "SELECT id FROM case_configs WHERE id=? AND active=1",(target_case,)
                     )).fetchone()
-                    if not exists:
+                    if not case_row:
                         await conn.rollback()
-                        raise HTTPException(409,"Кейс, к которому привязан промокод, больше не существует")
+                        raise HTTPException(400,"Кейс для Donation Ticket больше недоступен")
                 await conn.execute(
                     "INSERT INTO donation_ticket_balances(telegram_id,case_id,tickets) VALUES(?,?,?) "
                     "ON CONFLICT(telegram_id,case_id) DO UPDATE SET tickets=tickets+excluded.tickets",
-                    (uid,target_case,donation_count)
+                    (uid,target_case,donation_added)
+                )
+            elif ptype == "spin":
+                await conn.execute(
+                    "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
+                    (uid,)
                 )
                 await conn.execute(
-                    "INSERT INTO promo_redemptions(promo_id,telegram_id) VALUES(?,?)",
-                    (promo["id"],uid)
+                    "UPDATE spin_state SET tickets=tickets+? WHERE telegram_id=?",
+                    (spin_added,uid)
                 )
-                await conn.execute("UPDATE promos SET uses=uses+1 WHERE id=?",(promo["id"],))
-                await conn.commit()
-                wallet_rows = await (await conn.execute(
-                    "SELECT case_id,tickets FROM donation_ticket_balances WHERE telegram_id=? AND tickets>0",
-                    (uid,)
-                )).fetchall()
-                wallet = {str(x["case_id"]):int(x["tickets"] or 0) for x in wallet_rows}
-                return {
-                    "ok":True,"code":code,"kind":"donation_ticket",
-                    "donation_tickets_added":donation_count,"case_id":target_case,
-                    "donation_tickets_total":sum(wallet.values()),"donation_ticket_wallet":wallet
-                }
-
-            if spin_count <= 0 and promo_type == "spin":
-                spin_count = 1
-                await conn.execute("UPDATE promos SET spin_tickets=1 WHERE id=?",(promo["id"],))
-            if spin_count <= 0:
+            else:
                 await conn.rollback()
-                raise HTTPException(400,"Этот промокод не выдаёт прокрутки")
-            await conn.execute(
-                "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
-                (uid,)
-            )
-            await conn.execute(
-                "UPDATE spin_state SET tickets=tickets+? WHERE telegram_id=?",
-                (spin_count,uid)
-            )
+                raise HTTPException(400,"Этот промокод предназначен для покупки товара")
+
             await conn.execute(
                 "INSERT INTO promo_redemptions(promo_id,telegram_id) VALUES(?,?)",
                 (promo["id"],uid)
             )
             await conn.execute("UPDATE promos SET uses=uses+1 WHERE id=?",(promo["id"],))
             await conn.commit()
-            state = await (await conn.execute("SELECT tickets FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+            state = await (await conn.execute(
+                "SELECT tickets FROM spin_state WHERE telegram_id=?",(uid,)
+            )).fetchone()
+            donation_total = await (await conn.execute(
+                "SELECT COALESCE(SUM(tickets),0) total FROM donation_ticket_balances WHERE telegram_id=?",(uid,)
+            )).fetchone()
         finally:
             await conn.close()
+
     return {
-        "ok":True,"code":code,"kind":"spin_ticket",
-        "tickets_added":spin_count,"bonus_tickets":int(state["tickets"] or 0)
+        "ok":True,"code":code,"promo_type":ptype,
+        "tickets_added":spin_added if ptype=="spin" else 0,
+        "bonus_tickets":int(state["tickets"] or 0) if state else 0,
+        "donation_tickets_added":donation_added if ptype=="donation" else 0,
+        "donation_case_id":target_case,
+        "donation_tickets_total":int(donation_total["total"] or 0)
     }
 
 
@@ -2281,7 +2273,7 @@ async def admin_users(x_telegram_init_data: str | None = Header(default=None)):
         rows = await (await conn.execute(
             "SELECT u.token,u.username,u.first_name,u.created_at,"
             "COALESCE(s.tickets,0) tickets,COALESCE(s.upgrade_points,0) upgrade_points,"
-            "COALESCE((SELECT SUM(dt.tickets) FROM donation_ticket_balances dt WHERE dt.telegram_id=u.telegram_id),0) donation_tickets,"
+            "COALESCE((SELECT SUM(d.tickets) FROM donation_ticket_balances d WHERE d.telegram_id=u.telegram_id),0) donation_tickets,"
             "(SELECT COUNT(*) FROM orders o WHERE o.telegram_id=u.telegram_id) orders_count,"
             "(SELECT COUNT(*) FROM referrals r WHERE r.referrer_id=u.telegram_id) referrals_count "
             "FROM users u LEFT JOIN spin_state s ON s.telegram_id=u.telegram_id "
@@ -2306,8 +2298,8 @@ async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | N
                 raise HTTPException(404,"Пользователь с таким жетоном не найден")
             uid = int(user["telegram_id"])
             if body.donation_tickets > 0 and target_case != "*":
-                exists = await (await conn.execute("SELECT 1 FROM case_configs WHERE id=?",(target_case,))).fetchone()
-                if not exists:
+                case_row = await (await conn.execute("SELECT id FROM case_configs WHERE id=?",(target_case,))).fetchone()
+                if not case_row:
                     raise HTTPException(404,"Кейс для Donation Ticket не найден")
             await conn.execute(
                 "INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",
@@ -2333,6 +2325,83 @@ async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | N
     }
 
 
+@app.get("/api/admin/cases")
+async def admin_cases(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn = await db()
+    try:
+        cases = await load_case_catalog(conn,None,include_inactive=True)
+    finally:
+        await conn.close()
+    rewards = [
+        {"name":x["name"],"tier":x["tier"],"value_stars":int(x["value_stars"])}
+        for x in sorted(SPIN_REWARDS,key=lambda r:(TIER_ORDER.index(r["tier"]),int(r["value_stars"]),r["name"]))
+    ]
+    return {"cases":cases,"rewards":rewards,"tiers":list(TIER_ORDER)}
+
+
+@app.patch("/api/admin/cases/{case_id}")
+async def admin_update_case(case_id: str, body: CaseAdminIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    case_id = (case_id or "").strip().upper()
+    clean_tiers = {}
+    for tier,chance in body.tiers.items():
+        t = str(tier).strip().upper()
+        if t not in TIER_ORDER:
+            raise HTTPException(400,f"Неизвестная редкость: {t}")
+        value = float(chance or 0)
+        if value > 0:
+            clean_tiers[t] = value
+    if not clean_tiers:
+        raise HTTPException(400,"Включите хотя бы одно качество")
+    if abs(sum(clean_tiers.values()) - 100.0) > 0.05:
+        raise HTTPException(400,"Сумма процентов должна быть ровно 100%")
+
+    reward_by_name = {x["name"]:x for x in SPIN_REWARDS}
+    contents = []
+    for name in body.contents:
+        if name in reward_by_name and name not in contents:
+            contents.append(name)
+    if not contents:
+        raise HTTPException(400,"Добавьте хотя бы один предмет")
+    enabled_tiers = set(clean_tiers)
+    invalid = [n for n in contents if reward_by_name[n]["tier"] not in enabled_tiers]
+    if invalid:
+        raise HTTPException(400,"В содержимом есть предметы из выключенной редкости")
+    for tier in enabled_tiers:
+        if not any(reward_by_name[n]["tier"] == tier for n in contents):
+            raise HTTPException(400,f"Для {tier} нет ни одного предмета")
+
+    is_free = bool(body.is_free)
+    stars_price = int(body.stars_price or 0)
+    if case_id == "FREE":
+        is_free = True
+        stars_price = 0
+    elif not is_free and stars_price <= 0:
+        raise HTTPException(400,"Для платного кейса укажите цену в Stars")
+
+    async with db_write_lock:
+        conn = await db()
+        try:
+            cur = await conn.execute(
+                "UPDATE case_configs SET name=?,description=?,icon=?,stars_price=?,is_free=?,active=?,sort_order=?,"
+                "tiers_json=?,contents_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (
+                    body.name.strip(),body.description.strip(),body.icon.strip() or "crate",stars_price,
+                    1 if is_free else 0,1 if body.active else 0,int(body.sort_order),
+                    json.dumps([{"tier":t,"chance":clean_tiers[t]} for t in TIER_ORDER if t in clean_tiers],ensure_ascii=False),
+                    json.dumps(contents,ensure_ascii=False),case_id
+                )
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(404,"Кейс не найден")
+            await conn.commit()
+            row = await (await conn.execute("SELECT * FROM case_configs WHERE id=?",(case_id,))).fetchone()
+        finally:
+            await conn.close()
+    return {"ok":True,"case":parse_case_row(row)}
+
+
 @app.get("/api/admin/promos")
 async def admin_promos(x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
@@ -2349,24 +2418,24 @@ async def admin_create_promo(body: PromoCreateIn, x_telegram_init_data: str | No
     await owner(x_telegram_init_data)
     code=body.code.strip().upper()
     promo_type=body.promo_type.strip().lower()
-    case_id=(body.case_id or "").strip().upper()
     if not code.replace("_","").replace("-","").isalnum():
         raise HTTPException(400,"Код может содержать буквы, цифры, - и _")
-    if promo_type not in ("discount","spin","donation_spin"):
-        raise HTTPException(400,"Тип промокода: discount, spin или donation_spin")
+    if promo_type not in ("discount","spin","donation"):
+        raise HTTPException(400,"Тип промокода: discount, spin или donation")
     if promo_type=="discount" and body.discount_percent<=0:
         raise HTTPException(400,"Для скидочного промокода укажите процент скидки")
     if promo_type=="spin" and body.spin_tickets<=0:
         raise HTTPException(400,"Для SPIN-промокода укажите количество билетов")
-    if promo_type=="donation_spin" and body.donation_tickets<=0:
-        raise HTTPException(400,"Для Donation-промокода укажите количество синих билетов")
+    if promo_type=="donation" and body.donation_tickets<=0:
+        raise HTTPException(400,"Для Donation Ticket промокода укажите количество синих тикетов")
+    target_case=(body.case_id or "").strip().upper() or "*"
     async with db_write_lock:
         conn=await db()
         try:
-            if promo_type=="donation_spin" and case_id and case_id!="*":
-                exists=await (await conn.execute("SELECT 1 FROM case_configs WHERE id=?",(case_id,))).fetchone()
+            if promo_type=="donation" and target_case!="*":
+                exists=await (await conn.execute("SELECT id FROM case_configs WHERE id=?",(target_case,))).fetchone()
                 if not exists:
-                    raise HTTPException(404,"Указанный кейс не найден")
+                    raise HTTPException(404,"Кейс для промокода не найден")
             try:
                 cur=await conn.execute(
                     "INSERT INTO promos(code,promo_type,discount_percent,spin_tickets,donation_tickets,case_id,max_uses,expires_at) "
@@ -2375,8 +2444,8 @@ async def admin_create_promo(body: PromoCreateIn, x_telegram_init_data: str | No
                         code,promo_type,
                         body.discount_percent if promo_type=="discount" else 0,
                         body.spin_tickets if promo_type=="spin" else 0,
-                        body.donation_tickets if promo_type=="donation_spin" else 0,
-                        (case_id or "*") if promo_type=="donation_spin" else "",
+                        body.donation_tickets if promo_type=="donation" else 0,
+                        target_case if promo_type=="donation" else "",
                         body.max_uses,body.expires_at.strip()
                     )
                 )
