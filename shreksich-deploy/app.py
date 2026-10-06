@@ -1730,6 +1730,14 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .rarity-item-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-top:1px solid #252a30}
 .rarity-item-name{font-weight:850;min-width:0;line-height:1.3}
 .rarity-item-price{flex:0 0 auto;font-size:15px;font-weight:950;color:#ffd35a;white-space:nowrap}
+.drop-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+.drop-actions button{width:100%}.save-drop{background:#17304a;color:#79c7ff}.sell-drop{background:linear-gradient(135deg,#ffd12d,#f5a900);color:#181000}
+.inventory-balance{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px;border-radius:18px;background:linear-gradient(135deg,#2d2207,#111418);border:1px solid #5c4817;margin-bottom:14px}
+.inventory-balance b{font-size:25px;color:#ffd155}
+.inventory-card{background:#111419;border:1px solid #292f35;border-radius:20px;padding:15px;margin:10px 0}
+.inventory-card-head{display:flex;align-items:center;gap:12px}.inventory-card-head .loot-cube{width:58px;height:58px;border-radius:15px;font-size:28px;flex:0 0 58px}
+.inventory-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.inventory-meta span{font-size:11px;padding:6px 8px;border-radius:9px;background:#1b1f24;color:#c7cdd4}
+.inventory-actions{display:flex;gap:8px;margin-top:12px}.inventory-actions button{flex:1}
 .claim{width:100%;margin-top:8px;background:#20252b;color:#fff}.claim:disabled{opacity:.4}
 .drop-fx{position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:24px;background:#000c;backdrop-filter:blur(7px);animation:fxFade .25s ease-out}
 .drop-card{width:min(520px,100%);border-radius:28px;padding:34px 22px;text-align:center;background:#101318;border:1px solid #343941;transform:scale(.72);animation:dropPop .7s cubic-bezier(.2,1.35,.35,1) forwards;position:relative;overflow:hidden}
@@ -1845,6 +1853,7 @@ function sticker(title,sub,icon,cls,attrs){
   shop:'<svg viewBox="0 0 24 24"><path d="M4 8h16l-1.4 11H5.4L4 8Z"/><path d="M8 8a4 4 0 0 1 8 0"/></svg>',
   spin:'<svg viewBox="0 0 24 24"><path d="M20 7V3l-2 2a8 8 0 1 0 1.5 10"/><path d="M20 3h-4"/><path d="M12 8v4l3 2"/></svg>',
   orders:'<svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7"/><path d="m9 15 2 2 4-4"/></svg>',
+  inventory:'<svg viewBox="0 0 24 24"><path d="M4 6h16v14H4V6Z"/><path d="M8 6V3h8v3"/><path d="M8 11h8M8 15h5"/></svg>',
   referral:'<svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c.5-4 2.5-6 5-6s4.5 2 5 6"/><path d="M14 15c1-.8 2-1 3-1 2.2 0 3.7 1.5 4 4"/></svg>',
   news:'<svg viewBox="0 0 24 24"><path d="m4 13 12-6v10L4 13Z"/><path d="M16 10c2 0 4-1 4-3v10c0-2-2-3-4-3"/><path d="m6 14 1 5h4l-2-4"/></svg>',
   chat:'<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 10h.01M12 10h.01M16 10h.01"/></svg>',
@@ -1860,6 +1869,7 @@ function home(){
  sticker('Каталог','Товары и услуги','shop','st-gold','data-go="catalog"')+
  sticker('HYPE SPIN','1 free / 24h','spin','st-purple','data-go="spin"')+
  sticker('Мои заказы','Статусы покупок','orders','st-blue','data-go="orders"')+
+ sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+
  sticker('Рефералы','Билеты и бонусы','referral','st-red','data-go="referral"')+
  sticker('Новости','@shreksi4PubgNEWS','news','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+
  sticker('Наш чат','@chatshreksi4','chat','st-cyan','data-tg="https://t.me/chatshreksi4"')+
@@ -1918,7 +1928,7 @@ function showDropFx(reward){
  if(!reward||(reward.tier!=='LEGENDARY'&&reward.tier!=='MYTHIC'))return;
  try{if(tg&&tg.HapticFeedback){tg.HapticFeedback.notificationOccurred('success');tg.HapticFeedback.impactOccurred(reward.tier==='MYTHIC'?'heavy':'medium')}}catch(_){}
  const fx=document.createElement('div');fx.className='drop-fx '+reward.tier.toLowerCase();
- fx.innerHTML='<div class="drop-card"><div class="drop-content"><h2>'+(reward.tier==='MYTHIC'?'MYTHIC DROP!':'LEGENDARY DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div>'+rarityBar(reward.tier)+'<div class="muted" style="margin-top:12px">+'+reward.points+' SHR</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
+ fx.innerHTML='<div class="drop-card"><div class="drop-content"><h2>'+(reward.tier==='MYTHIC'?'MYTHIC DROP!':'LEGENDARY DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div>'+rarityBar(reward.tier)+'<div class="muted" style="margin-top:12px">Продажа: '+reward.points+' SHR</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
  document.body.appendChild(fx);const card=fx.querySelector('.drop-card'),total=reward.tier==='MYTHIC'?30:20;
  for(let i=0;i<total;i++){const s=document.createElement('i');s.className='spark';const a=Math.PI*2*i/total,d=90+Math.random()*170;s.style.left=(45+Math.random()*10)+'%';s.style.top=(45+Math.random()*10)+'%';s.style.setProperty('--x',(Math.cos(a)*d)+'px');s.style.setProperty('--y',(Math.sin(a)*d)+'px');s.style.color=reward.tier==='MYTHIC'?(i%2?'#ff4bd8':'#8b62ff'):'#ffad25';card.appendChild(s)}
  fx.querySelector('#closeDrop').addEventListener('click',()=>fx.remove())
@@ -1956,19 +1966,19 @@ function bindRarityCatalog(){
 
 async function spinHtml(){
  spinState=await api('/api/spin/state');
- const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • +'+x.points+' pts • '+esc(x.created_at)+'</div></div>').join('');
- const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.upgrade_points)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' pts</button>').join('');
+ const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR • '+esc(x.created_at)+'</div></div>').join('');
+ const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0);
  const buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
- '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.upgrade_points+'</div></div></div>'+
+ '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
  '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
  '<label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию и сразу показать награду</span></label>'+
  '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
  rarityCatalogHtml()+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
- '<h3>Upgrade Lab</h3><div class="card"><div class="muted">SHR обмениваются на гарантированную награду — без случайной ставки.</div>'+claims+'</div><h3>История</h3>'+(history||'<div class="empty">История пока пустая.</div>')
+ '<h3>SHR MARKET</h3><div class="card"><div class="muted">SHR можно получить за продажу выпавших предметов и обменять на гарантированные награды.</div>'+claims+'</div><h3>История</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
@@ -2062,9 +2072,26 @@ function showFinalCube(track,windowEl,reward){
  const finalX=windowEl.clientWidth/2-itemWidth/2;
  track.style.transform='translate3d('+finalX+'px,-50%,0)'
 }
-function revealReward(result,reward){
+function revealReward(result,data){
  if(!result)return;
- result.innerHTML='<div class="reveal-name '+tierClass(reward.tier)+'">'+esc(reward.name)+'</div><div class="mini">+'+reward.points+' SHR</div>'
+ const reward=data.reward;
+ result.innerHTML='<div class="reveal-name '+tierClass(reward.tier)+'">'+esc(reward.name)+'</div>'+
+ '<div class="mini">Решите, что сделать с предметом</div>'+
+ '<div class="drop-actions"><button class="save-drop" id="saveDropBtn">Сохранить</button><button class="sell-drop" id="sellDropBtn">Продать за '+data.sell_shr+' SHR</button></div>';
+ const save=document.getElementById('saveDropBtn'),sell=document.getElementById('sellDropBtn');
+ if(save)save.addEventListener('click',()=>resolveDrop(data.inventory_item_id,'save',save));
+ if(sell)sell.addEventListener('click',()=>resolveDrop(data.inventory_item_id,'sell',sell))
+}
+async function resolveDrop(itemId,action,btn){
+ if(btn)btn.disabled=true;
+ try{
+  const d=await api('/api/inventory/'+itemId+'/resolve',{method:'POST',body:JSON.stringify({action})});
+  if(action==='save'){tab='inventory';await render()}
+  else{
+   alert('Продано. Баланс: '+d.shr+' SHR');
+   app.innerHTML=await spinHtml();bindSpin();loadWinsFeed()
+  }
+ }catch(e){if(btn)btn.disabled=false;alert(e.message)}
 }
 async function spinOnce(){
  const b=document.getElementById('spinBtn');if(!b||b.disabled)return;
@@ -2077,25 +2104,49 @@ async function spinOnce(){
   lastSpinReward=d.reward;
   if(skip){
    showFinalCube(track,windowEl,d.reward);
-   revealReward(result,d.reward);
+   revealReward(result,d);
    try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
-   showDropFx(d.reward);
-   await sleep(950)
+   showDropFx(d.reward)
   }else{
    await animateSpinRight(track,windowEl,d.reward);
-   revealReward(result,d.reward);
+   revealReward(result,d);
    try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
-   await sleep(900);
-   showDropFx(d.reward);
-   await sleep(d.reward.tier==='LEGENDARY'||d.reward.tier==='MYTHIC'?450:300)
+   await sleep(500);
+   showDropFx(d.reward)
   }
-  app.innerHTML=await spinHtml();bindSpin();loadWinsFeed()
+  b.textContent='НАГРАДА ВЫПАЛА';
  }catch(e){
   b.disabled=false;b.textContent='КРУТИТЬ SPIN';
   alert(e.message)
  }
 }
 async function claimUpgrade(points){try{const d=await api('/api/upgrade/claim',{method:'POST',body:JSON.stringify({points})});alert('Заявка создана: '+d.reward.name);app.innerHTML=await spinHtml();bindSpin()}catch(e){alert(e.message)}}
+
+async function inventoryHtml(){
+ const d=await api('/api/inventory');
+ const items=d.items||[];
+ const list=items.map(x=>{
+  const pending=x.status==='pending';
+  return '<div class="inventory-card"><div class="inventory-card-head"><div class="loot-cube '+cubeClass(x.reward_tier)+'"><span>?</span></div><div><div class="name">'+esc(x.reward_name)+'</div><div class="'+tierClass(x.reward_tier)+'">'+esc(x.reward_tier)+'</div></div></div>'+
+  '<div class="inventory-meta"><span>Продажа: '+x.sell_shr+' SHR</span><span>Оценка: 🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+'</span><span>'+(pending?'Новый дроп':'Сохранён')+'</span></div>'+
+  '<div class="inventory-actions">'+(pending?'<button class="secondary" data-inv-save="'+x.id+'">Сохранить</button>':'')+'<button class="buy" data-inv-sell="'+x.id+'">Продать за '+x.sell_shr+' SHR</button></div></div>'
+ }).join('');
+ return '<section class="hero"><div class="cat">ИНВЕНТАРЬ</div><h1>Ваши предметы</h1><div class="muted">Сохраняйте дропы или продавайте их за SHR в любое время.</div></section>'+
+ '<div class="inventory-balance"><div><div class="mini">БАЛАНС SHR</div><div class="muted">Внутренняя валюта Шрексича</div></div><b>'+d.shr+' SHR</b></div>'+
+ (list||'<div class="empty">Инвентарь пока пуст. Предметы появляются после SPIN.</div>')
+}
+function bindInventory(){
+ document.querySelectorAll('[data-inv-save]').forEach(b=>b.addEventListener('click',()=>resolveInventory(Number(b.dataset.invSave),'save',b)));
+ document.querySelectorAll('[data-inv-sell]').forEach(b=>b.addEventListener('click',()=>resolveInventory(Number(b.dataset.invSell),'sell',b)))
+}
+async function resolveInventory(id,action,btn){
+ if(btn)btn.disabled=true;
+ try{
+  const d=await api('/api/inventory/'+id+'/resolve',{method:'POST',body:JSON.stringify({action})});
+  if(action==='sell')alert('Предмет продан. Баланс: '+d.shr+' SHR');
+  app.innerHTML=await inventoryHtml();bindInventory()
+ }catch(e){if(btn)btn.disabled=false;alert(e.message)}
+}
 
 async function referralHtml(){
  const r=await api('/api/referral');
@@ -2183,6 +2234,7 @@ async function render(){
   else if(tab==='catalog'){app.innerHTML='<h2>Каталог</h2>'+cards(products);bindProductButtons()}
   else if(tab==='spin'){app.innerHTML=await spinHtml();bindSpin()}
   else if(tab==='orders'){app.innerHTML=await ordersHtml()}
+  else if(tab==='inventory'){app.innerHTML=await inventoryHtml();bindInventory()}
   else if(tab==='referral'){app.innerHTML=await referralHtml();bindReferral()}
   else if(tab==='support'){app.innerHTML=supportHtml();bindSupport()}
  }catch(e){showFatal(e.message)}
