@@ -2092,7 +2092,15 @@ let spinNavigationLocked=false;
 let selectedCaseId=localStorage.getItem('shx_selected_case')||'FREE';
 
 let audioCtx=null,spinSoundTimer=null,spinSoundStarted=0,spinSoundStep=0,spinSoundTotalMs=30000,spinSoundActive=false,spinAudioHold=null;
-function soundsEnabled(){return localStorage.getItem('shx_sound_enabled')!=='0'}
+function soundsEnabled(){
+ const saved=localStorage.getItem('shx_sound_enabled');
+ const prefV2=localStorage.getItem('shx_sound_pref_v2');
+ if(saved==='0'&&prefV2!=='1'){
+  localStorage.setItem('shx_sound_enabled','1');
+  return true
+ }
+ return saved!=='0'
+}
 function getAudio(){
  if(!soundsEnabled())return null;
  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;
@@ -2119,6 +2127,9 @@ async function ensureAudioReady(){
  try{if(ac.state!=='running')await ac.resume()}catch(_){}
  return ac
 }
+document.addEventListener('pointerdown',()=>{if(soundsEnabled())unlockAudio()},{passive:true});
+document.addEventListener('touchstart',()=>{if(soundsEnabled())unlockAudio()},{passive:true});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&soundsEnabled())unlockAudio()});
 function beginAudioHold(){
  const ac=unlockAudio();if(!ac||spinAudioHold)return;
  try{
@@ -2215,6 +2226,7 @@ function sfxDrop(tier){
 function sfxSell(){if(!soundsEnabled())return;[660,880,1100,1320].forEach((f,i)=>tone(f,.13,.04,'triangle',i*.055))}
 function sfxSave(){if(!soundsEnabled())return;noiseBurst(.08,.018);tone(420,.13,.035,'sine');tone(630,.18,.035,'sine',.08);tone(840,.2,.03,'sine',.14)}
 async function setSoundEnabled(on){
+ localStorage.setItem('shx_sound_pref_v2','1');
  localStorage.setItem('shx_sound_enabled',on?'1':'0');
  if(!on){stopSpinSound();return}
  await ensureAudioReady();
