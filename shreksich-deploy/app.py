@@ -1074,6 +1074,12 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
                 "WHERE telegram_id=? AND source='free' AND created_at >= datetime('now','-24 hours')",
                 (uid,)
             )).fetchone()
+            pending = await (await conn.execute(
+                "SELECT id,reward_name,reward_tier,sell_shr,value_stars,source,created_at "
+                "FROM inventory_items WHERE telegram_id=? AND status='pending' "
+                "ORDER BY id DESC LIMIT 1",
+                (uid,)
+            )).fetchone()
         finally:
             await conn.close()
     used = int(used_row["c"] or 0)
@@ -1094,7 +1100,21 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "upgrade_rewards":SHR_REWARDS,
       "tier_chances":SPIN_TIER_CHANCES,
       "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS],
-      "case_catalog":CASE_CATALOG
+      "case_catalog":CASE_CATALOG,
+      "pending_drop":(
+        {
+          "inventory_item_id":int(pending["id"]),
+          "sell_shr":int(pending["sell_shr"]),
+          "source":pending["source"],
+          "created_at":pending["created_at"],
+          "reward":{
+            "name":pending["reward_name"],
+            "tier":pending["reward_tier"],
+            "points":int(pending["sell_shr"]),
+            "value_stars":int(pending["value_stars"])
+          }
+        } if pending else None
+      )
     }
 
 
@@ -1171,6 +1191,13 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
             await conn.execute("BEGIN IMMEDIATE")
             await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",(uid,))
             state = await (await conn.execute("SELECT * FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+            pending = await (await conn.execute(
+                "SELECT id FROM inventory_items WHERE telegram_id=? AND status='pending' ORDER BY id DESC LIMIT 1",
+                (uid,)
+            )).fetchone()
+            if pending:
+                await conn.rollback()
+                raise HTTPException(409,"Сначала сохраните или продайте предыдущий выпавший предмет")
             used_row = await (await conn.execute(
                 "SELECT COUNT(*) c FROM spin_history WHERE telegram_id=? AND source='free' AND created_at >= datetime('now','-24 hours')",
                 (uid,)
@@ -1826,6 +1853,8 @@ input:focus,textarea:focus,select:focus{border-color:#80651d;box-shadow:0 0 0 3p
 textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1}.empty{text-align:center;padding:38px 10px;color:#89919a;white-space:pre-line}.hide{display:none!important}
 .nav{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;width:min(710px,calc(100% - 20px));background:#111418ef;backdrop-filter:blur(18px);border:1px solid #2a2e33;border-radius:20px;padding:8px;display:flex;gap:4px;z-index:20}
 .nav button{flex:1;background:transparent;color:#8f969e;font-size:12px;padding:10px 3px}.nav button.active{background:#24200f;color:#ffd24b}
+.nav.spin-locked{opacity:.48;filter:saturate(.55);pointer-events:none}.nav.spin-locked:after{content:"SPIN";position:absolute;right:10px;top:-8px;font-size:9px;font-weight:1000;letter-spacing:.7px;color:#171000;background:#ffd044;border-radius:8px;padding:3px 6px;box-shadow:0 0 14px #ffc21c55}
+.spin-lock-note{display:none;margin-top:9px;font-size:11px;font-weight:850;color:#ffd45a;text-align:center}.spin-lock-note.show{display:block}
 .page-home{display:inline-flex;align-items:center;gap:7px;margin:0 0 12px;background:#171b20;color:#dce1e6;border:1px solid #30363d;padding:9px 12px;border-radius:13px;box-shadow:inset 0 1px #ffffff0a}
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
 .setting-card{background:#111418;border:1px solid #2a3036;border-radius:18px;padding:14px}
@@ -2055,6 +2084,7 @@ const initData=tg?(tg.initData||''):'';
 const headers={'Content-Type':'application/json','X-Telegram-Init-Data':initData};
 let products=[],me=null,spinState=null,lastSpinReward=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
 let adminSection='overview',adminData=null;
+let spinNavigationLocked=false;
 
 let audioCtx=null,spinSoundTimer=null,spinSoundStarted=0,spinSoundStep=0,spinSoundTotalMs=30000,spinSoundActive=false;
 function soundsEnabled(){return localStorage.getItem('shx_sound_enabled')!=='0'}
@@ -2186,7 +2216,20 @@ async function api(path,options={}){
 function openTelegram(url){try{if(tg&&tg.openTelegramLink)tg.openTelegramLink(url);else window.open(url,'_blank')}catch(_){window.open(url,'_blank')}}
 function bindSocials(){document.querySelectorAll('[data-tg]').forEach(b=>b.addEventListener('click',()=>openTelegram(b.dataset.tg)))}
 function updateNav(){document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));if(ADMIN)navEl.classList.add('hide')}
-function go(t){tab=t;render()}
+function setSpinNavigationLocked(on){
+ spinNavigationLocked=!!on;
+ if(navEl)navEl.classList.toggle('spin-locked',spinNavigationLocked);
+ document.querySelectorAll('#nav button').forEach(b=>b.disabled=spinNavigationLocked);
+ const home=document.getElementById('pageHomeBtn');if(home)home.disabled=spinNavigationLocked;
+ const note=document.getElementById('spinLockNote');if(note)note.classList.toggle('show',spinNavigationLocked)
+}
+function go(t){
+ if(spinNavigationLocked){
+  try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.impactOccurred('light')}catch(_){}
+  return
+ }
+ tab=t;render()
+}
 
 async function loadWinsFeed(){
  try{
@@ -2343,11 +2386,12 @@ async function spinHtml(){
  const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+(x.source==='ticket'?'🎟 Бонусный билет':'🕐 Бесплатный SPIN')+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0);
- const buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
+ const pending=spinState.pending_drop||null;
+ const buttonText=pending?'СНАЧАЛА РАЗБЕРИТЕ ДРОП':spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">1 бесплатное вращение за 24 часа. Дополнительные вращения — бонусными билетами и SPIN-промокодами.</div></section>'+
  '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / 1</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
+ '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0||pending?'disabled':'')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
  '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
@@ -2357,7 +2401,16 @@ function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
+ if(spinState&&spinState.pending_drop)restorePendingDrop(spinState.pending_drop);
  document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
+}
+function restorePendingDrop(data){
+ const track=document.getElementById('reelTrack'),windowEl=document.getElementById('reelWindow'),result=document.getElementById('spinResult'),b=document.getElementById('spinBtn');
+ if(!track||!windowEl||!result||!data||!data.reward)return;
+ lastSpinReward=data.reward;
+ showFinalCube(track,windowEl,data.reward);
+ revealReward(result,data);
+ if(b){b.disabled=true;b.textContent='СНАЧАЛА РАЗБЕРИТЕ ДРОП'}
 }
 async function applySpinPromo(){
  const code=(document.getElementById('spinPromoCode').value||'').trim(),info=document.getElementById('spinPromoInfo');
@@ -2452,6 +2505,7 @@ function revealReward(result,data){
 }
 async function resolveDrop(itemId,action,btn){
  if(btn)btn.disabled=true;
+ setSpinNavigationLocked(false);
  try{
   const d=await api('/api/inventory/'+itemId+'/resolve',{method:'POST',body:JSON.stringify({action})});
   if(action==='save'){sfxSave();tab='inventory';await render()}
@@ -2468,6 +2522,7 @@ async function spinOnce(){
  const skip=!!document.getElementById('skipSpinAnimation')?.checked;
  b.disabled=true;b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
  if(result)result.textContent='';
+ setSpinNavigationLocked(true);
  // Unlock Web Audio directly from the user's tap so iOS/Telegram WebView
  // keeps rarity SFX working even when the reel animation is skipped.
  unlockAudio();
@@ -2479,7 +2534,8 @@ async function spinOnce(){
    sfxDrop(d.reward.tier);
    revealReward(result,d);
    try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
-   showDropFx(d.reward)
+   showDropFx(d.reward);
+   setSpinNavigationLocked(false)
   }else{
    startSpinSound(30000);
    await animateSpinRight(track,windowEl,d.reward);
@@ -2489,10 +2545,12 @@ async function spinOnce(){
    revealReward(result,d);
    try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.notificationOccurred('success')}catch(_){}
    await sleep(500);
-   showDropFx(d.reward)
+   showDropFx(d.reward);
+   setSpinNavigationLocked(false)
   }
   b.textContent='НАГРАДА ВЫПАЛА';
  }catch(e){
+  setSpinNavigationLocked(false);
   b.disabled=false;b.textContent='КРУТИТЬ SPIN';
   alert(e.message)
  }
@@ -2708,7 +2766,7 @@ async function render(){
   addHomeExit()
  }catch(e){showFatal(e.message)}
 }
-document.querySelectorAll('#nav button').forEach(b=>b.addEventListener('click',()=>{tab=b.dataset.tab;render()}));
+document.querySelectorAll('#nav button').forEach(b=>b.addEventListener('click',()=>go(b.dataset.tab)));
 
 async function boot(){
  try{
