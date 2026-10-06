@@ -1565,10 +1565,16 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .spin-shell{background:linear-gradient(145deg,#12151a,#090b0d);border:1px solid #3a2c0a;border-radius:22px;padding:16px;margin:14px 0;overflow:hidden}
 .reel-window{position:relative;height:118px;border:1px solid #2b3036;background:#0b0d10;border-radius:18px;overflow:hidden;display:flex;align-items:center;justify-content:center}
 .reel-window:after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:#ffc21c;box-shadow:0 0 18px #ffc21c;transform:translateX(-50%)}
-.reel-item{font-size:20px;font-weight:950;text-align:center;padding:0 28px;transition:transform .15s,opacity .15s}
-.reel-item.spinning{animation:spinPulse .11s linear infinite}
+.reel-item{font-size:20px;font-weight:950;text-align:center;padding:0 28px;transition:transform .18s,opacity .18s;will-change:transform,opacity}
+.reel-item.spinning{animation:spinRight .18s linear infinite}
 .reel-item.tier-common{color:#d1d6dc}.reel-item.tier-rare{color:#67b7ff;text-shadow:0 0 18px #249cff}.reel-item.tier-epic{color:#c985ff;text-shadow:0 0 20px #a84cff}.reel-item.tier-legendary{color:#ffc250;text-shadow:0 0 24px #ff9800}.reel-item.tier-mythic{color:#ff79df;text-shadow:0 0 26px #ff37d2,0 0 44px #7d45ff}
-@keyframes spinPulse{0%{transform:translateY(-5px);opacity:.45}50%{transform:translateY(5px);opacity:1}100%{transform:translateY(-5px);opacity:.45}}
+@keyframes spinRight{
+  0%{transform:translateX(-105px) scale(.94);opacity:0}
+  24%{opacity:.55}
+  50%{transform:translateX(0) scale(1);opacity:1}
+  76%{opacity:.58}
+  100%{transform:translateX(105px) scale(.94);opacity:0}
+}
 .spin-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:11px}.spin-stat .price{font-size:17px}
 .claim{width:100%;margin-top:8px;background:#20252b;color:#fff}.claim:disabled{opacity:.4}
 .drop-fx{position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;padding:24px;background:#000c;backdrop-filter:blur(7px);animation:fxFade .25s ease-out}
