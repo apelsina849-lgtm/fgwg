@@ -169,6 +169,49 @@ def pick_free_spin_reward():
     pool = [x for x in SPIN_REWARDS if x["tier"] == tier]
     return random.choice(pool)
 
+CASE_CATALOG = [
+    {
+        "id":"FREE","name":"Бесплатный кейс","price_label":"БЕСПЛАТНО",
+        "tiers":[
+            {"tier":"GRAY","chance":60.0},
+            {"tier":"CYAN","chance":30.0},
+            {"tier":"BLUE","chance":10.0},
+        ],
+    },
+    {
+        "id":"CASE29","name":"Кейс 29","price_label":"29 ⭐",
+        "tiers":[
+            {"tier":"BLUE","chance":65.0},
+            {"tier":"PURPLE","chance":25.0},
+            {"tier":"PINK","chance":3.0},
+        ],
+    },
+    {
+        "id":"CASE79","name":"Кейс 79","price_label":"79 ⭐",
+        "tiers":[
+            {"tier":"PURPLE","chance":55.0},
+            {"tier":"PINK","chance":20.0},
+            {"tier":"RED","chance":5.0},
+        ],
+    },
+    {
+        "id":"CASE199","name":"Кейс 199","price_label":"199 ⭐",
+        "tiers":[
+            {"tier":"PURPLE","chance":40.0},
+            {"tier":"PINK","chance":25.0},
+            {"tier":"RED","chance":15.0},
+            {"tier":"GOLD","chance":1.0},
+        ],
+    },
+    {
+        "id":"CASE499","name":"Mythic Case","price_label":"499 ⭐",
+        "tiers":[
+            {"tier":"RED","chance":70.0},
+            {"tier":"GOLD","chance":30.0},
+        ],
+    },
+]
+
 SHR_REWARDS = [
     {"points":5,"name":"Набор расходников"},
     {"points":10,"name":"Metro Starter Kit"},
@@ -1050,7 +1093,8 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "history":[dict(x) for x in history],
       "upgrade_rewards":SHR_REWARDS,
       "tier_chances":SPIN_TIER_CHANCES,
-      "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS]
+      "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS],
+      "case_catalog":CASE_CATALOG
     }
 
 
@@ -1797,6 +1841,12 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .history-periods button{white-space:nowrap;background:#1c2127;color:#aeb5bd;border:1px solid #30363d;padding:8px 10px}.history-periods button.active{background:#33290c;color:#ffd45b;border-color:#6d5719}
 .history-result-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:12px 0 8px}
 .history-time{font-size:11px;font-weight:850;color:#d0d6dc;margin-top:7px}
+.case-guide{display:grid;gap:12px}.case-guide-card{background:#111418;border:1px solid #2a3036;border-radius:20px;padding:14px;overflow:hidden}
+.case-guide-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.case-guide-name{font-size:17px;font-weight:950}.case-guide-price{font-size:15px;font-weight:1000;color:#ffd45a;white-space:nowrap}
+.case-tier-row{display:flex;gap:8px;overflow-x:auto;padding:3px 0 5px;scrollbar-width:none}.case-tier-row::-webkit-scrollbar{display:none}
+.case-tier-btn{flex:0 0 112px;background:#171b20;border:1px solid #2c3238;border-radius:16px;padding:10px;text-align:center;color:#fff}
+.case-tier-btn .loot-cube{width:52px;height:52px;border-radius:14px;font-size:25px;margin:0 auto 7px}.case-tier-btn .rarity-card-title{font-size:10px}.case-tier-btn .rarity-card-chance{font-size:16px}
+.case-guide-note{font-size:10px;color:#858d96;margin-top:9px;line-height:1.35}
 @media(max-width:430px){.history-filter-grid{grid-template-columns:1fr}}
 
 /* live big wins */
@@ -2165,7 +2215,8 @@ function sticker(title,sub,icon,cls,attrs){
   promo:'<svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="m6 18 12-12"/></svg>',
   support:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M4 12v5h4v-6H4M20 12v5h-4v-6h4"/><path d="M16 19c-1 1-2 2-4 2"/></svg>',
   settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a8 8 0 0 0-1.7 1L5 6.1 3 9.5 5 11a7 7 0 0 0 0 2l-2 1.5L5 18l2.4-1a8 8 0 0 0 1.7 1l.4 3h5l.4-3a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1Z"/></svg>',
-  history:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6"/><path d="M4 4v4.6h4.6"/><path d="M12 7v5l3 2"/></svg>'
+  history:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6"/><path d="M4 4v4.6h4.6"/><path d="M12 7v5l3 2"/></svg>',
+  cases:'<svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7"/><path d="M8 13h8M12 11v8"/></svg>'
  };
  return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon">'+(icons[icon]||icons.shop)+'</span><div class="sticker-copy"><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div></div>'
 }
@@ -2275,7 +2326,7 @@ function rarityCatalogHtml(){
 function openRarityModal(tier){
  const modal=document.getElementById('rarityModal'),sheet=document.getElementById('raritySheet');
  if(!modal||!sheet)return;
- const items=(spinState.rewards||[]).filter(x=>x.tier===tier);
+ const items=(spinState.rewards||[]).filter(x=>x.tier===tier).slice().sort((a,b)=>Number(a.value_stars||0)-Number(b.value_stars||0));
  sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div><div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+tierLabel(tier)+'</h3><div class="muted">Шанс качества: '+tierChance(tier)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="rarityClose">Закрыть</button></div>'+
  items.map(x=>'<div class="rarity-item-row"><div class="rarity-item-name">'+esc(x.name)+'</div><div class="rarity-item-price">🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+'</div></div>').join('');
  modal.classList.remove('hide');
@@ -2299,7 +2350,6 @@ async function spinHtml(){
  '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+idleCubeStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(total<=0?'disabled':'')+'>'+buttonText+'</button>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
  '<div class="muted" style="margin-top:10px">'+(spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds))+'</div></div>'+
- rarityCatalogHtml()+
  '<div class="card"><div class="cat">SPIN-ПРОМОКОД</div><div class="muted">Введите промокод на дополнительные бонусные вращения.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<h3>SHR MARKET</h3><div class="card"><div class="muted">SHR можно получить за продажу выпавших предметов и обменять на гарантированные награды.</div>'+claims+'</div><h3>Последние 5 выпадений</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
@@ -2307,7 +2357,6 @@ function bindSpin(){
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
- bindRarityCatalog();
  document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
 }
 async function applySpinPromo(){
@@ -2526,13 +2575,42 @@ function bindDropHistory(){
  })
 }
 
+async function caseCatalogHtml(){
+ spinState=await api('/api/spin/state');
+ const cases=spinState.case_catalog||[];
+ const html=cases.map(c=>{
+  const tiers=(c.tiers||[]).filter(t=>(spinState.rewards||[]).some(x=>x.tier===t.tier));
+  return '<div class="case-guide-card"><div class="case-guide-head"><div><div class="case-guide-name">'+esc(c.name)+'</div><div class="mini">'+tiers.length+' качеств</div></div><div class="case-guide-price">'+esc(c.price_label)+'</div></div>'+
+   '<div class="case-tier-row">'+tiers.map(t=>'<button type="button" class="case-tier-btn" data-case-tier="'+esc(c.id)+'" data-tier="'+esc(t.tier)+'"><div class="loot-cube '+cubeClass(t.tier)+'"><span>?</span></div><div class="rarity-card-title '+tierClass(t.tier)+'">'+tierLabel(t.tier)+'</div><div class="rarity-card-chance">'+Number(t.chance||0)+'%</div></button>').join('')+'</div>'+
+   '<div class="case-guide-note">Нажмите на качество, чтобы посмотреть предметы и цены по возрастанию.</div></div>'
+ }).join('');
+ return '<section class="hero"><div class="cat">КУБИКИ И ПРЕДМЕТЫ</div><h1>Каталог кейсов</h1><div class="muted">В каждом кейсе показаны только доступные ему качества. Цены предметов отсортированы от меньшей к большей.</div></section>'+
+ '<div class="case-guide">'+html+'</div><div class="rarity-modal hide" id="caseTierModal"><div class="rarity-sheet" id="caseTierSheet"></div></div>'
+}
+function openCaseTier(caseId,tier){
+ const cfg=(spinState.case_catalog||[]).find(x=>x.id===caseId);
+ const tierCfg=cfg&&(cfg.tiers||[]).find(x=>x.tier===tier);
+ const modal=document.getElementById('caseTierModal'),sheet=document.getElementById('caseTierSheet');
+ if(!cfg||!tierCfg||!modal||!sheet)return;
+ const items=(spinState.rewards||[]).filter(x=>x.tier===tier).slice().sort((a,b)=>Number(a.value_stars||0)-Number(b.value_stars||0));
+ sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div><div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+tierLabel(tier)+'</h3><div class="muted">'+esc(cfg.name)+' • шанс '+Number(tierCfg.chance||0)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="caseTierClose">Закрыть</button></div>'+
+ items.map(x=>'<div class="rarity-item-row"><div class="rarity-item-name">'+esc(x.name)+'</div><div class="rarity-item-price">🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+' / '+Number(x.value_stars||0).toLocaleString('ru-RU')+' SHR</div></div>').join('');
+ modal.classList.remove('hide');
+ const close=()=>modal.classList.add('hide');
+ document.getElementById('caseTierClose').addEventListener('click',close);
+ modal.addEventListener('click',e=>{if(e.target===modal)close()},{once:true})
+}
+function bindCaseCatalog(){
+ document.querySelectorAll('[data-case-tier]').forEach(b=>b.addEventListener('click',()=>openCaseTier(b.dataset.caseTier,b.dataset.tier)))
+}
+
 function settingsHtml(){
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  const sound=soundsEnabled();
  return '<section class="hero"><div class="cat">НАСТРОЙКИ</div><h1>Шрексич</h1><div class="muted">Управляйте анимацией, звуками и быстрыми разделами.</div></section>'+
  '<div class="settings-grid"><div class="setting-card"><h3>Анимация SPIN</h3><div class="muted">Обычный прокрут длится 30 секунд: быстрый старт и плавное замедление до полной остановки.</div><label class="switch-row"><span>Пропускать анимацию</span><input type="checkbox" id="settingsSkip" '+(skip?'checked':'')+'></label></div>'+
  '<div class="setting-card"><h3>Звуки эффектов</h3><div class="muted">Прокрут, остановка, выпадение, продажа и сохранение. SFX генерируются внутри приложения.</div><label class="switch-row"><span>Звуки включены</span><input type="checkbox" id="settingsSound" '+(sound?'checked':'')+'></label></div></div>'+
- '<div class="sticker-grid">'+sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+sticker('История дропов','Фильтр по времени и редкости','history','st-purple','data-go="drop-history"')+sticker('Поддержка','Обращения и помощь','support','st-blue','data-go="support"')+'</div>'
+ '<div class="sticker-grid">'+sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+sticker('Кубики и предметы','Кейсы, качества и цены','cases','st-gold','data-go="case-catalog"')+sticker('История дропов','Фильтр по времени и редкости','history','st-purple','data-go="drop-history"')+sticker('Поддержка','Обращения и помощь','support','st-blue','data-go="support"')+'</div>'
 }
 function bindSettings(){
  const a=document.getElementById('settingsSkip');if(a)a.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',a.checked?'1':'0'));
@@ -2625,6 +2703,7 @@ async function render(){
   else if(tab==='referral'){app.innerHTML=await referralHtml();bindReferral()}
   else if(tab==='support'){app.innerHTML=supportHtml();bindSupport()}
   else if(tab==='settings'){app.innerHTML=settingsHtml();bindSettings()}
+  else if(tab==='case-catalog'){app.innerHTML=await caseCatalogHtml();bindCaseCatalog()}
   else if(tab==='drop-history'){app.innerHTML=await dropHistoryHtml();bindDropHistory()}
   addHomeExit()
  }catch(e){showFatal(e.message)}
