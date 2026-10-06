@@ -2268,6 +2268,19 @@ async function spinOnce(){
  const skip=!!document.getElementById('skipSpinAnimation')?.checked;
  b.disabled=true;b.textContent=skip?'ПОЛУЧАЕМ НАГРАДУ…':'КРУТИМ…';
  if(result)result.textContent='';
+ // Unlock Web Audio synchronously from the user's tap so iOS/Telegram WebView
+ // can still play the rarity drop sound after the server response arrives.
+ if(soundsEnabled()){
+  const ac=getAudio();
+  if(ac){
+   try{
+    const o=ac.createOscillator(),g=ac.createGain();
+    o.frequency.value=1;g.gain.value=.000001;
+    o.connect(g);g.connect(ac.destination);
+    o.start();o.stop(ac.currentTime+.015)
+   }catch(_){}
+  }
+ }
  try{
   const d=await api('/api/spin/free',{method:'POST'});
   lastSpinReward=d.reward;
