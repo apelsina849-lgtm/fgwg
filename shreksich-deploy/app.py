@@ -182,6 +182,11 @@ PREMIUM_CASES = {
         "id":"APEX","name":"Apex Case","stars":199,"product_id":-19901,
         "tiers":["RED","GOLD"],"subtitle":"Гарантированный красный или золотой предмет"
     },
+    "MYTHIC": {
+        "id":"MYTHIC","name":"Mythic Case","stars":499,"product_id":-49901,
+        "tiers":["RED","GOLD"],"min_value":230,
+        "subtitle":"Гарантированный выбор из топовых красных и золотых предметов"
+    },
 }
 
 SHR_REWARDS = [
@@ -1020,7 +1025,12 @@ async def create_case_order(body: CaseOrderIn, x_telegram_init_data: str | None 
     if not cfg:
         raise HTTPException(404,"Кейс не найден")
     reward = next(
-        (x for x in SPIN_REWARDS if x["name"] == body.reward_name and x["tier"] in cfg["tiers"]),
+        (
+            x for x in SPIN_REWARDS
+            if x["name"] == body.reward_name
+            and x["tier"] in cfg["tiers"]
+            and int(x["value_stars"]) >= int(cfg.get("min_value",0))
+        ),
         None
     )
     if not reward:
@@ -1155,7 +1165,7 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "cases":[
         {
           "id":cfg["id"],"name":cfg["name"],"stars":cfg["stars"],"tiers":cfg["tiers"],"subtitle":cfg["subtitle"],
-          "items":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS if x["tier"] in cfg["tiers"]]
+          "items":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS if x["tier"] in cfg["tiers"] and int(x["value_stars"]) >= int(cfg.get("min_value",0))]
         }
         for cfg in PREMIUM_CASES.values()
       ]
@@ -2013,14 +2023,14 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .spin-result{min-height:22px;margin-top:10px;font-size:13px;font-weight:850;text-align:center}
 .spin-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:11px}.spin-stat .price{font-size:17px}
 .case-shelf{margin:14px 0 18px}.case-shelf h3{margin:0 0 10px}
-.case-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.case-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
 .case-card{position:relative;overflow:hidden;min-height:176px;padding:13px 10px;border-radius:20px;background:#111418;border:1px solid #2b3036;text-align:center;cursor:pointer}
 .case-card:active{transform:scale(.975)}.case-card:before{content:"";position:absolute;inset:auto -30% -55% -30%;height:120px;background:radial-gradient(circle,currentColor 0%,transparent 70%);opacity:.16;pointer-events:none}
 .case-card .loot-cube{width:58px;height:58px;border-radius:15px;font-size:27px;margin:2px auto 10px}
 .case-name{font-size:13px;font-weight:950;line-height:1.1}.case-price{font-size:19px;font-weight:1000;margin:7px 0 3px}.case-desc{font-size:9.5px;color:#aeb5bd;line-height:1.25}
-.case-card.tactical{color:#65a9ff;border-color:#265caa}.case-card.elite{color:#c982ff;border-color:#7434a6}.case-card.apex{color:#ffd65a;border-color:#9a6d00;box-shadow:0 0 24px #ffc40022}
+.case-card.tactical{color:#65a9ff;border-color:#265caa}.case-card.elite{color:#c982ff;border-color:#7434a6}.case-card.apex{color:#ffd65a;border-color:#9a6d00;box-shadow:0 0 24px #ffc40022}.case-card.mythic{color:#ff6b6b;border-color:#c32626;box-shadow:0 0 32px #ff262644,inset 0 0 30px #6b090922;animation:caseMythicPulse 1.15s ease-in-out infinite}@keyframes caseMythicPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
 .case-buy-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-top:1px solid #252a30}.case-buy-info{min-width:0}.case-buy-name{font-weight:900;line-height:1.25}.case-buy-price{font-size:11px;color:#9299a1;margin-top:3px}.case-buy-btn{flex:0 0 auto;padding:9px 11px;background:linear-gradient(135deg,#ffd12d,#f5a900);color:#181000}
-@media(max-width:430px){.case-grid{grid-template-columns:1fr}.case-card{min-height:116px;display:grid;grid-template-columns:70px 1fr;grid-template-rows:auto auto auto;column-gap:8px;text-align:left;align-items:center}.case-card .loot-cube{grid-row:1/4;margin:auto}.case-name,.case-price,.case-desc{margin-left:0}.case-price{margin:0}}
+@media(max-width:760px){.case-grid{grid-template-columns:1fr}.case-card{min-height:116px;display:grid;grid-template-columns:70px 1fr;grid-template-rows:auto auto auto;column-gap:8px;text-align:left;align-items:center}.case-card .loot-cube{grid-row:1/4;margin:auto}.case-name,.case-price,.case-desc{margin-left:0}.case-price{margin:0}}
 .rarity-catalog{margin:18px 0 8px}
 .rarity-catalog-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:10px}
 .rarity-catalog-head h3{margin:0}.rarity-catalog-head .mini{text-align:right}
@@ -2408,8 +2418,8 @@ function premiumCasesHtml(){
  const cases=spinState.cases||[];
  if(!cases.length)return '';
  return '<section class="case-shelf"><h3>Премиум-кейсы</h3><div class="case-grid">'+cases.map(c=>{
-  const cls=c.id==='TACTICAL'?'tactical':c.id==='ELITE'?'elite':'apex';
-  const visual=c.id==='TACTICAL'?'BLUE':c.id==='ELITE'?'PURPLE':'GOLD';
+  const cls=c.id==='TACTICAL'?'tactical':c.id==='ELITE'?'elite':c.id==='MYTHIC'?'mythic':'apex';
+  const visual=c.id==='TACTICAL'?'BLUE':c.id==='ELITE'?'PURPLE':c.id==='MYTHIC'?'RED':'GOLD';
   return '<button type="button" class="case-card '+cls+'" data-case-open="'+c.id+'"><div class="loot-cube '+cubeClass(visual)+'"><span>?</span></div><div class="case-name">'+esc(c.name)+'</div><div class="case-price">'+c.stars+' ⭐</div><div class="case-desc">'+esc(c.subtitle)+'</div></button>'
  }).join('')+'</div><div class="mini" style="margin-top:8px">Платные кейсы без случайной ставки: предмет выбирается до оплаты.</div></section>'+
  '<div class="rarity-modal hide" id="caseModal"><div class="rarity-sheet" id="caseSheet"></div></div>'
@@ -2417,7 +2427,7 @@ function premiumCasesHtml(){
 function openPremiumCase(caseId){
  const cfg=(spinState.cases||[]).find(x=>x.id===caseId),modal=document.getElementById('caseModal'),sheet=document.getElementById('caseSheet');
  if(!cfg||!modal||!sheet)return;
- const visual=cfg.id==='TACTICAL'?'BLUE':cfg.id==='ELITE'?'PURPLE':'GOLD';
+ const visual=cfg.id==='TACTICAL'?'BLUE':cfg.id==='ELITE'?'PURPLE':cfg.id==='MYTHIC'?'RED':'GOLD';
  sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(visual)+'"><span>?</span></div><div class="rarity-sheet-title"><h3>'+esc(cfg.name)+' • '+cfg.stars+' ⭐</h3><div class="muted">'+esc(cfg.subtitle)+' • выберите предмет</div></div><button type="button" class="rarity-close" id="caseClose">Закрыть</button></div>'+
  (cfg.items||[]).map(x=>'<div class="case-buy-row"><div class="case-buy-info"><div class="case-buy-name '+tierClass(x.tier)+'">'+esc(x.name)+'</div><div class="case-buy-price">'+tierLabel(x.tier)+' • оценка 🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+'</div></div><button class="case-buy-btn" data-case-buy="'+cfg.id+'" data-case-item="'+esc(x.name)+'">Купить '+cfg.stars+' ⭐</button></div>').join('');
  modal.classList.remove('hide');
