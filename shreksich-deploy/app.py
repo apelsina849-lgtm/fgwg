@@ -2591,8 +2591,8 @@ async function spinOnce(){
  setSpinNavigationLocked(true);
  // Start audio from the user's tap so Telegram/iOS cannot suspend it while the request is in flight.
  unlockAudio();
- if(!skip){beginAudioHold();startSpinSound(30000)}
- else{tone(523.25,.09,.018,'sine')}
+ if(!skip)beginAudioHold();
+ else tone(523.25,.09,.018,'sine');
  try{
   const d=await api('/api/spin/free',{method:'POST'});
   lastSpinReward=d.reward;
@@ -2604,6 +2604,7 @@ async function spinOnce(){
    showDropFx(d.reward);
    setSpinNavigationLocked(false)
   }else{
+   startSpinSound(30000);
    await animateSpinRight(track,windowEl,d.reward);
    stopSpinSound();sfxStop();
    await sleep(220);
