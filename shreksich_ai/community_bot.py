@@ -23,6 +23,8 @@ AI_MODEL = os.getenv("SHREKSICH_AI_MODEL", "")
 VISION_MODEL = os.getenv("SHREKSICH_VISION_MODEL", "")
 TRANSCRIBE_URL = os.getenv("SHREKSICH_TRANSCRIBE_URL", "")
 VOICE_MODEL = os.getenv("SHREKSICH_VOICE_MODEL", "")
+TTS_URL = os.getenv("SHREKSICH_TTS_URL", "")
+TTS_MODEL = os.getenv("SHREKSICH_TTS_MODEL", "")
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("shreksich-ai")
 QUESTIONS = [
@@ -122,6 +124,21 @@ def transcribe_voice(file_id):
     with urllib.request.urlopen(request,timeout=35) as response:
         result=json.load(response)
     return result.get("text","")[:1500]
+
+def tts_audio(text):
+    if not (TTS_URL and AI_KEY and TTS_MODEL): return None
+    body={"model":TTS_MODEL,"input":text[:700],"voice":"alloy","response_format":"opus"}
+    req=urllib.request.Request(TTS_URL,data=json.dumps(body).encode(),headers={"Authorization":"Bearer "+AI_KEY,"Content-Type":"application/json"})
+    with urllib.request.urlopen(req,timeout=35) as response:
+        audio=response.read(2_000_000)
+    return audio if audio else None
+
+def multipart_voice(chat_id,audio):
+    boundary="----shreksichupload"
+    fields=("--"+boundary+"\\r\\nContent-Disposition: form-data; name=\"chat_id\"\\r\\n\\r\\n"+str(chat_id)+"\\r\\n--"+boundary+"\\r\\nContent-Disposition: form-data; name=\"voice\"; filename=\"reply.ogg\"\\r\\nContent-Type: audio/ogg\\r\\n\\r\\n").encode()+audio+("\\r\\n--"+boundary+"--\\r\\n").encode()
+    req=urllib.request.Request("https://api.telegram.org/bot"+TOKEN+"/sendVoice",data=fields,headers={"Content-Type":"multipart/form-data; boundary="+boundary})
+    with urllib.request.urlopen(req,timeout=25) as response:
+        return json.load(response)
 
 async def call(method, **kwargs):
     return await asyncio.to_thread(api, method, kwargs)
