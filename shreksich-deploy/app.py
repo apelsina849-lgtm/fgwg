@@ -1417,6 +1417,36 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Shreksich Shop", lifespan=lifespan)
 
 
+
+class SellerApplicationIn(BaseModel):
+    display_name: str = Field(min_length=3,max_length=72)
+    contact: str = Field(min_length=3,max_length=120)
+    experience: str = Field(default="",max_length=700)
+    rules_confirmed: bool = False
+
+class SellerListingIn(BaseModel):
+    category: str = Field(min_length=2,max_length=80)
+    name: str = Field(min_length=3,max_length=120)
+    description: str = Field(min_length=8,max_length=1200)
+    stars_price: int = Field(ge=1,le=100000)
+    stock: int = Field(ge=1,le=1000)
+
+class SellerRestockIn(BaseModel):
+    stock_to_add: int = Field(ge=1,le=1000)
+
+class SellerDeliveryIn(BaseModel):
+    note: str = Field(min_length=5,max_length=700)
+
+class AdminSellerDecisionIn(BaseModel):
+    status: str
+    commission_pct: int = Field(default=20,ge=5,le=60)
+
+class AdminSellerListingDecisionIn(BaseModel):
+    status: str
+
+class AdminSellerSettlementIn(BaseModel):
+    note: str = Field(min_length=5,max_length=400)
+
 class OrderIn(BaseModel):
     product_id: int
     uid: str = Field(min_length=3, max_length=64)
@@ -1560,6 +1590,271 @@ def shop_order_shares(stars_amount: int, commission_pct: int):
     pct=max(0,min(100,int(commission_pct)))
     owner=(total*pct+99)//100
     return (total-owner,owner)
+
+
+@app.get("/api/seller")
+async def seller_dashboard(x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid=int(u["id"])
+    conn=await db()
+    try:
+        profile=await (await conn.execute(
+            "SELECT * FROM shop_sellers WHERE telegram_id=?",(uid,)
+        )).fetchone()
+        listings=await (await conn.execute(
+            "SELECT id,name,category,description,stars_price,seller_stock,seller_status,active "
+            "FROM products WHERE seller_id=? ORDER BY id DESC",(uid,)
+        )).fetchall()
+        # No buyer data is shared before a payment is confirmed.
+        jobs=await (await conn.execute(
+            "SELECT id,number,product_name,stars_amount,seller_share_stars,platform_share_stars,"
+            "status,uid,nickname,comment,seller_delivery_note,updated_at "
+            "FROM orders WHERE seller_id=? AND telegram_charge_id<>'' ORDER BY id DESC LIMIT 100",
+            (uid,)
+        )).fetchall()
+        settlements=await (await conn.execute(
+            "SELECT order_id,seller_stars,note FROM seller_settlement_log WHERE seller_id=? "
+            "ORDER BY id DESC LIMIT 100",(uid,)
+        )).fetchall()
+    finally:
+        await conn.close()
+    paid_ids={int(x["order_id"]) for x in settlements}
+    return {"profile":dict(profile) if profile else None,
+            "listings":[dict(x) for x in listings],
+            "orders":[{**dict(x),"settled":int(x["id"]) in paid_ids} for x in jobs],
+            "settlements":[dict(x) for x in settlements]}
+
+@app.post("/api/seller/apply")
+async def seller_apply(body: SellerApplicationIn, x_telegram_init_data: str | None = Header(default=None)):
+    u=await current_user(x_telegram_init_data)
+    if not body.rules_confirmed:
+        raise HTTPException(400,"Подтвердите ответственность за законность товара и наличие остатков")
+    uid=int(u["id"])
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            old=await (await conn.execute(
+                "SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,)
+            )).fetchone()
+            if old and old["status"]=="blocked":
+                await conn.rollback()
+                raise HTTPException(403,"Заявка заблокирована администрацией")
+            if old and old["status"]=="approved":
+                await conn.rollback()
+                raise HTTPException(409,"Вы уже продавец")
+            await conn.execute(
+                "INSERT INTO shop_sellers(telegram_id,display_name,contact,experience,rules_confirmed,status) "
+                "VALUES(?,?,?,?,1,'pending') "
+                "ON CONFLICT(telegram_id) DO UPDATE SET display_name=excluded.display_name,"
+                "contact=excluded.contact,experience=excluded.experience,rules_confirmed=1,"
+                "status='pending',updated_at=CURRENT_TIMESTAMP",
+                (uid,body.display_name.strip(),body.contact.strip(),body.experience.strip())
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+    try:
+        await tg("sendMessage",{"chat_id":OWNER_ID,"text":"🧾 Новая заявка продавца: "+body.display_name[:72]+
+                  "\nПроверьте раздел «Продавцы» в админ-панели."})
+    except Exception:
+        pass
+    return {"ok":True,"status":"pending"}
+
+@app.post("/api/seller/listings")
+async def seller_create_listing(body: SellerListingIn, x_telegram_init_data: str | None = Header(default=None)):
+    u=await current_user(x_telegram_init_data)
+    uid=int(u["id"])
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            profile=await (await conn.execute(
+                "SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,)
+            )).fetchone()
+            if not profile or profile["status"]!="approved":
+                await conn.rollback()
+                raise HTTPException(403,"Только подтверждённый продавец может добавлять товары")
+            count=await (await conn.execute(
+                "SELECT COUNT(*) c FROM products WHERE seller_id=?",(uid,)
+            )).fetchone()
+            if int(count["c"] or 0)>=100:
+                await conn.rollback()
+                raise HTTPException(409,"Максимум 100 товаров на одного продавца")
+            cursor=await conn.execute(
+                "INSERT INTO products(category,name,description,price,stars_price,active,sort_order,"
+                "seller_id,seller_stock,seller_status) VALUES(?,?,?,?,?,0,100,?,?,'pending')",
+                (body.category.strip(),body.name.strip(),body.description.strip(),body.stars_price,
+                 body.stars_price,uid,body.stock)
+            )
+            await conn.commit()
+            lid=cursor.lastrowid
+        finally:
+            await conn.close()
+    return {"ok":True,"id":lid,"status":"pending"}
+
+@app.post("/api/seller/listings/{listing_id}/restock")
+async def seller_restock(listing_id:int, body:SellerRestockIn,
+                         x_telegram_init_data: str | None = Header(default=None)):
+    u=await current_user(x_telegram_init_data)
+    uid=int(u["id"])
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            profile=await (await conn.execute(
+                "SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,)
+            )).fetchone()
+            if not profile or profile["status"]!="approved":
+                await conn.rollback()
+                raise HTTPException(403,"Нет доступа")
+            cur=await conn.execute(
+                "UPDATE products SET seller_stock=seller_stock+? WHERE id=? AND seller_id=? "
+                "AND seller_stock+?<=100000",
+                (body.stock_to_add,listing_id,uid,body.stock_to_add)
+            )
+            if cur.rowcount!=1:
+                await conn.rollback()
+                raise HTTPException(404,"Товар не найден или превышен лимит остатков")
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True}
+
+@app.post("/api/seller/orders/{order_id}/delivered")
+async def seller_mark_delivered(order_id:int,body:SellerDeliveryIn,
+                                x_telegram_init_data: str | None = Header(default=None)):
+    u=await current_user(x_telegram_init_data)
+    uid=int(u["id"])
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            seller=await (await conn.execute(
+                "SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,)
+            )).fetchone()
+            order=await (await conn.execute(
+                "SELECT id,status,telegram_charge_id FROM orders WHERE id=? AND seller_id=?",
+                (order_id,uid)
+            )).fetchone()
+            if not seller or seller["status"]!="approved" or not order or not order["telegram_charge_id"]\
+               or order["status"] not in ("Оплачен","Принят","В работе"):
+                await conn.rollback()
+                raise HTTPException(409,"Заказ недоступен для подтверждения")
+            await conn.execute(
+                "UPDATE orders SET status='Проверка выдачи',seller_delivery_note=?,"
+                "seller_submitted_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (body.note.strip(),order_id)
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+    try:
+        await tg("sendMessage",{"chat_id":OWNER_ID,
+            "text":f"✅ Продавец отметил заказ #{order_id} выданным. Проверьте заказ в Owner Panel."})
+    except Exception:
+        pass
+    return {"ok":True,"status":"Проверка выдачи"}
+
+@app.get("/api/admin/sellers")
+async def admin_sellers(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        sellers=await (await conn.execute(
+            "SELECT s.*,u.token FROM shop_sellers s LEFT JOIN users u "
+            "ON u.telegram_id=s.telegram_id ORDER BY s.created_at DESC"
+        )).fetchall()
+        listings=await (await conn.execute(
+            "SELECT p.*,s.display_name seller_name FROM products p "
+            "LEFT JOIN shop_sellers s ON s.telegram_id=p.seller_id "
+            "WHERE p.seller_id>0 ORDER BY p.id DESC LIMIT 500"
+        )).fetchall()
+        jobs=await (await conn.execute(
+            "SELECT o.id,o.number,o.product_name,o.status,o.stars_amount,o.seller_share_stars,"
+            "o.platform_share_stars,o.seller_delivery_note,o.telegram_charge_id,o.seller_id,"
+            "s.display_name seller_name,COALESCE(x.id,0) settled_id "
+            "FROM orders o JOIN shop_sellers s ON s.telegram_id=o.seller_id "
+            "LEFT JOIN seller_settlement_log x ON x.order_id=o.id "
+            "WHERE o.seller_id>0 AND o.telegram_charge_id<>'' ORDER BY o.id DESC LIMIT 250"
+        )).fetchall()
+    finally:
+        await conn.close()
+    return {"sellers":[dict(x) for x in sellers],"listings":[dict(x) for x in listings],
+            "orders":[dict(x) for x in jobs]}
+
+@app.patch("/api/admin/sellers/{seller_id}")
+async def admin_seller_decision(seller_id:int,body:AdminSellerDecisionIn,
+                                x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    if body.status not in ("approved","blocked"):
+        raise HTTPException(400,"Некорректный статус")
+    async with db_write_lock:
+        conn=await db()
+        try:
+            cur=await conn.execute(
+                "UPDATE shop_sellers SET status=?,commission_pct=?,updated_at=CURRENT_TIMESTAMP "
+                "WHERE telegram_id=?",(body.status,body.commission_pct,seller_id)
+            )
+            if cur.rowcount!=1:
+                raise HTTPException(404,"Продавец не найден")
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True}
+
+@app.patch("/api/admin/seller-listings/{listing_id}")
+async def admin_seller_listing(listing_id:int,body:AdminSellerListingDecisionIn,
+                               x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    if body.status not in ("active","rejected","paused"):
+        raise HTTPException(400,"Некорректный статус товара")
+    async with db_write_lock:
+        conn=await db()
+        try:
+            cur=await conn.execute(
+                "UPDATE products SET seller_status=?,active=? WHERE id=? AND seller_id>0",
+                (body.status,1 if body.status=="active" else 0,listing_id)
+            )
+            if cur.rowcount!=1:
+                raise HTTPException(404,"Товар продавца не найден")
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True}
+
+@app.post("/api/admin/seller-orders/{order_id}/settle")
+async def admin_settle_seller_order(order_id:int,body:AdminSellerSettlementIn,
+                                   x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            order=await (await conn.execute(
+                "SELECT seller_id,seller_share_stars,status,telegram_charge_id "
+                "FROM orders WHERE id=?",(order_id,)
+            )).fetchone()
+            if not order or not int(order["seller_id"] or 0) or order["status"]!="Выполнен"\
+               or not order["telegram_charge_id"]:
+                await conn.rollback()
+                raise HTTPException(409,"Расчёт допускается только после подтверждения выдачи товара")
+            old=await (await conn.execute(
+                "SELECT id FROM seller_settlement_log WHERE order_id=?",(order_id,)
+            )).fetchone()
+            if old:
+                await conn.rollback()
+                raise HTTPException(409,"Этот заказ уже отмечен оплаченным продавцу")
+            await conn.execute(
+                "INSERT INTO seller_settlement_log(order_id,seller_id,seller_stars,note) "
+                "VALUES(?,?,?,?)",
+                (order_id,int(order["seller_id"]),int(order["seller_share_stars"]),body.note.strip())
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"settlement_recorded":True}
+
 
 @app.get("/api/catalog")
 async def catalog():
