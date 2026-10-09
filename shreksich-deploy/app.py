@@ -3641,6 +3641,72 @@ input,textarea,select{background:#0a1625;border-color:#2c455e}
 @keyframes roul-hub-pulse{0%,100%{box-shadow:0 3px 15px #000a,0 0 0 2px #f5ce6599,0 0 17px #ffd25a65}50%{box-shadow:0 4px 17px #000a,0 0 0 4px #ffe191a6,0 0 28px #ffd25ab5}}
 @media(prefers-reduced-motion:reduce){.roul-hub-action:not(:disabled){animation:none}}
 
+
+/* Rarity colors: match the item tier, overriding the old brown/gold farm pills */
+.farm-ui .farm-chance{--rr:#a6b6c6;--rb:#2c3b4a;--rd:#102030;display:inline-flex;align-items:center;gap:5px;background:var(--rd)!important;color:var(--rr)!important;border:1px solid var(--rb)!important;box-shadow:0 0 11px color-mix(in srgb,var(--rr) 13%,transparent);font-weight:850;border-radius:22px;padding:9px 12px}
+.farm-ui .farm-chance.tier-gray{--rr:#c3ccd6;--rb:#687989;--rd:#202c39}
+.farm-ui .farm-chance.tier-cyan{--rr:#76e9f5;--rb:#1985ad;--rd:#102b3c}
+.farm-ui .farm-chance.tier-blue{--rr:#82b9ff;--rb:#2767b3;--rd:#102343}
+.farm-ui .farm-chance.tier-purple{--rr:#ce9bff;--rb:#7a46aa;--rd:#2b1c43}
+.farm-ui .farm-chance.tier-pink{--rr:#ffa1d3;--rb:#ad458c;--rd:#3b1d37}
+.farm-ui .farm-chance.tier-red{--rr:#ff9a92;--rb:#aa394b;--rd:#3d1727}
+.farm-ui .farm-chance.tier-gold{--rr:#ffe081;--rb:#bd872c;--rd:#382b16}
+.shx-farm-catalog .farm-filterbar button.active{background:#243248;color:#e8f4ff;border-color:#79a3c3}
+.shx-farm-catalog .farm-filterbar button[data-farm-filter="GRAY"].active,.farm-filterbar button[data-farm-filter="GRAY"].active{background:#273340;color:#d8e0eb;border-color:#7e91a2}
+.shx-farm-catalog .farm-filterbar button[data-farm-filter="CYAN"].active,.farm-filterbar button[data-farm-filter="CYAN"].active{background:#10374a;color:#7deaf9;border-color:#2dacc8}
+.shx-farm-catalog .farm-filterbar button[data-farm-filter="BLUE"].active,.farm-filterbar button[data-farm-filter="BLUE"].active{background:#122b57;color:#8abaff;border-color:#488bea}
+.shx-farm-catalog .farm-filterbar button[data-farm-filter="PURPLE"].active,.farm-filterbar button[data-farm-filter="PURPLE"].active{background:#35204f;color:#d2a7ff;border-color:#9360d8}
+.shx-farm-catalog .farm-filterbar button[data-farm-filter="PINK"].active,.farm-filterbar button[data-farm-filter="PINK"].active{background:#48203e;color:#ffa8d6;border-color:#d66aac}
+.shx-farm-catalog .farm-filterbar button[data-farm-filter="RED"].active,.farm-filterbar button[data-farm-filter="RED"].active{background:#471d26;color:#ffa29b;border-color:#df6572}
+.shx-farm-catalog .farm-filterbar button[data-farm-filter="GOLD"].active,.farm-filterbar button[data-farm-filter="GOLD"].active{background:#47340f;color:#ffe08d;border-color:#daa94c}
+/* Case contents: individual 3D vector stickers, framed by rarity */
+.case-loot-sticker{--loot:#bfcbd7;--loot-dark:#233043;--loot-glow:#bfcbd733;position:relative;display:grid;place-items:center;width:82px;height:87px;margin:0 auto;isolation:isolate;flex:0 0 auto}
+.case-loot-sticker[data-tier="GRAY"]{--loot:#bfcbd7;--loot-dark:#253240;--loot-glow:#bfcbd733}
+.case-loot-sticker[data-tier="CYAN"]{--loot:#6ae4f1;--loot-dark:#0b3950;--loot-glow:#4ddff244}
+.case-loot-sticker[data-tier="BLUE"]{--loot:#83b7ff;--loot-dark:#112e64;--loot-glow:#438dff55}
+.case-loot-sticker[data-tier="PURPLE"]{--loot:#cf91ff;--loot-dark:#3b1d60;--loot-glow:#aa67ff66}
+.case-loot-sticker[data-tier="PINK"]{--loot:#ff9bdb;--loot-dark:#571e4a;--loot-glow:#ff69c866}
+.case-loot-sticker[data-tier="RED"]{--loot:#ff858b;--loot-dark:#641b2b;--loot-glow:#ff465c66}
+.case-loot-sticker[data-tier="GOLD"]{--loot:#ffe18a;--loot-dark:#644010;--loot-glow:#ffbf4077}
+.case-loot-sticker:before{content:"";position:absolute;inset:7px 4px 5px 4px;border-radius:18px;background:linear-gradient(135deg,var(--loot-dark),#0b1422 68%);border:2px solid var(--loot);box-shadow:inset 0 1px 7px #ffffff36,0 0 16px var(--loot-glow),0 10px 16px #0007;transform:perspective(140px) rotateX(4deg) rotateY(-8deg)}
+.case-loot-sticker:after{content:"";position:absolute;inset:13px 12px auto 13px;height:19px;border-radius:14px;background:linear-gradient(#ffffff55,transparent);filter:blur(5px);pointer-events:none}
+.case-loot-sticker svg{position:relative;z-index:2;width:75px;height:75px;filter:drop-shadow(2px 6px 3px #0009)}
+.case-loot-sticker.compact{width:48px;height:52px}.case-loot-sticker.compact:before{inset:5px 1px}.case-loot-sticker.compact svg{width:47px;height:47px}
+.case-loot-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:11px 0}
+.case-loot-card{display:flex;gap:7px;align-items:center;min-width:0;border:1px solid var(--loot,#52667e);background:linear-gradient(125deg,#11243a,#0a1727);border-radius:15px;padding:7px 6px;color:#ebf3ff;box-shadow:inset 0 1px #ffffff15;--loot:#566f8a}
+.case-loot-card[data-tier="GRAY"]{--loot:#8797a8}.case-loot-card[data-tier="CYAN"]{--loot:#269fb5}.case-loot-card[data-tier="BLUE"]{--loot:#377be0}.case-loot-card[data-tier="PURPLE"]{--loot:#8c4ed0}.case-loot-card[data-tier="PINK"]{--loot:#d0529f}.case-loot-card[data-tier="RED"]{--loot:#c94b5d}.case-loot-card[data-tier="GOLD"]{--loot:#dcac4b}
+.case-loot-card-name{font-size:10px;font-weight:900;line-height:1.28;overflow-wrap:anywhere}
+.case-loot-card-meta{font-size:10px;margin-top:4px;color:#bfcfe0}
+.case-loot-card .case-loot-sticker{width:55px;height:57px}.case-loot-card .case-loot-sticker svg{width:50px;height:50px}
+.case-loot-card .case-loot-sticker:before{inset:4px 0}
+.case-loot-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:47vh;overflow-y:auto;margin-top:10px;padding:3px}
+.case-loot-details .case-loot-card{min-height:79px}
+.case-guide-card .case-loot-preview{margin-top:14px;border-top:1px solid #2c4560;padding-top:9px}
+.case-guide-card .case-loot-preview-title{font-size:12px;color:#a8c9e5;font-weight:900}
+.case-tier-btn .case-loot-sticker{width:62px;height:62px}.case-tier-btn .case-loot-sticker svg{width:60px;height:60px}.case-tier-btn .case-loot-sticker:before{inset:3px}
+.spin-result .case-loot-sticker,.roul-result .case-loot-sticker{width:106px;height:112px;margin:7px auto}
+.spin-result .case-loot-sticker svg,.roul-result .case-loot-sticker svg{width:95px;height:95px}
+.case-farm-feature{position:relative;overflow:hidden;border-radius:23px;margin:21px 0;border:1px solid #667b4a;background:linear-gradient(145deg,#19332f,#0e1b28 68%,#43321a);box-shadow:0 12px 30px #0008}
+.case-farm-feature:before{content:"";position:absolute;inset:-30%;background:radial-gradient(circle at 70% 20%,#e8c46f2a,transparent 36%),radial-gradient(circle at 8% 85%,#76d49e18,transparent 35%);pointer-events:none}
+.case-farm-scene{position:relative;height:167px;overflow:hidden}
+.case-farm-scene .farm-landscape{border:0;border-radius:0;box-shadow:none;min-height:0;height:100%}
+.case-farm-scene .farm-landscape svg{min-height:0;height:100%;width:100%;aspect-ratio:auto}
+.case-farm-scene .farm-landscape-title{font-size:11px}
+.case-farm-sky{position:absolute;left:68%;top:21px;z-index:2;font-size:23px;animation:caseFarmBob 3.4s ease-in-out infinite;filter:drop-shadow(0 4px 3px #0009)}
+.case-farm-feature-content{position:relative;padding:14px}
+.case-farm-feature-title{font-size:19px;font-weight:1000;color:#f0f8e8}
+.case-farm-feature-desc{font-size:11px;line-height:1.5;color:#b4ccba;margin:8px 0 11px}
+.case-farm-icons{display:flex;gap:7px;align-items:center;justify-content:space-between;margin-bottom:11px}
+.case-farm-icons .farm-collectible{width:66px;height:63px;transform:scale(.8);transform-origin:center}
+.case-farm-feature-stats{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.case-farm-feature-stats span{font-size:10px;border-radius:10px;background:#0f2630;border:1px solid #4b7667;padding:7px;color:#def5e5}
+.case-farm-enter{width:100%;font-size:14px;color:#163017;background:linear-gradient(135deg,#d9f6a3,#a2d673 70%,#6dba5e);box-shadow:0 5px 19px #69be6359}
+@keyframes caseFarmBob{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-10px) rotate(6deg)}}
+@media(max-width:390px){.case-loot-grid{grid-template-columns:1fr 1fr;gap:5px}.case-loot-card-name{font-size:9px}}
+@media(prefers-reduced-motion:reduce){.case-farm-sky{animation:none}}
+.farm-uc-need{margin:12px 0;padding:12px;border:1px solid #326b83;border-radius:13px;background:linear-gradient(125deg,#123045,#102231);color:#c8f4ff;font-size:12px;line-height:1.5}
+.farm-uc-need strong{color:#f0faff}
+
 </style>
 </head>
 <body>
@@ -4269,7 +4335,7 @@ async function rouletteHtml(){
  const hubMain=pending?'ПРИЗ':paid?'КЕЙС':!enabled?'ЗАКРЫТО':ready?'КРУТИТЬ':'ОЖИДАНИЕ';
  const hubSub=pending?'ЗАБЕРИ':paid?'ЗАБЕРИ':!enabled?'НЕДОСТУПНО':free>0?'БЕСПЛАТНО':ticket>0?'ЗА БИЛЕТ':'НЕТ СПИНОВ';
  const note=pending?'Приз уже выпал: сначала сохраните или продайте его.':paid?'Сначала заберите оплаченный кейс во вкладке «Кейсы».':!enabled?'Рулетка отключена администратором.':free>0?'Вращение бесплатное. Результат выбирает сервер.':ticket>0?'Будет использован один бонусный билет.':'Следующая бесплатная прокрутка через '+formatReset(spinState.next_reset_seconds);
- const history=(spinState.history||[]).filter(x=>x.source==='free'||x.source==='ticket').slice(0,5).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div><div class="mini">'+tierLabel(x.reward_tier)+' · '+formatDropDate(x.created_at)+'</div></div>').join('');
+ const history=(spinState.history||[]).filter(x=>x.source==='free'||x.source==='ticket').slice(0,5).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div><div class="mini">'+tierLabel(x.reward_tier)+'</div></div>').join('');
  const rouletteSkipDefault=localStorage.getItem('shx_roulette_skip_v1')==='1';
  const rouletteSoundEnabled=soundsEnabled();
  return '<div class="roul-page"><section class="hero roul-hero"><div class="cat">МЕТРО · КОЛЕСО ФОРТУНЫ</div><h1>Бесплатная <span class="gold">рулетка</span></h1><div class="muted">Настоящее круглое колесо, случайные призы и честные шансы.</div></section>'+
@@ -4387,7 +4453,7 @@ async function spinHtml(){
  spinState=await api('/api/spin/state');
  const paidReady=spinState.paid_case_opening||null;
  if(paidReady){selectedCaseId=paidReady.case_id;localStorage.setItem('shx_selected_case',selectedCaseId)}
- const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
+ const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div></div>').join('');
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0),pending=spinState.pending_drop||null,cfg=selectedCase();
  const adminFree=!!(cfg&&cfg.is_free),donation=Number(cfg&&cfg.donation_tickets||0);
@@ -4815,7 +4881,7 @@ async function farmHtml(){
  const items=(d.inventory||[]).slice().sort((a,b)=>FARM_TIER_ORDER_JS.indexOf(a.tier)-FARM_TIER_ORDER_JS.indexOf(b.tier)||Number(a.coins)-Number(b.coins)).map(x=>
   '<div class="farm-item"><div class="farm-item-head"><div class="farm-item-icon">'+farmItemSticker(x)+'</div><div><div class="farm-item-name">'+esc(x.name)+'</div><span class="farm-rarity-label '+esc(x.tier)+'">'+tierLabel(x.tier)+'</span><div class="farm-item-meta">В наличии: '+x.qty+' шт.</div></div></div><div class="farm-item-meta">За шт.: '+farmPrice(x.coins)+'<br>Итого: '+farmPrice(x.total_coins)+'</div><button class="secondary" data-farm-sell="'+esc(x.id)+'" data-farm-qty="'+x.qty+'">Продать '+x.qty+' шт.</button></div>'
  ).join('');
- const withdrawals=(d.withdrawals||[]).map(w=>'<div class="order"><div class="name">'+w.uc_amount+' UC • '+esc(w.status)+'</div><div class="mini">UID '+esc(w.pubg_uid)+' • '+formatDropDate(w.created_at)+'</div></div>').join('');
+ const withdrawals=(d.withdrawals||[]).map(w=>'<div class="order"><div class="name">'+w.uc_amount+' UC • '+esc(w.status)+'</div><div class="mini">PUBG UID: '+esc(w.pubg_uid)+'</div></div>').join('');
  const modules=(d.coin_upgrades||[]).map(m=>'<div class="farm-module"><div class="farm-module-header"><span class="farm-module-icon">'+esc(m.icon)+'</span>'+esc(m.name)+'</div><div class="farm-module-desc">'+esc(m.description)+'</div><div class="mini">Уровень '+m.level+' / '+m.max_level+'</div><div class="farm-module-progress"><span style="width:'+(100*m.level/m.max_level)+'%"></span></div><button class="secondary" data-farm-module="'+esc(m.id)+'" '+(m.level>=m.max_level||d.shrek_coins<m.cost?'disabled':'')+'>'+(m.level>=m.max_level?'МАКС. УРОВЕНЬ':'УЛУЧШИТЬ • '+m.cost+' монет')+'</button></div>').join('');
  const targets=(d.uc_targets||[]).map(t=>'<div class="farm-uc-target '+(t.need_more<=0?'farm-uc-complete':'')+'"><b>'+t.uc+' UC</b><span>Нужно '+t.required_credits+' UC Credits<br>'+(t.need_more<=0?'Доступно для заявки':('Осталось '+t.need_more+' • ≈'+t.days_at_daily_rate+' дн. при ежедневном бонусе'))+'</span></div>').join('');
  const filters=[['ALL','Все'],['GRAY','Серые'],['CYAN','Голубые'],['BLUE','Синие'],['PURPLE','Фиолетовые'],['PINK','Розовые'],['RED','Красные'],['GOLD','Золотые']].map(([t,name])=>'<button data-farm-filter="'+t+'" class="'+(farmCatalogFilter===t?'active':'')+'">'+name+'</button>').join('');
@@ -4883,7 +4949,7 @@ async function dropHistoryHtml(){
  if(period==='custom'&&from)q.set('from_at',from);
  if(period==='custom'&&to)q.set('to_at',to);
  const d=await api('/api/spin/history?'+q.toString());
- const items=(d.items||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
+ const items=(d.items||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div></div>').join('');
  return '<section class="hero"><div class="cat">ИСТОРИЯ ДРОПОВ</div><h1>Все выпадения</h1><div class="muted">Фильтруйте историю по времени и качеству кубика.</div></section>'+
  '<div class="history-filters"><div class="history-filter-grid"><select id="historyTier"><option value="ALL">Все редкости</option><option value="GRAY">Серый</option><option value="CYAN">Голубой</option><option value="BLUE">Синий</option><option value="PURPLE">Фиолетовый</option><option value="PINK">Розовый</option><option value="RED">Красный</option><option value="GOLD">Золотой</option></select><button class="secondary" id="historyApply">Применить фильтр</button><input id="historyFrom" type="datetime-local" aria-label="С даты"><input id="historyTo" type="datetime-local" aria-label="По дату"></div>'+
  '<div class="history-periods"><button data-hperiod="all">Всё время</button><button data-hperiod="24h">24 часа</button><button data-hperiod="7d">7 дней</button><button data-hperiod="30d">30 дней</button><button data-hperiod="90d">90 дней</button><button data-hperiod="custom">Свой период</button></div></div>'+
