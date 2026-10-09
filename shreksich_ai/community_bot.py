@@ -424,8 +424,11 @@ async def handle_callback(query):
                     season=now//(30*86400)
                     conn.execute("INSERT INTO seasonal_xp(chat_id,user_id,season,xp) VALUES(?,?,?,?) ON CONFLICT(chat_id,user_id,season) DO UPDATE SET xp=xp+excluded.xp",(cid,uid,season,reward))
                     conn.execute("INSERT OR IGNORE INTO achievements(chat_id,user_id,code,awarded_at) VALUES(?,?,?,?)",(cid,uid,"first_win",now))
+                    winner=(query.get("from") or {})
+                    winner_name=(" ".join(filter(None,[winner.get("first_name"),winner.get("last_name")])) or winner.get("username") or "Игрок")[:80]
                     notice=f"🏆 Победа! +{reward} XP"
-                    await edit(cid,mid,"🏆 ВИКТОРИНА ЗАВЕРШЕНА\n\nПравильный ответ: "+QUESTIONS[row[0]][1][int(answer_id)]+"\n\n🎉 Победитель определён!",{"inline_keyboard":[]})
+                    result_text=f"🏆 ВИКТОРИНА ЗАВЕРШЕНА\n\n✅ Правильный ответ: {QUESTIONS[row[0]][1][int(answer_id)]}\n\n🥇 Победитель: {winner_name}\n🎁 Награда: +{reward} XP\n⭐ Опыт зачислен победителю!"
+                    await edit(cid,mid,result_text,{"inline_keyboard":[]})
         else:
             notice="Неизвестная кнопка."
     except Exception:
