@@ -1623,6 +1623,14 @@ def shop_order_shares(stars_amount: int, commission_pct: int):
 async def seller_dashboard(x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
     uid=int(u["id"])
+    async with db_write_lock:
+        sweep_conn=await db()
+        try:
+            await sweep_conn.execute("BEGIN IMMEDIATE")
+            await expire_seller_reservations(sweep_conn)
+            await sweep_conn.commit()
+        finally:
+            await sweep_conn.close()
     conn=await db()
     try:
         profile=await (await conn.execute(
@@ -1885,15 +1893,21 @@ async def admin_settle_seller_order(order_id:int,body:AdminSellerSettlementIn,
 
 @app.get("/api/catalog")
 async def catalog():
-    conn = await db()
-    rows = await (await conn.execute(
-        "SELECT p.*,s.display_name seller_name FROM products p "
-        "LEFT JOIN shop_sellers s ON s.telegram_id=p.seller_id "
-        "WHERE p.active=1 AND (p.seller_id=0 OR "
-        "(p.seller_status='active' AND p.seller_stock>0 AND s.status='approved')) "
-        "ORDER BY p.sort_order,p.id"
-    )).fetchall()
-    await conn.close()
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            await expire_seller_reservations(conn)
+            rows = await (await conn.execute(
+                "SELECT p.*,s.display_name seller_name FROM products p "
+                "LEFT JOIN shop_sellers s ON s.telegram_id=p.seller_id "
+                "WHERE p.active=1 AND (p.seller_id=0 OR "
+                "(p.seller_status='active' AND p.seller_stock>0 AND s.status='approved')) "
+                "ORDER BY p.sort_order,p.id"
+            )).fetchall()
+            await conn.commit()
+        finally:
+            await conn.close()
     return [dict(r) for r in rows]
 
 
