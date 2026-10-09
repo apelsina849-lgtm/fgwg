@@ -4152,9 +4152,9 @@ function openRarityModal(tier){
  const modal=document.getElementById('rarityModal'),sheet=document.getElementById('raritySheet');
  if(!modal||!sheet)return;
  const items=(spinState.rewards||[]).filter(x=>x.tier===tier).slice().sort((a,b)=>Number(a.value_stars||0)-Number(b.value_stars||0));
- sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div><div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+tierLabel(tier)+'</h3><div class="muted">Шанс качества: '+tierChance(tier)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="rarityClose">Закрыть</button></div>'+
- items.map(x=>'<div class="rarity-item-row"><div class="rarity-item-name">'+esc(x.name)+'</div><div class="rarity-item-price">🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+'</div></div>').join('');
- modal.classList.remove('hide');
+ sheet.innerHTML='<div class="rarity-sheet-head">'+caseLootSticker(items[0]||{name:'Metro',tier},true)+'<div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+tierLabel(tier)+'</h3><div class="muted">Шанс качества: '+tierChance(tier)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="rarityClose">Закрыть</button></div>'+
+ '<div class="case-loot-details">'+items.map(caseLootCard).join('')+'</div>';
+  modal.classList.remove('hide');
  const close=()=>modal.classList.add('hide');
  document.getElementById('rarityClose').addEventListener('click',close);
  modal.addEventListener('click',e=>{if(e.target===modal)close()},{once:true})
@@ -4602,7 +4602,6 @@ async function spinHtml(){
  const paidReady=spinState.paid_case_opening||null;
  if(paidReady){selectedCaseId=paidReady.case_id;localStorage.setItem('shx_selected_case',selectedCaseId)}
  const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div></div>').join('');
- const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0),pending=spinState.pending_drop||null,cfg=selectedCase();
  const adminFree=!!(cfg&&cfg.is_free),donation=Number(cfg&&cfg.donation_tickets||0);
  const paidForSelected=!!(paidReady&&cfg&&paidReady.case_id===cfg.id);
@@ -4637,7 +4636,7 @@ function bindSpin(){
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
  if(spinState&&spinState.pending_drop)restorePendingDrop(spinState.pending_drop);
- document.querySelectorAll('[data-claim]').forEach(b=>b.addEventListener('click',()=>claimUpgrade(Number(b.dataset.claim))))
+ // SHR Market section removed; backend admin settings remain intact.
 }
 function restorePendingDrop(data){
  const track=document.getElementById('reelTrack'),windowEl=document.getElementById('reelWindow'),result=document.getElementById('spinResult'),b=document.getElementById('spinBtn');
@@ -4825,7 +4824,7 @@ async function inventoryHtml(){
  const items=d.items||[];
  const list=items.map(x=>{
   const pending=x.status==='pending';
-  return '<div class="inventory-card"><div class="inventory-card-head"><div class="loot-cube '+cubeClass(x.reward_tier)+'"><span>?</span></div><div><div class="name">'+esc(x.reward_name)+'</div><div class="'+tierClass(x.reward_tier)+'">'+esc(x.reward_tier)+'</div></div></div>'+
+  return '<div class="inventory-card"><div class="inventory-card-head">'+caseLootSticker({name:x.reward_name,tier:x.reward_tier},true)+'<div><div class="name">'+esc(x.reward_name)+'</div><div class="'+tierClass(x.reward_tier)+'">'+esc(x.reward_tier)+'</div></div></div>'+
   '<div class="inventory-meta"><span>Продажа: '+x.sell_shr+' SHR</span><span>Оценка: 🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+'</span><span>'+(pending?'Новый дроп':'Сохранён')+'</span></div>'+
   '<div class="inventory-actions">'+(pending?'<button class="secondary" data-inv-save="'+x.id+'">Сохранить</button>':'')+'<button class="buy" data-inv-sell="'+x.id+'">Продать за '+x.sell_shr+' SHR</button></div></div>'
  }).join('');
@@ -5152,8 +5151,9 @@ async function caseCatalogHtml(){
   const tiers=(c.tiers||[]).filter(t=>(spinState.rewards||[]).some(x=>x.tier===t.tier&&allowed.has(x.name)));
   return '<div class="case-guide-card"><div class="case-guide-head">'+caseIconMarkup(c.icon)+'<div><div class="case-guide-name">'+esc(c.name)+'</div><div class="mini">'+tiers.length+' качеств</div></div><div class="case-guide-price">'+esc(c.price_label)+'</div></div>'+
    '<div class="case-guide-desc">'+esc(c.description||'')+'</div>'+
-   '<div class="case-tier-row">'+tiers.map(t=>'<button type="button" class="case-tier-btn" data-case-tier="'+esc(c.id)+'" data-tier="'+esc(t.tier)+'"><div class="loot-cube '+cubeClass(t.tier)+'"><span>?</span></div><div class="rarity-card-title '+tierClass(t.tier)+'">'+caseTierLabel(c.id,t.tier)+'</div><div class="rarity-card-chance">'+Number(t.chance||0)+'%</div></button>').join('')+'</div>'+
-   '<div class="case-guide-note">Нажмите на качество, чтобы посмотреть только предметы этого кейса. Цены идут по возрастанию.</div></div>'
+   '<div class="case-tier-row">'+tiers.map(t=>'<button type="button" class="case-tier-btn" data-case-tier="'+esc(c.id)+'" data-tier="'+esc(t.tier)+'">'+caseLootSticker((spinState.rewards||[]).find(x=>x.tier===t.tier&&allowed.has(x.name))||{name:c.name,tier:t.tier},true)+'<div class="rarity-card-title '+tierClass(t.tier)+'">'+caseTierLabel(c.id,t.tier)+'</div><div class="rarity-card-chance">'+Number(t.chance||0)+'%</div></button>').join('')+'</div>'+
+ '<div class="case-loot-preview"><div class="case-loot-preview-title">🎁 Предметы и их стоимость</div><div class="case-loot-grid">'+caseItemsOf(c).slice(0,6).map(caseLootCard).join('')+'</div></div>'+
+ '<div class="case-guide-note">Нажмите на качество, чтобы посмотреть только предметы этого кейса. Цены идут по возрастанию.</div></div>'
  }).join('');
  return '<section class="hero"><div class="cat">КЕЙСЫ И ПРЕДМЕТЫ</div><h1>Каталог кейсов</h1><div class="muted">У каждого кейса свои качества, проценты и содержимое. Всё редактируется из админ-панели.</div></section>'+
  '<div class="case-guide">'+html+'</div><div class="rarity-modal hide" id="caseTierModal"><div class="rarity-sheet" id="caseTierSheet"></div></div>'
@@ -5165,9 +5165,9 @@ function openCaseTier(caseId,tier){
  if(!cfg||!tierCfg||!modal||!sheet)return;
  const allowed=new Set(cfg.contents||[]);
  const items=(spinState.rewards||[]).filter(x=>x.tier===tier&&allowed.has(x.name)).slice().sort((a,b)=>Number(a.value_stars||0)-Number(b.value_stars||0));
- sheet.innerHTML='<div class="rarity-sheet-head"><div class="loot-cube '+cubeClass(tier)+'"><span>?</span></div><div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+caseTierLabel(caseId,tier)+'</h3><div class="muted">'+esc(cfg.name)+' • шанс '+Number(tierCfg.chance||0)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="caseTierClose">Закрыть</button></div>'+
- items.map(x=>'<div class="rarity-item-row"><div class="rarity-item-name">'+esc(x.name)+'</div><div class="rarity-item-price">🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+' / '+Number(x.value_stars||0).toLocaleString('ru-RU')+' SHR</div></div>').join('');
- modal.classList.remove('hide');
+ sheet.innerHTML='<div class="rarity-sheet-head">'+caseLootSticker(items[0]||{name:cfg.name,tier},true)+'<div class="rarity-sheet-title"><h3 class="'+tierClass(tier)+'">'+caseTierLabel(caseId,tier)+'</h3><div class="muted">'+esc(cfg.name)+' • шанс '+Number(tierCfg.chance||0)+'% • '+items.length+' предметов</div></div><button type="button" class="rarity-close" id="caseTierClose">Закрыть</button></div>'+
+ '<div class="case-loot-details">'+items.map(caseLootCard).join('')+'</div>';
+  modal.classList.remove('hide');
  const close=()=>modal.classList.add('hide');
  document.getElementById('caseTierClose').addEventListener('click',close);
  modal.addEventListener('click',e=>{if(e.target===modal)close()},{once:true})
