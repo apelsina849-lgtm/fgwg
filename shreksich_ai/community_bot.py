@@ -305,7 +305,7 @@ async def handle_callback(query):
         if data=="admin:quiz":
             try:
                 await quiz_start(row[0])
-                await call("answerCallbackQuery",callback_query_id=qid,text="Викторина отправлена в группу или уже идёт активная.",show_alert=True)
+                await call("answerCallbackQuery",callback_query_id=qid,text="Проверено: викторина отправлена или уже идёт активная.",show_alert=True)
             except Exception:
                 LOG.exception("Failed to post quiz in group")
                 await call("answerCallbackQuery",callback_query_id=qid,text="Не удалось отправить викторину. Проверь права бота в группе.",show_alert=True)
@@ -376,8 +376,9 @@ async def handle_callback(query):
         try: await edit(cid,mid,special or admin_text(row),special_buttons or admin_menu(row))
         except Exception as exc:
             if "message is not modified" not in str(exc): LOG.exception("Admin menu edit failed")
-        try: await call("answerCallbackQuery",callback_query_id=qid)
-        except Exception: pass
+        if data!="admin:quiz":
+            try: await call("answerCallbackQuery",callback_query_id=qid)
+            except Exception: pass
         return
     if data=="event:join":
         with db() as conn:
@@ -863,7 +864,7 @@ async def handle(msg):
             return
         with db() as conn:
             conn.execute("INSERT OR REPLACE INTO settings(chat_id,owner_id,enabled,interval_minutes,next_quiz) VALUES(?,?,1,30,?)",(cid,uid,int(time.time())+1800))
-        await send(cid,"✅ SHREKSICH AI подключён к чату. Автовикторины — каждые 30 минут.\n🔒 Управление доступно создателю чата в личных сообщениях @Shrekchataibot.")
+        await send(cid,"✅ SHREKSICH AI подключён к чату. Автовикторины — каждые 30 минут.\n🔒 Управление доступно привязавшему группу администратору: напиши /admin в личном чате @Shrekchataibot.")
         return
     with db() as conn:
         bound=conn.execute("SELECT 1 FROM settings WHERE chat_id=?",(cid,)).fetchone()
