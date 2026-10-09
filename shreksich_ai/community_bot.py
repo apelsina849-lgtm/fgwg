@@ -249,6 +249,11 @@ async def handle_callback(query):
             with db() as conn:
                 conn.execute("INSERT OR IGNORE INTO preferences(chat_id) VALUES(?)",(row[0],))
                 conn.execute("UPDATE preferences SET persona=? WHERE chat_id=?",(new,row[0]))
+        elif data in ("admin:scam","admin:flood"):
+            column="anti_scam" if data=="admin:scam" else "anti_flood"
+            with db() as conn:
+                conn.execute("INSERT OR IGNORE INTO moderation(chat_id) VALUES(?)",(row[0],))
+                conn.execute(f"UPDATE moderation SET {column}=1-{column} WHERE chat_id=?",(row[0],))
         elif data=="admin:cooldown":
             old=options(row[0])[0]
             choices=[0,10,15,30,60]
@@ -571,10 +576,10 @@ async def handle(msg):
         key=(cid,uid)
         recent=[t for t in FLOOD.get(key,[]) if now-t<8]
         recent.append(now); FLOOD[key]=recent
-        if len(recent)>7 and uid not in ADMIN_IDS:
+        if len(recent)>7 and uid not in ADMIN_IDS and moderation_pref(cid)[1]:
             log(cid,uid,"flood","8 messages / 8 seconds")
             return
-        if SCAM.search(text):
+        if moderation_pref(cid)[0] and SCAM.search(text):
             log(cid,uid,"suspected_scam",text)
             await send(cid,"⚠️ Возможная мошенническая схема. Не передавайте пароли и коды. Используйте только официальный магазин.",reply_parameters={"message_id":msg["message_id"],"allow_sending_without_reply":True})
             return
