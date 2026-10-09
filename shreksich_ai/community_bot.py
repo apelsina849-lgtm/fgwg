@@ -119,7 +119,7 @@ def transcribe_voice(file_id):
         return None
     audio=telegram_file(file_id,limit=12_000_000)
     boundary="----shreksichvoice"
-    payload=("--"+boundary+"\\r\\nContent-Disposition: form-data; name=\"model\"\\r\\n\\r\\n"+(VOICE_MODEL or "whisper-1")+"\\r\\n--"+boundary+"\\r\\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.ogg\"\\r\\nContent-Type: audio/ogg\\r\\n\\r\\n").encode()+audio+("\\r\\n--"+boundary+"--\\r\\n").encode()
+    payload=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n"+(VOICE_MODEL or "whisper-1")+"\r\n--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.ogg\"\r\nContent-Type: audio/ogg\r\n\r\n").encode()+audio+("\r\n--"+boundary+"--\r\n").encode()
     request=urllib.request.Request(TRANSCRIBE_URL,data=payload,headers={"Authorization":"Bearer "+AI_KEY,"Content-Type":"multipart/form-data; boundary="+boundary})
     with urllib.request.urlopen(request,timeout=35) as response:
         result=json.load(response)
@@ -135,7 +135,7 @@ def tts_audio(text):
 
 def multipart_voice(chat_id,audio):
     boundary="----shreksichupload"
-    fields=("--"+boundary+"\\r\\nContent-Disposition: form-data; name=\"chat_id\"\\r\\n\\r\\n"+str(chat_id)+"\\r\\n--"+boundary+"\\r\\nContent-Disposition: form-data; name=\"voice\"; filename=\"reply.ogg\"\\r\\nContent-Type: audio/ogg\\r\\n\\r\\n").encode()+audio+("\\r\\n--"+boundary+"--\\r\\n").encode()
+    fields=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n"+str(chat_id)+"\r\n--"+boundary+"\r\nContent-Disposition: form-data; name=\"voice\"; filename=\"reply.ogg\"\r\nContent-Type: audio/ogg\r\n\r\n").encode()+audio+("\r\n--"+boundary+"--\r\n").encode()
     req=urllib.request.Request("https://api.telegram.org/bot"+TOKEN+"/sendVoice",data=fields,headers={"Content-Type":"multipart/form-data; boundary="+boundary})
     with urllib.request.urlopen(req,timeout=25) as response:
         return json.load(response)
@@ -493,7 +493,7 @@ def offline_answer(question):
     if any(x in q for x in ("привет", "здравствуй", "хай", "hello")):
         return "🐸 Привет! Я помощник сообщества Шрексич. Могу рассказать о магазине, Metro Royale и правилах безопасности."
     if any(x in q for x in ("магазин", "купить", "каталог", "товар", "продаж")):
-        return "🛒 Официальный магазин Шрексич: "+SHOP_URL+"\\nАктуальные товары, наличие и цены смотри в каталоге."
+        return "🛒 Официальный магазин Шрексич: "+SHOP_URL+"\nАктуальные товары, наличие и цены смотри в каталоге."
     if any(x in q for x in ("заказ", "достав", "оплат", "покупк")):
         return "📦 Проверь информацию о заказе в официальном магазине. Я не вижу твои покупки и не могу подтвердить оплату или доставку."
     if any(x in q for x in ("metro", "метро", "pubg", "пабг", "эвакуац", "лут")):
@@ -520,7 +520,7 @@ async def ask_ai(question):
             with urllib.request.urlopen(req,timeout=17) as r:
                 return json.load(r)["choices"][0]["message"]["content"]
         # Legacy public anonymous endpoint: best-effort, not guaranteed or private.
-        prompt=system+"\\nВопрос: "+question+"\\nОтвет:"
+        prompt=system+"\nВопрос: "+question+"\nОтвет:"
         url="https://text.pollinations.ai/"+urllib.parse.quote(prompt,safe="")
         req=urllib.request.Request(url,headers={"User-Agent":"ShreksichCommunityBot/1.0"})
         with urllib.request.urlopen(req,timeout=17) as r:
@@ -558,7 +558,7 @@ def season_top(cid):
     season=int(time.time())//(30*86400)
     with db() as conn:
         rows=conn.execute("SELECT p.name,s.xp FROM seasonal_xp s JOIN profiles p ON p.chat_id=s.chat_id AND p.user_id=s.user_id WHERE s.chat_id=? AND s.season=? ORDER BY s.xp DESC LIMIT 10",(cid,season)).fetchall()
-    return "🏆 Рейтинг сезона (30 дней)\\n"+("\\n".join(f"{i}. {name}: {xp} XP" for i,(name,xp) in enumerate(rows,1)) if rows else "Пока нет участников")
+    return "🏆 Рейтинг сезона (30 дней)\n"+("\n".join(f"{i}. {name}: {xp} XP" for i,(name,xp) in enumerate(rows,1)) if rows else "Пока нет участников")
 
 def add_xp(cid,uid,name):
     now=int(time.time())
@@ -575,8 +575,8 @@ def add_xp(cid,uid,name):
 def memory_context(cid,uid,question):
     with db() as conn:
         rows=conn.execute("SELECT role,content FROM memory WHERE chat_id=? AND user_id=? ORDER BY ts DESC,rowid DESC LIMIT 8",(cid,uid)).fetchall()
-    history="\\n".join(role+": "+content for role,content in reversed(rows))
-    return (history+"\\nПользователь: "+question) if history else question
+    history="\n".join(role+": "+content for role,content in reversed(rows))
+    return (history+"\nПользователь: "+question) if history else question
 
 def remember(cid,uid,question,answer):
     with db() as conn:
@@ -855,7 +855,7 @@ def claim_daily(cid,uid):
 def top_xp(cid):
     with db() as conn:
         rows=conn.execute("SELECT name,xp FROM profiles WHERE chat_id=? ORDER BY xp DESC LIMIT 10",(cid,)).fetchall()
-    return "🏆 РЕЙТИНГ АКТИВНОСТИ\\n\\n"+("\\n".join(f"{i}. {name} — {xp} XP ({rank_name(xp)})" for i,(name,xp) in enumerate(rows,1)) if rows else "Пока нет участников.")
+    return "🏆 РЕЙТИНГ АКТИВНОСТИ\n\n"+("\n".join(f"{i}. {name} — {xp} XP ({rank_name(xp)})" for i,(name,xp) in enumerate(rows,1)) if rows else "Пока нет участников.")
 
 async def reply_to_question(chat_id,message_id,question,user_id=0):
     try:
@@ -955,7 +955,7 @@ async def handle(msg):
             return
         with db() as conn:
             conn.execute("INSERT OR REPLACE INTO settings(chat_id,owner_id,enabled,interval_minutes,next_quiz) VALUES(?,?,1,30,?)",(cid,uid,int(time.time())+1800))
-        await send(cid,"✅ SHREKSICH AI подключён к чату. Автовикторины — каждые 30 минут.\\n🔒 Управление доступно создателю чата в личных сообщениях @Shrekchataibot.")
+        await send(cid,"✅ SHREKSICH AI подключён к чату. Автовикторины — каждые 30 минут.\n🔒 Управление доступно создателю чата в личных сообщениях @Shrekchataibot.")
         return
     with db() as conn:
         bound=conn.execute("SELECT 1 FROM settings WHERE chat_id=?",(cid,)).fetchone()
@@ -987,13 +987,13 @@ async def handle(msg):
         with db() as conn:
             row=conn.execute("SELECT xp FROM profiles WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()
         xp=row[0] if row else 0
-        await send(cid,f"🐸 Профиль: {user.get('first_name','Игрок')}\\n⭐ {xp} XP\\n🏅 Звание: {rank_name(xp)}")
+        await send(cid,f"🐸 Профиль: {user.get('first_name','Игрок')}\n⭐ {xp} XP\n🏅 Звание: {rank_name(xp)}")
     elif cmd=="/aistats" and await asyncio.to_thread(group_owner,cid,uid):
         with db() as conn:
             players=conn.execute("SELECT COUNT(*) FROM profiles WHERE chat_id=?",(cid,)).fetchone()[0]
             memories=conn.execute("SELECT COUNT(*) FROM memory WHERE chat_id=?",(cid,)).fetchone()[0]
         persona,enabled,levels=group_pref(cid)
-        await send(cid,f"📊 SHREKSICH AI 2.0\\nУчастников: {players}\\nЗаписей памяти: {memories}\\nИИ: {enabled}\\nXP: {levels}\\nХарактер: {persona}\\nКоманды: /aiconfig friendly|expert|serious, /aitoggle, /xptoggle")
+        await send(cid,f"📊 SHREKSICH AI 2.0\nУчастников: {players}\nЗаписей памяти: {memories}\nИИ: {enabled}\nXP: {levels}\nХарактер: {persona}\nКоманды: /aiconfig friendly|expert|serious, /aitoggle, /xptoggle")
     elif cmd=="/aiconfig" and await asyncio.to_thread(group_owner,cid,uid):
         mode=text.partition(" ")[2].strip().lower()
         if mode not in ("friendly","expert","serious"): await send(cid,"Режимы: /aiconfig friendly, /aiconfig expert, /aiconfig serious")
