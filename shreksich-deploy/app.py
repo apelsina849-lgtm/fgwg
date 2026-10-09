@@ -744,6 +744,8 @@ async def init_db():
     }.items():
         if col not in product_cols:
             await conn.execute(f"ALTER TABLE products ADD COLUMN {col} {ddl}")
+    # One-time compatibility: make previously submitted, still-pending listings from approved sellers visible.
+    await conn.execute("UPDATE products SET active=1,seller_status='active' WHERE seller_id>0 AND seller_stock>0 AND seller_status='pending' AND seller_id IN (SELECT telegram_id FROM shop_sellers WHERE status='approved')")
     seller_order_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(orders)")).fetchall()}
     for col,ddl in {
         "seller_id":"INTEGER NOT NULL DEFAULT 0",
