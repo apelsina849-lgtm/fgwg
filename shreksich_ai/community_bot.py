@@ -489,7 +489,7 @@ def private_menu(uid):
 def privacy_text(uid):
     with db() as conn:
         row=conn.execute("SELECT ai_memory FROM user_preferences WHERE user_id=?",(uid,)).fetchone()
-    return "🔒 Личные настройки\\nПамять диалогов: "+("включена" if not row or row[0] else "выключена")+"\\nНикому не показываем ваши персональные ответы в группе."
+    return "🔒 Личные настройки\nПамять диалогов: "+("включена" if not row or row[0] else "выключена")+"\nНикому не показываем ваши персональные ответы в группе."
 
 def find_team(cid,uid,question):
     q=question.lower()
@@ -501,7 +501,7 @@ def find_team(cid,uid,question):
         conn.execute("INSERT OR REPLACE INTO teammates(chat_id,user_id,mode,style,created_at) VALUES(?,?,?,?,?)",(cid,uid,mode,question[:120],int(time.time())))
         rows=conn.execute("SELECT user_id,style FROM teammates WHERE chat_id=? AND user_id!=? AND (mode=? OR mode='any' OR ?='any') AND created_at>? ORDER BY created_at DESC LIMIT 5",(cid,uid,mode,mode,int(time.time())-7*86400)).fetchall()
     if not rows: return "🎮 Заявка сохранена на 7 дней. Пока подходящих игроков нет. Напиши «отмена поиска команды», чтобы удалить её."
-    return "🎮 Подходящие игроки (сами разместили заявку):\\n"+ "\\n".join(f"• Игрок: tg://user?id={other} — {style}" for other,style in rows)+"\\nСвяжись с ними самостоятельно. Не передавай пароли и коды."
+    return "🎮 Подходящие игроки (сами разместили заявку):\n"+ "\n".join(f"• Игрок: tg://user?id={other} — {style}" for other,style in rows)+"\nСвяжись с ними самостоятельно. Не передавай пароли и коды."
 
 async def private_answer(uid,question,cid):
     if cid is None:
@@ -522,7 +522,7 @@ async def private_answer(uid,question,cid):
     with db() as conn:
         pref=conn.execute("SELECT ai_memory FROM user_preferences WHERE user_id=?",(uid,)).fetchone()
     use_memory=not pref or bool(pref[0])
-    answer=await ask_ai(style+"\\n"+(memory_context(cid,uid,question) if use_memory else question))
+    answer=await ask_ai(style+"\n"+(memory_context(cid,uid,question) if use_memory else question))
     await send(uid,answer,reply_markup=private_menu(uid))
     if use_memory: remember(cid,uid,question,answer)
 
