@@ -185,7 +185,11 @@ async def main():
             updates=await call("getUpdates",offset=offset,timeout=15,allowed_updates=["message","callback_query"])
             for update in updates:
                 offset=update["update_id"]+1
-                try:\n                    if "callback_query" in update: await handle_callback(update["callback_query"])\n                    else: await handle(update.get("message",{}))
+                try:
+                    if "callback_query" in update:
+                        await handle_callback(update["callback_query"])
+                    else:
+                        await handle(update.get("message",{}))
                 except Exception: LOG.exception("Update failed")
         except Exception:
             LOG.exception("Polling error")
