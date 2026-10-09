@@ -1,0 +1,10 @@
+{
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "python community_bot.py",
+    "restartPolicyType": "ALWAYS"
+  }
+}
