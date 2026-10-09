@@ -348,6 +348,13 @@ def remember(cid,uid,question,answer):
         conn.executemany("INSERT INTO memory(chat_id,user_id,role,content,ts) VALUES(?,?,?,?,?)",[(cid,uid,"Пользователь",question[:600],now),(cid,uid,"Шрек",answer[:900],now)])
         conn.execute("DELETE FROM memory WHERE rowid IN (SELECT rowid FROM memory WHERE chat_id=? AND user_id=? ORDER BY ts DESC,rowid DESC LIMIT -1 OFFSET 20)",(cid,uid))
 
+AI_LAST_ANSWER={}
+
+def options(cid):
+    with db() as conn:
+        row=conn.execute("SELECT cooldown,reward FROM bot_options WHERE chat_id=?",(cid,)).fetchone()
+    return row or (15,25)
+
 def daily_progress(cid,uid):
     day=time.strftime("%Y-%m-%d",time.gmtime())
     with db() as conn:
