@@ -160,7 +160,7 @@ async def handle_callback(query):
         LOG.warning("Callback acknowledgement failed: %s",exc)
     try:
         if data=="page:home":
-            await edit(cid,mid,home_text(),menu())
+            await call("editMessageText",chat_id=cid,message_id=mid,text="🐸 SHREKSICH AI работает в чате. Обратись: Шрек, твой вопрос.")
         elif data=="page:help":
             await edit(cid,mid,"📖 ПОМОЩЬ\n\n🎮 Викторина — отвечай кнопками\n🤖 /ai твой вопрос — спросить ИИ\n🛒 Магазин — перейти к покупкам\n\nВыбери раздел ниже.",keyboard([[{"text":"🎮 Викторина","callback_data":"quiz:new"}],[{"text":"⬅️ Главное меню","callback_data":"page:home"}]]))
         elif data=="page:ai":
@@ -349,7 +349,7 @@ async def handle(msg):
                 asyncio.create_task(reply_to_question(cid,msg["message_id"],question,uid))
         return
     if cmd in ("/start","/help","/menu"):
-        await send(cid,home_text(),reply_markup=menu())
+        return  # No public menus in the group; owner controls are private.
     elif cmd=="/top": await send(cid,top_xp(cid))
     elif cmd=="/profile":
         with db() as conn:
