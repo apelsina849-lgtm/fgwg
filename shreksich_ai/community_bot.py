@@ -611,6 +611,9 @@ def private_menu(uid):
         [{"text":"⭐ Мой XP","callback_data":"me:profile"},{"text":"🎯 Задания","callback_data":"me:daily"}],
         [{"text":"🏆 Рейтинг","callback_data":"me:top"},{"text":"🏅 Достижения","callback_data":"me:achievements"}],
         [{"text":"🎁 Забрать XP","callback_data":"me:claim"},{"text":"🎮 Найти команду","callback_data":"me:team"}],
+        [{"text":"🎖 Боевой пропуск","callback_data":"me:pass"},{"text":"🎯 Испытания","callback_data":"me:challenges"}],
+        [{"text":"🧩 Загадка","callback_data":"me:riddle"},{"text":"⚔️ Дуэль","callback_data":"me:duel"}],
+        [{"text":"📚 База знаний","callback_data":"me:guides"},{"text":"🎙 Голос и фото","callback_data":"me:media"}],
         [{"text":"🔒 Приватность и память","callback_data":"me:privacy"},{"text":"🛒 Магазин","url":SHOP_URL}],
     ])
 
