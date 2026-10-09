@@ -347,6 +347,35 @@ def remember(cid,uid,question,answer):
         conn.executemany("INSERT INTO memory(chat_id,user_id,role,content,ts) VALUES(?,?,?,?,?)",[(cid,uid,"Пользователь",question[:600],now),(cid,uid,"Шрек",answer[:900],now)])
         conn.execute("DELETE FROM memory WHERE rowid IN (SELECT rowid FROM memory WHERE chat_id=? AND user_id=? ORDER BY ts DESC,rowid DESC LIMIT -1 OFFSET 20)",(cid,uid))
 
+def daily_progress(cid,uid):
+    day=time.strftime("%Y-%m-%d",time.gmtime())
+    with db() as conn:
+        row=conn.execute("SELECT messages,questions,claimed FROM daily_tasks WHERE chat_id=? AND user_id=? AND day=?",(cid,uid,day)).fetchone()
+    return row or (0,0,0)
+
+def daily_text(cid,uid):
+    messages,questions,claimed=daily_progress(cid,uid)
+    return ("📅 ЗАДАНИЯ НА СЕГОДНЯ (UTC)\n\n"
+            f"💬 Написать 10 сообщений: {min(messages,10)}/10\n"
+            f"🐸 Задать Шреку 3 вопроса: {min(questions,3)}/3\n"
+            f"🎁 Награда: 50 XP — {'получена' if claimed else 'команда /claim' if messages>=10 and questions>=3 else 'пока недоступна'}")
+
+def add_daily(cid,uid,is_question=False):
+    day=time.strftime("%Y-%m-%d",time.gmtime())
+    with db() as conn:
+        conn.execute("INSERT OR IGNORE INTO daily_tasks(chat_id,user_id,day) VALUES(?,?,?)",(cid,uid,day))
+        conn.execute("UPDATE daily_tasks SET messages=MIN(messages+1,10),questions=MIN(questions+?,3) WHERE chat_id=? AND user_id=? AND day=?",(int(is_question),cid,uid,day))
+
+def claim_daily(cid,uid):
+    day=time.strftime("%Y-%m-%d",time.gmtime())
+    with db() as conn:
+        result=conn.execute("UPDATE daily_tasks SET claimed=1 WHERE chat_id=? AND user_id=? AND day=? AND messages>=10 AND questions>=3 AND claimed=0",(cid,uid,day))
+        if result.rowcount:
+            conn.execute("INSERT OR IGNORE INTO profiles(chat_id,user_id,name,xp,last_xp) VALUES(?,?,?,0,0)",(cid,uid,"Игрок"))
+            conn.execute("UPDATE profiles SET xp=xp+50 WHERE chat_id=? AND user_id=?",(cid,uid))
+            return True
+    return False
+
 def top_xp(cid):
     with db() as conn:
         rows=conn.execute("SELECT name,xp FROM profiles WHERE chat_id=? ORDER BY xp DESC LIMIT 10",(cid,)).fetchall()
