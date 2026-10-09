@@ -1773,6 +1773,64 @@ async def seller_restock(listing_id:int, body:SellerRestockIn,
             await conn.close()
     return {"ok":True}
 
+
+@app.post("/api/seller/listings/{listing_id}/pause")
+async def seller_pause_listing(listing_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    """Seller can stop NEW purchases without affecting paid/reserved orders."""
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            seller = await (await conn.execute(
+                "SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,)
+            )).fetchone()
+            if not seller or seller["status"]!="approved":
+                await conn.rollback()
+                raise HTTPException(403,"Нет доступа")
+            cur = await conn.execute(
+                "UPDATE products SET seller_status='paused',active=0 "
+                "WHERE id=? AND seller_id=? AND seller_status='active'",
+                (listing_id,uid)
+            )
+            if cur.rowcount!=1:
+                await conn.rollback()
+                raise HTTPException(409,"Остановить можно только активный товар")
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"status":"paused"}
+
+@app.post("/api/seller/listings/{listing_id}/review")
+async def seller_request_listing_review(listing_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    """Reactivation always requires owner review."""
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            seller = await (await conn.execute(
+                "SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,)
+            )).fetchone()
+            if not seller or seller["status"]!="approved":
+                await conn.rollback()
+                raise HTTPException(403,"Нет доступа")
+            cur = await conn.execute(
+                "UPDATE products SET seller_status='pending',active=0 "
+                "WHERE id=? AND seller_id=? AND seller_status='paused' AND seller_stock>0",
+                (listing_id,uid)
+            )
+            if cur.rowcount!=1:
+                await conn.rollback()
+                raise HTTPException(409,"Отправить на проверку можно только приостановленный товар с остатком")
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"status":"pending"}
+
+
 @app.post("/api/seller/orders/{order_id}/delivered")
 async def seller_mark_delivered(order_id:int,body:SellerDeliveryIn,
                                 x_telegram_init_data: str | None = Header(default=None)):
@@ -4931,7 +4989,9 @@ async function sellerHtml(){
  '<h3>'+esc(x.name)+'</h3><div class="mini">'+esc(x.category)+' · '+Number(x.stars_price)+' ⭐</div>'+
  '<div class="seller-stock-tag">Доступно: '+Number(x.seller_stock)+' шт.</div>'+
  '<div class="seller-market-actions"><input type="number" id="sellerRestock'+x.id+'" min="1" max="1000" placeholder="+ остаток" style="width:110px">'+
- '<button class="secondary" data-seller-restock="'+x.id+'">Пополнить</button></div></div>').join('')||'<div class="empty">Товаров пока нет</div>')+
+ '<button class="secondary" data-seller-restock="'+x.id+'">Пополнить</button>'+
+ (x.seller_status==='active'?'<button class="secondary" data-seller-pause="'+x.id+'">⏸ Скрыть</button>':x.seller_status==='paused'?'<button class="secondary" data-seller-review="'+x.id+'">На повторную проверку</button>':'')+
+ '</div></div>').join('')||'<div class="empty">Товаров пока нет</div>')+
  '<h3 style="margin:16px 0 7px">Оплаченные заказы</h3>'+
  (orders.map(x=>'<div class="seller-market-card"><div class="mini">#'+x.number+' · '+esc(x.status)+'</div>'+
  '<h3>'+esc(x.product_name)+'</h3><div class="mini">UID: '+esc(x.uid)+' · Ник: '+esc(x.nickname||'—')+'</div>'+
@@ -4966,6 +5026,15 @@ function bindSeller(){
    stock:Number(document.getElementById('sellerListingStock').value)
   })});await refresh()}catch(e){alert(e.message);add.disabled=false}
  });
+ document.querySelectorAll('[data-seller-pause]').forEach(btn=>btn.addEventListener('click',async()=>{
+  if(!confirm('Скрыть товар от новых покупателей?'))return;
+  btn.disabled=true;
+  try{await api('/api/seller/listings/'+btn.dataset.sellerPause+'/pause',{method:'POST'});await refresh()}catch(e){alert(e.message);btn.disabled=false}
+ }));
+ document.querySelectorAll('[data-seller-review]').forEach(btn=>btn.addEventListener('click',async()=>{
+  btn.disabled=true;
+  try{await api('/api/seller/listings/'+btn.dataset.sellerReview+'/review',{method:'POST'});await refresh()}catch(e){alert(e.message);btn.disabled=false}
+ }));
  document.querySelectorAll('[data-seller-restock]').forEach(btn=>btn.addEventListener('click',async()=>{
   const id=Number(btn.dataset.sellerRestock);
   btn.disabled=true;try{await api('/api/seller/listings/'+id+'/restock',{method:'POST',body:JSON.stringify({
