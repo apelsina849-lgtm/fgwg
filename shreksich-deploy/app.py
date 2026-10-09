@@ -4626,6 +4626,22 @@ background:radial-gradient(circle,#71e0ff1f,transparent 70%);pointer-events:none
 .seller-admin-box .seller-market-actions{margin-top:12px}
 @media(max-width:390px){.seller-feature-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.seller-hero h1{font-size:22px}}
 
+
+/* Seller marketplace storefront */
+.seller-catalog-head{padding:19px 16px 13px;border-radius:19px;border:1px solid #385c79;
+background:radial-gradient(ellipse at 91% 0,#367f9a38,transparent 52%),linear-gradient(135deg,#10263d,#09192c);
+box-shadow:0 13px 30px #0008;margin-bottom:18px}
+.seller-catalog-head h1{font-size:25px;line-height:1.2;margin:5px 0 14px;color:#eaf7ff}
+.seller-market-switch{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.seller-market-switch button{font-size:10px;font-weight:850;padding:10px 3px;line-height:1.2;min-height:43px;color:#a9bed7;border:1px solid #34516a;background:#0e2138;border-radius:11px}
+.seller-market-switch button.active{border-color:#7bd7fa;color:#e8f8ff;background:linear-gradient(135deg,#214f70,#153855);box-shadow:0 0 12px #6ccafc27}
+.shop-list-section{margin:15px 0 23px}
+.shop-list-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.shop-list-heading h3{font-size:16px;color:#e1f4ff;margin:0;line-height:1.25}
+.seller-availability{font-size:11px;color:#b4d9ec;margin-top:9px;padding:8px 10px;background:#102b40;border:1px solid #365e7b;border-radius:8px}
+.shop-list-section .grid{margin-top:0}
+@media(max-width:345px){.seller-market-switch button{font-size:9px}.shop-list-heading h3{font-size:14px}}
+
 </style>
 </head>
 <body>
@@ -4885,6 +4901,31 @@ function cards(list){
  '<div class="seller-stock-tag">● В наличии: '+Number(p.seller_stock||0)+' шт.</div>':'')+
  '<div class="price">'+stars(p.stars_price)+'</div><button class="buy" data-buy="'+p.id+'">Купить за Stars</button></div>').join('')+'</div>'
 }
+
+function marketplaceCatalogHtml(){
+ const supplier=products.filter(p=>Number(p.seller_id||0)>0),main=products.filter(p=>Number(p.seller_id||0)===0);
+ return '<section class="seller-catalog-head"><div class="seller-headline">SHREKSICH SHOP · METRO ROYALE</div>'+
+ '<h1>🛒 Каталог товаров</h1><div class="seller-market-switch">'+
+ '<button type="button" class="secondary" data-shop-section="all">Все · '+products.length+'</button>'+
+ '<button type="button" class="secondary" data-shop-section="partners">Партнёры · '+supplier.length+'</button>'+
+ '<button type="button" class="secondary" data-shop-section="official">Шрексич · '+main.length+'</button></div></section>'+
+ '<section class="shop-list-section" data-shop-group="partners"><div class="shop-list-heading"><h3>🤝 Товары партнёров</h3><span class="seller-chip">'+supplier.length+' предложений</span></div>'+
+ (supplier.length?cards(supplier):'<div class="empty">Пока нет товаров от продавцов</div>')+'</section>'+
+ '<section class="shop-list-section" data-shop-group="official"><div class="shop-list-heading"><h3>📦 Товары Шрексича</h3><span class="seller-chip">'+main.length+' предложений</span></div>'+
+ (main.length?cards(main):'<div class="empty">Нет товаров в наличии</div>')+'</section>';
+}
+function bindMarketplaceCatalog(){
+ bindProductButtons();
+ const filters=[...document.querySelectorAll('[data-shop-section]')];
+ const applyFilter=value=>{
+  filters.forEach(b=>b.classList.toggle('active',b.dataset.shopSection===value));
+  document.querySelectorAll('[data-shop-group]').forEach(section=>{
+   section.classList.toggle('hide',value!=='all'&&section.dataset.shopGroup!==value)
+  })
+ };
+ filters.forEach(b=>b.addEventListener('click',()=>applyFilter(b.dataset.shopSection)));
+ applyFilter('all')
+}
 function bindProductButtons(){document.querySelectorAll('[data-buy]').forEach(b=>b.addEventListener('click',()=>orderForm(Number(b.dataset.buy))))}
 
 function sticker(title,sub,icon,cls,attrs){
@@ -5096,9 +5137,33 @@ async function payStars(id){
   if(tg&&tg.openInvoice)tg.openInvoice(d.url,()=>{tab='orders';render()});else location.href=d.url
  }catch(e){b.disabled=false;b.textContent='Оплатить Stars';alert(e.message)}
 }
+
 async function ordersHtml(){
- const list=await api('/api/orders');if(!list.length)return'<div class="empty">У вас пока нет заказов.</div>';
- return '<h2>Мои заказы</h2>'+list.map(o=>'<div class="order"><div class="cat">ЗАКАЗ #'+o.number+'</div><div class="name">'+esc(o.product_name)+'</div><div class="row"><div class="price">'+stars(o.stars_amount)+'</div><div style="text-align:right"><span class="status">'+esc(o.status)+'</span></div></div>'+(o.promo_code?'<div class="mini">Промокод: '+esc(o.promo_code)+' (-'+o.discount_percent+'%)</div>':'')+'<div class="muted">'+esc(o.created_at)+'</div></div>').join('')
+ const list=await api('/api/orders');
+ if(!list.length)return '<div class="empty">У вас пока нет заказов.</div>';
+ return '<h2>Мои заказы</h2>'+list.map(o=>{
+  const unpaid=o.status==='Ожидает оплаты'&&!o.telegram_charge_id;
+  const hold=Number(o.seller_reserved_until||0)-Math.floor(Date.now()/1000);
+  const cancel=unpaid?'<button class="secondary" data-order-cancel="'+o.id+'" style="margin-top:9px;min-height:38px;width:100%">Отменить неоплаченный заказ</button>':'';
+  const reserved=unpaid&&Number(o.seller_id||0)>0?
+   '<div class="seller-availability">'+(hold>0?'Резерв товара: '+Math.ceil(hold/60)+' мин':'Время бронирования истекло')+'</div>':'';
+  return '<div class="order"><div class="cat">ЗАКАЗ #'+o.number+
+   (Number(o.seller_id||0)>0?' · ПАРТНЁР':'')+'</div><div class="name">'+esc(o.product_name)+
+   '</div><div class="row"><div class="price">'+stars(o.stars_amount)+'</div>'+
+   '<div style="text-align:right"><span class="status">'+esc(o.status)+'</span></div></div>'+
+   (o.promo_code?'<div class="mini">Промокод: '+esc(o.promo_code)+' (-'+o.discount_percent+'%)</div>':'')+
+   reserved+cancel+'</div>'
+ }).join('')
+}
+function bindOrders(){
+ document.querySelectorAll('[data-order-cancel]').forEach(btn=>btn.addEventListener('click',async()=>{
+  if(!confirm('Отменить неоплаченный заказ и вернуть товар в наличие?'))return;
+  btn.disabled=true;
+  try{
+   await api('/api/orders/'+btn.dataset.orderCancel+'/cancel',{method:'POST'});
+   app.innerHTML=await ordersHtml();bindOrders();addHomeExit()
+  }catch(e){alert(e.message);btn.disabled=false}
+ }))
 }
 
 function showDropFx(reward){
@@ -6501,11 +6566,11 @@ async function render(){
  try{
   if(ADMIN){app.innerHTML=await adminHtml();bindAdmin();return}
   if(tab==='home'){try{homeFarmData=await api('/api/farm')}catch(_){} app.innerHTML=home();bindHome()}
-  else if(tab==='catalog'){products=await api('/api/catalog');app.innerHTML='<h2>Каталог</h2>'+cards(products);bindProductButtons()}
+  else if(tab==='catalog'){products=await api('/api/catalog');app.innerHTML=marketplaceCatalogHtml();bindMarketplaceCatalog()}
   else if(tab==='seller'){app.innerHTML=await sellerHtml();bindSeller()}
   else if(tab==='spin'){app.innerHTML=await spinHtml();bindSpin()}
   else if(tab==='roulette'){app.innerHTML=await rouletteHtml();bindRoulette()}
-  else if(tab==='orders'){app.innerHTML=await ordersHtml()}
+  else if(tab==='orders'){app.innerHTML=await ordersHtml();bindOrders()}
   else if(tab==='inventory'){app.innerHTML=await inventoryHtml();bindInventory()}
   else if(tab==='farm'){app.innerHTML=await farmHtml();bindFarm()}
   else if(tab==='farm-catalog'){app.innerHTML=await farmCatalogPage();bindFarmCatalogPage()}
