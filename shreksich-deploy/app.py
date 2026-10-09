@@ -338,6 +338,27 @@ async def complete_case_opening(conn, opening) -> dict:
 FARM_MAX_LEVEL = 20
 FARM_WITHDRAW_MIN_UC = 120
 FARM_DAILY_UC_CREDITS = 2
+
+# UC Credits can be redeemed for actual UC: every new farm award must be
+# backed by a pre-funded, owner-approved pool from verified NET Stars profit.
+UC_MINE_SECONDS_PER_CREDIT = 86400
+def uc_mine_daily_rate(level: int) -> int:
+    return max(1,min(5,1+max(1,min(FARM_MAX_LEVEL,int(level)))//5))
+
+def farm_uc_progress(state, now: int):
+    rate = uc_mine_daily_rate(int(state["level"] or 1))
+    last = int(state["uc_mine_last_at"] or now)
+    elapsed = min(86400,max(0,now-last))
+    progress = min(86400*rate,max(0,int(state["uc_mine_progress"] or 0))+elapsed*rate)
+    ready = int(progress//86400)
+    next_seconds = max(0,(86400-progress%86400+rate-1)//rate) if ready<rate else 0
+    return int(progress),ready,rate,int(next_seconds)
+
+async def uc_fund(conn):
+    return await (await conn.execute(
+        "SELECT available_credits,funded_credits,issued_credits FROM uc_mining_fund WHERE id=1"
+    )).fetchone()
+
 FARM_TIER_ORDER = ("GRAY","CYAN","BLUE","PURPLE","PINK","RED","GOLD")
 
 FARM_RESOURCES = [
@@ -463,9 +484,9 @@ async def ensure_farm_state(conn, uid: int):
         return row
     now = int(time.time())
     await conn.execute(
-        "INSERT INTO farm_state(telegram_id,level,shrek_coins,uc_credits,uc_reserved,last_mine_at,last_collect_at,last_activity_at,activity_streak,activity_total) "
-        "VALUES(?,1,0,0,0,?,?,0,0,0)",
-        (uid,now-farm_interval_seconds(1),0)
+        "INSERT INTO farm_state(telegram_id,level,shrek_coins,uc_credits,uc_reserved,last_mine_at,last_collect_at,last_activity_at,activity_streak,activity_total,uc_mine_last_at,uc_mine_progress) "
+        "VALUES(?,1,0,0,0,?,?,0,0,0,?,0)",
+        (uid,now-farm_interval_seconds(1),0,now)
     )
     return await (await conn.execute("SELECT * FROM farm_state WHERE telegram_id=?",(uid,))).fetchone()
 
@@ -789,12 +810,33 @@ async def init_db():
         "last_activity_at":"INTEGER NOT NULL DEFAULT 0",
         "activity_streak":"INTEGER NOT NULL DEFAULT 0",
         "activity_total":"INTEGER NOT NULL DEFAULT 0",
+        "uc_mine_last_at":"INTEGER NOT NULL DEFAULT 0",
+        "uc_mine_progress":"INTEGER NOT NULL DEFAULT 0",
         "drill_level":"INTEGER NOT NULL DEFAULT 0",
         "warehouse_level":"INTEGER NOT NULL DEFAULT 0",
         "trader_level":"INTEGER NOT NULL DEFAULT 0",
     }.items():
         if col not in farm_cols:
             await conn.execute(f"ALTER TABLE farm_state ADD COLUMN {col} {ddl}")
+
+    await conn.executescript("""
+    CREATE TABLE IF NOT EXISTS uc_mining_fund(
+        id INTEGER PRIMARY KEY CHECK(id=1),
+        available_credits INTEGER NOT NULL DEFAULT 0 CHECK(available_credits>=0),
+        funded_credits INTEGER NOT NULL DEFAULT 0 CHECK(funded_credits>=0),
+        issued_credits INTEGER NOT NULL DEFAULT 0 CHECK(issued_credits>=0),
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS uc_mining_fund_log(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operator_id INTEGER NOT NULL,
+        credited_amount INTEGER NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    await conn.execute("INSERT OR IGNORE INTO uc_mining_fund(id) VALUES(1)")
+    await conn.execute("UPDATE farm_state SET uc_mine_last_at=? WHERE uc_mine_last_at=0",(int(time.time()),))
 
     reset = await (await conn.execute("SELECT value FROM settings WHERE key='bonus_tickets_v1'")).fetchone()
     if not reset:
@@ -2077,6 +2119,7 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
             (uid,)
         )).fetchall()
         spin = await (await conn.execute("SELECT upgrade_points FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+        fund = await uc_fund(conn)
         withdrawals = await (await conn.execute(
             "SELECT id,pubg_uid,uc_amount,status,created_at,processed_at FROM uc_withdrawals WHERE telegram_id=? ORDER BY id DESC LIMIT 10",
             (uid,)
@@ -2099,6 +2142,8 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
         if item:
             inventory.append({**item,"coins":farm_sale_price(item,trader_level),"qty":int(r["qty"] or 0),"total_coins":int(r["qty"] or 0)*farm_sale_price(item,trader_level)})
     activity_ready = bool(int(state["last_collect_at"] or 0) > int(state["last_activity_at"] or 0) and now-int(state["last_activity_at"] or 0)>=20*3600)
+    mine_progress,mine_ready,mine_rate,mine_next = farm_uc_progress(state,now)
+    fund_available = int(fund["available_credits"] or 0) if fund else 0
     return {
         "level":level,"max_level":FARM_MAX_LEVEL,"stage":farm_stage(level),
         "shr":int(spin["upgrade_points"] or 0) if spin else 0,
@@ -2108,6 +2153,9 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
         "uc_available":max(0,int(state["uc_credits"] or 0)-int(state["uc_reserved"] or 0)),
         "withdraw_min_uc":FARM_WITHDRAW_MIN_UC,
         "daily_uc_credits":FARM_DAILY_UC_CREDITS,
+        "uc_mining":{"daily_rate":mine_rate,"ready":mine_ready,
+            "next_seconds":mine_next,"capacity":mine_rate,
+            "reserve_available":fund_available,"claimable":min(mine_ready,fund_available)},
         "interval_seconds":interval,"capacity":cap,"stored":stored,
         "available_cycles":int(available_cycles),
         "next_cycle_seconds":(0 if available_cycles>0 else max(0,interval-max(0,now-int(state["last_mine_at"] or now))%interval)) if stored<cap else 0,
