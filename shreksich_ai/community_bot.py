@@ -382,6 +382,11 @@ async def handle_callback(query):
             with db() as conn:
                 conn.execute("INSERT OR IGNORE INTO preferences(chat_id) VALUES(?)",(row[0],))
                 conn.execute("UPDATE preferences SET persona=? WHERE chat_id=?",(new,row[0]))
+        elif data in ("admin:images","admin:voice","admin:duels"):
+            column={"admin:images":"images_enabled","admin:voice":"voice_enabled","admin:duels":"duels_enabled"}[data]
+            with db() as conn:
+                conn.execute("INSERT OR IGNORE INTO ai_options(chat_id) VALUES(?)",(row[0],))
+                conn.execute(f"UPDATE ai_options SET {column}=1-{column} WHERE chat_id=?",(row[0],))
         elif data in ("admin:scam","admin:flood"):
             column="anti_scam" if data=="admin:scam" else "anti_flood"
             with db() as conn:
@@ -660,6 +665,9 @@ async def start_riddle(uid,cid):
     await send(uid,"🧩 ЗАГАДКА ДНЯ\\n"+question,reply_markup=keyboard([[{"text":f"{i+1}. {answer}","callback_data":f"riddle:{cid}:{index}:{i}"}] for i,answer in enumerate(answers)]))
 
 async def start_duel(uid,cid):
+    if not ai_features(cid)[2]:
+        await send(uid,"⚔️ Дуэли отключены администратором.")
+        return
     with db() as conn:
         row=conn.execute("SELECT user_id FROM profiles WHERE chat_id=? AND user_id!=? ORDER BY last_xp DESC LIMIT 1",(cid,uid)).fetchone()
     if not row:
@@ -839,6 +847,9 @@ async def handle(msg):
         if not group:
             await send(uid,"Сначала напиши Шреку в группе, чтобы привязать профиль.")
             return
+        if not ai_features(group)[1]:
+            await send(uid,"📸 Анализ скриншотов отключён администратором.")
+            return
         await send(uid,"📸 Анализирую скриншот...")
         try:
             answer=await asyncio.to_thread(vision_query,msg["photo"][-1]["file_id"],text)
@@ -853,6 +864,9 @@ async def handle(msg):
         group=user_group(uid)
         if not group:
             await send(uid,"Сначала напиши Шреку в группе, чтобы привязать профиль.")
+            return
+        if not ai_features(group)[0]:
+            await send(uid,"🎙 Голосовые функции отключены администратором.")
             return
         try:
             transcript=await asyncio.to_thread(transcribe_voice,msg["voice"]["file_id"])
