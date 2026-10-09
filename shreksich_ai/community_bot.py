@@ -334,6 +334,8 @@ async def handle_callback(query):
                     reward=options(cid)[1]
                     conn.execute("INSERT OR IGNORE INTO profiles(chat_id,user_id,name,xp,last_xp) VALUES(?,?,?,0,0)",(cid,uid,(query.get("from") or {}).get("first_name","Игрок")))
                     conn.execute("UPDATE profiles SET xp=xp+? WHERE chat_id=? AND user_id=?",(reward,cid,uid))
+                    season=now//(30*86400)
+                    conn.execute("INSERT INTO seasonal_xp(chat_id,user_id,season,xp) VALUES(?,?,?,?) ON CONFLICT(chat_id,user_id,season) DO UPDATE SET xp=xp+excluded.xp",(cid,uid,season,reward))
                     conn.execute("INSERT OR IGNORE INTO achievements(chat_id,user_id,code,awarded_at) VALUES(?,?,?,?)",(cid,uid,"first_win",now))
                     notice=f"🏆 Победа! +{reward} XP"
                     await edit(cid,mid,"🏆 ВИКТОРИНА ЗАВЕРШЕНА\n\nПравильный ответ: "+QUESTIONS[row[0]][1][int(answer_id)]+"\n\n🎉 Победитель определён!",{"inline_keyboard":[]})
@@ -606,7 +608,7 @@ async def handle(msg):
             if group_pref(cid)[2]: add_xp(cid,uid,user.get("first_name") or user.get("username") or "Игрок")
         except Exception: LOG.exception("XP update failed")
     if chat.get("type") in ("group","supergroup") and not text.startswith("/") and len(text)>=3:
-        add_daily(cid,uid,text.lower().startswith("шрек "))
+        add_daily(cid,uid,bool(re.match(r"^шрек[\\s,:.!?—-]+\\S",text,flags=re.I)))
     cmd=text.split()[0].split("@")[0].lower()
     if chat.get("type")=="private":
         row=owner_chat(uid)
