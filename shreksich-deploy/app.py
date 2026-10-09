@@ -1491,7 +1491,7 @@ class SellerApplicationIn(BaseModel):
 class SellerListingIn(BaseModel):
     category: str = Field(min_length=2,max_length=80)
     name: str = Field(min_length=3,max_length=120)
-    description: str = Field(min_length=8,max_length=1200)
+    description: str = Field(default="",max_length=1200)
     stars_price: int = Field(ge=1,le=100000)
     stock: int = Field(ge=1,le=1000)
 
@@ -1765,7 +1765,7 @@ async def seller_create_listing(body: SellerListingIn, x_telegram_init_data: str
             cursor=await conn.execute(
                 "INSERT INTO products(category,name,description,price,stars_price,active,sort_order,"
                 "seller_id,seller_stock,seller_status) VALUES(?,?,?,?,?,0,100,?,?,'pending')",
-                (body.category.strip(),body.name.strip(),body.description.strip(),body.stars_price,
+                (body.category.strip(),body.name.strip(),body.description.strip() or "Товар продавца. Условия выдачи уточняйте перед покупкой.",body.stars_price,
                  body.stars_price,uid,body.stock)
             )
             await conn.commit()
@@ -4976,7 +4976,7 @@ async function api(path,options={}){
  try{
   const r=await fetch(path,Object.assign({},options,{headers:Object.assign({},headers,options.headers||{}),signal:ctl.signal}));
   let d={};try{d=await r.json()}catch(_){}
-  if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));
+  if(!r.ok){const detail=Array.isArray(d.detail)?d.detail.map(x=>{const field=(x.loc||[]).filter(v=>v!=='body').join('.');return (field?field+': ':'')+(x.msg||'Неверное значение')}).join('; '):typeof d.detail==='string'?d.detail:('HTTP '+r.status);throw new Error(detail)}
   return d;
  }catch(e){if(e&&e.name==='AbortError')throw new Error('Сервер не ответил за 15 секунд');throw e}
  finally{clearTimeout(timer)}
@@ -5147,10 +5147,10 @@ async function sellerHtml(){
  '<div class="seller-help">Доли рассчитываются от оплаты за товар после скидок. Это учёт обязательств в эквиваленте Stars, а не автоматический перевод Stars. Расчёты проводит администрация отдельно.</div>'+
  '<div class="shx-panel"><h3>➕ Добавить товар</h3><div class="seller-inputs">'+
  '<input id="sellerListingName" maxlength="120" placeholder="Название товара">'+
- '<input id="sellerListingCategory" maxlength="80" placeholder="Категория (Metro Royale, квесты…)">'+
- '<textarea id="sellerListingDesc" maxlength="1200" placeholder="Описание, комплект и условия выдачи"></textarea>'+
+ '<select id="sellerListingCategory"><option value="Metro Royale">🎒 Metro Royale · предметы</option><option value="Ресурсы">💎 Ресурсы</option><option value="Буст">🚀 Буст и помощь</option><option value="Квесты">🎯 Квесты</option><option value="Другое">📦 Другое</option></select>'+
+ '<textarea id="sellerListingDesc" maxlength="1200" placeholder="Что получает покупатель? (необязательно)"></textarea>'+
  '<input id="sellerListingStars" type="number" min="1" max="100000" placeholder="Цена за 1 шт. в Stars">'+
- '<input id="sellerListingStock" type="number" min="1" max="1000" placeholder="Количество в наличии">'+
+ '<input id="sellerListingStock" type="number" min="1" max="1000" value="1" placeholder="Количество в наличии">'+
  '<button class="buy" id="sellerAddListing">ОТПРАВИТЬ НА ПРОВЕРКУ</button></div></div>'+
  '<h3 style="margin:16px 0 7px">Ваши товары</h3>'+
  ((d.listings||[]).map(x=>'<div class="seller-market-card"><span class="seller-status-pill '+esc(x.seller_status)+'">'+esc(x.seller_status)+'</span>'+
@@ -5191,6 +5191,10 @@ function bindSeller(){
  });
  const add=document.getElementById('sellerAddListing');
  if(add)add.addEventListener('click',async()=>{
+  const name=document.getElementById('sellerListingName').value.trim(),price=Number(document.getElementById('sellerListingStars').value),stock=Number(document.getElementById('sellerListingStock').value);
+  if(name.length<3){alert('Введите название товара — минимум 3 символа');return}
+  if(!Number.isInteger(price)||price<1||price>100000){alert('Цена должна быть от 1 до 100 000 Stars');return}
+  if(!Number.isInteger(stock)||stock<1||stock>1000){alert('Количество должно быть от 1 до 1000');return}
   add.disabled=true;try{await api('/api/seller/listings',{method:'POST',body:JSON.stringify({
    name:document.getElementById('sellerListingName').value,category:document.getElementById('sellerListingCategory').value,
    description:document.getElementById('sellerListingDesc').value,
