@@ -350,7 +350,31 @@ async def handle(msg):
         return
     if cmd in ("/start","/help","/menu"):
         await send(cid,home_text(),reply_markup=menu())
-    elif cmd=="/top": await send(cid,leaderboard(cid))
+    elif cmd=="/top": await send(cid,top_xp(cid))
+    elif cmd=="/profile":
+        with db() as conn:
+            row=conn.execute("SELECT xp FROM profiles WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()
+        xp=row[0] if row else 0
+        await send(cid,f"🐸 Профиль: {user.get('first_name','Игрок')}\\n⭐ {xp} XP\\n🏅 Звание: {rank_name(xp)}")
+    elif cmd=="/aistats" and await asyncio.to_thread(group_owner,cid,uid):
+        with db() as conn:
+            players=conn.execute("SELECT COUNT(*) FROM profiles WHERE chat_id=?",(cid,)).fetchone()[0]
+            memories=conn.execute("SELECT COUNT(*) FROM memory WHERE chat_id=?",(cid,)).fetchone()[0]
+        persona,enabled,levels=group_pref(cid)
+        await send(cid,f"📊 SHREKSICH AI 2.0\\nУчастников: {players}\\nЗаписей памяти: {memories}\\nИИ: {enabled}\\nXP: {levels}\\nХарактер: {persona}\\nКоманды: /aiconfig friendly|expert|serious, /aitoggle, /xptoggle")
+    elif cmd=="/aiconfig" and await asyncio.to_thread(group_owner,cid,uid):
+        mode=text.partition(" ")[2].strip().lower()
+        if mode not in ("friendly","expert","serious"): await send(cid,"Режимы: /aiconfig friendly, /aiconfig expert, /aiconfig serious")
+        else:
+            with db() as conn:
+                conn.execute("INSERT INTO preferences(chat_id,persona) VALUES(?,?) ON CONFLICT(chat_id) DO UPDATE SET persona=excluded.persona",(cid,mode))
+            await send(cid,"✅ Характер Шрека: "+mode)
+    elif cmd in ("/aitoggle","/xptoggle") and await asyncio.to_thread(group_owner,cid,uid):
+        column="ai_enabled" if cmd=="/aitoggle" else "level_enabled"
+        with db() as conn:
+            conn.execute("INSERT OR IGNORE INTO preferences(chat_id) VALUES(?)",(cid,))
+            conn.execute(f"UPDATE preferences SET {column}=1-{column} WHERE chat_id=?",(cid,))
+        await send(cid,"✅ Настройка изменена. /aistats")
     elif cmd=="/shop": await send(cid,SHOP_URL)
     elif cmd=="/ping": await send(cid,"✅ Бот на связи. Меню: /start")
     elif cmd=="/ai":
