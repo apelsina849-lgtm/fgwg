@@ -2524,7 +2524,7 @@ async def wins_feed():
             "CASE WHEN COALESCE(u.username,'')<>'' THEN '@'||u.username "
             "WHEN COALESCE(u.first_name,'')<>'' THEN u.first_name ELSE 'Игрок' END player "
             "FROM spin_history h LEFT JOIN users u ON u.telegram_id=h.telegram_id "
-            "WHERE h.reward_tier IN ('RED','GOLD','LEGENDARY','MYTHIC') ORDER BY h.id DESC LIMIT 30"
+            "WHERE h.reward_tier IN ('PURPLE','PINK','RED','GOLD','LEGENDARY','MYTHIC') ORDER BY h.id DESC LIMIT 35"
         )).fetchall()
     finally:
         await conn.close()
@@ -3370,6 +3370,7 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .farm-uc-target.farm-uc-complete{border-color:#678851;background:#1d2a1e}
 .farm-uc-target.farm-uc-complete b{color:#9be1a4}
 .farm-ui .farm-withdraw{background:linear-gradient(135deg,#1b2526,#12191a);border-color:#466266}
+.farm-ui .farm-withdraw .farm-section-head h3{display:flex;gap:9px;align-items:center}.farm-ui .farm-withdraw .farm-section-head h3 svg{height:32px;width:32px;flex:0 0 32px}
 .farm-ui .farm-withdraw .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .farm-ui .farm-withdraw .row>*{min-width:0}
 .farm-ui .farm-activity{background:linear-gradient(135deg,#243221,#151c16);border-color:#4c6b41}
