@@ -191,7 +191,8 @@ async def handle_callback(query):
         elif data=="page:ai":
             await edit(cid,mid,"🤖 ИИ-ПОМОЩНИК\n\nНапиши в чат команду:\n/ai твой вопрос\n\nСейчас отвечает встроенный помощник без API-ключа.",back())
         elif data=="quiz:new":
-            await quiz_start(cid,mid)
+            await call("editMessageReplyMarkup",chat_id=cid,message_id=mid,reply_markup={"inline_keyboard":[]})
+            notice="Новые викторины запускаются только автоматически."
         elif data.startswith("quiz:answer:"):
             _,_,question_id,answer_id=data.split(":")
             now=int(time.time())
@@ -207,7 +208,7 @@ async def handle_callback(query):
                     conn.execute("UPDATE quiz SET winner=? WHERE chat_id=? AND winner IS NULL",(uid,cid))
                     conn.execute("INSERT OR REPLACE INTO scores VALUES(?,?,?,COALESCE((SELECT wins FROM scores WHERE chat_id=? AND user_id=?),0)+1)",(cid,uid,"Игрок",cid,uid))
                     notice="🏆 Верно! Ты победил!"
-                    await edit(cid,mid,"🏆 ВИКТОРИНА ЗАВЕРШЕНА\n\nПравильный ответ: "+QUESTIONS[row[0]][1][int(answer_id)]+"\n\n🎉 Победитель определён!",keyboard([]))
+                    await edit(cid,mid,"🏆 ВИКТОРИНА ЗАВЕРШЕНА\n\nПравильный ответ: "+QUESTIONS[row[0]][1][int(answer_id)]+"\n\n🎉 Победитель определён!",{"inline_keyboard":[]})
         else:
             notice="Неизвестная кнопка."
     except Exception:
