@@ -708,6 +708,53 @@ async def init_db():
         await conn.execute("ALTER TABLE orders ADD COLUMN discount_percent INTEGER NOT NULL DEFAULT 0")
     if "telegram_charge_id" not in order_cols:
         await conn.execute("ALTER TABLE orders ADD COLUMN telegram_charge_id TEXT NOT NULL DEFAULT ''")
+
+    # Supplier marketplace, fully isolated from original first-party products.
+    # Stars split is an accounting estimate, never an automatic Stars transfer.
+    await conn.executescript("""
+    CREATE TABLE IF NOT EXISTS shop_sellers(
+      telegram_id INTEGER PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      contact TEXT NOT NULL,
+      experience TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      commission_pct INTEGER NOT NULL DEFAULT 20,
+      rules_confirmed INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS seller_settlement_log(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL UNIQUE,
+      seller_id INTEGER NOT NULL,
+      seller_stars INTEGER NOT NULL,
+      note TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_shop_sellers_status ON shop_sellers(status);
+    """)
+    product_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(products)")).fetchall()}
+    for col,ddl in {
+        "seller_id":"INTEGER NOT NULL DEFAULT 0",
+        "seller_stock":"INTEGER NOT NULL DEFAULT 0",
+        "seller_status":"TEXT NOT NULL DEFAULT 'active'",
+    }.items():
+        if col not in product_cols:
+            await conn.execute(f"ALTER TABLE products ADD COLUMN {col} {ddl}")
+    seller_order_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(orders)")).fetchall()}
+    for col,ddl in {
+        "seller_id":"INTEGER NOT NULL DEFAULT 0",
+        "seller_commission_pct":"INTEGER NOT NULL DEFAULT 0",
+        "seller_share_stars":"INTEGER NOT NULL DEFAULT 0",
+        "platform_share_stars":"INTEGER NOT NULL DEFAULT 0",
+        "seller_reserved_until":"INTEGER NOT NULL DEFAULT 0",
+        "seller_delivery_note":"TEXT NOT NULL DEFAULT ''",
+        "seller_submitted_at":"TEXT NOT NULL DEFAULT ''",
+    }.items():
+        if col not in seller_order_cols:
+            await conn.execute(f"ALTER TABLE orders ADD COLUMN {col} {ddl}")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_seller_products ON products(seller_id,seller_status,active)")
+    await conn.execute("CREATE INDEX IF NOT EXISTS idx_seller_orders ON orders(seller_id,status)")
     promo_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(promos)")).fetchall()}
     if "promo_type" not in promo_cols:
         await conn.execute("ALTER TABLE promos ADD COLUMN promo_type TEXT NOT NULL DEFAULT 'discount'")
@@ -1484,10 +1531,46 @@ async def health():
     return {"status":"ok","app":APP_NAME}
 
 
+
+SELLER_ORDER_HOLD_SECONDS = 30 * 60
+
+async def expire_seller_reservations(conn):
+    """Run under db_write_lock and BEGIN IMMEDIATE. Restore stock exactly once."""
+    now = int(time.time())
+    pending = await (await conn.execute(
+        "SELECT id,product_id FROM orders WHERE seller_id>0 AND status='Ожидает оплаты' "
+        "AND seller_reserved_until>0 AND seller_reserved_until<=?",
+        (now,)
+    )).fetchall()
+    for o in pending:
+        await conn.execute(
+            "UPDATE orders SET status='Истёк',updated_at=CURRENT_TIMESTAMP WHERE id=? "
+            "AND status='Ожидает оплаты'",
+            (o["id"],)
+        )
+        await conn.execute(
+            "UPDATE products SET seller_stock=seller_stock+1 WHERE id=? AND seller_id>0",
+            (o["product_id"],)
+        )
+
+def shop_order_shares(stars_amount: int, commission_pct: int):
+    # Marketplace terms use the post-discount Stars charge and the seller's
+    # commission rate frozen on order creation. This is gross accounting only.
+    total=max(0,int(stars_amount))
+    pct=max(0,min(100,int(commission_pct)))
+    owner=(total*pct+99)//100
+    return (total-owner,owner)
+
 @app.get("/api/catalog")
 async def catalog():
     conn = await db()
-    rows = await (await conn.execute("SELECT * FROM products WHERE active=1 ORDER BY sort_order,id")).fetchall()
+    rows = await (await conn.execute(
+        "SELECT p.*,s.display_name seller_name FROM products p "
+        "LEFT JOIN shop_sellers s ON s.telegram_id=p.seller_id "
+        "WHERE p.active=1 AND (p.seller_id=0 OR "
+        "(p.seller_status='active' AND p.seller_stock>0 AND s.status='approved')) "
+        "ORDER BY p.sort_order,p.id"
+    )).fetchall()
     await conn.close()
     return [dict(r) for r in rows]
 
@@ -1506,11 +1589,20 @@ async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(
         conn = await db()
         try:
             await conn.execute("BEGIN IMMEDIATE")
+            await expire_seller_reservations(conn)
             p = await (await conn.execute("SELECT * FROM products WHERE id=? AND active=1",(body.product_id,))).fetchone()
             if not p:
                 await conn.rollback()
                 raise HTTPException(404,"Товар не найден")
-
+            seller_id = int(p["seller_id"] or 0)
+            seller = None
+            if seller_id:
+                seller = await (await conn.execute(
+                    "SELECT status,commission_pct FROM shop_sellers WHERE telegram_id=?",(seller_id,)
+                )).fetchone()
+                if not seller or seller["status"]!="approved" or p["seller_status"]!="active" or int(p["seller_stock"] or 0)<1:
+                    await conn.rollback()
+                    raise HTTPException(409,"Предмет у этого продавца закончился")
             discount = 0
             if promo_code:
                 promo = await (await conn.execute(
@@ -1534,10 +1626,25 @@ async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(
             stars_amount = max(1, (int(p["stars_price"]) * (100 - discount) + 99) // 100)
             last = await (await conn.execute("SELECT COALESCE(MAX(number),10499) n FROM orders")).fetchone()
             number = int(last["n"]) + 1
+            pct = int(seller["commission_pct"] or 20) if seller else 0
+            seller_share,shop_share = shop_order_shares(stars_amount,pct) if seller else (0,0)
+            if seller_id:
+                reserved = await conn.execute(
+                    "UPDATE products SET seller_stock=seller_stock-1 WHERE id=? AND seller_id=? "
+                    "AND seller_stock>0 AND seller_status='active' AND active=1",
+                    (p["id"],seller_id)
+                )
+                if reserved.rowcount!=1:
+                    await conn.rollback()
+                    raise HTTPException(409,"Товар закончился, попробуйте другой")
             cur = await conn.execute(
-              "INSERT INTO orders(number,telegram_id,product_id,product_name,amount,stars_amount,uid,nickname,comment,promo_code,discount_percent) "
-              "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-              (number,int(u["id"]),p["id"],p["name"],p["price"],stars_amount,body.uid,body.nickname,body.comment,promo_code,discount)
+              "INSERT INTO orders(number,telegram_id,product_id,product_name,amount,stars_amount,"
+              "uid,nickname,comment,promo_code,discount_percent,seller_id,seller_commission_pct,"
+              "seller_share_stars,platform_share_stars,seller_reserved_until) "
+              "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              (number,int(u["id"]),p["id"],p["name"],p["price"],stars_amount,body.uid,body.nickname,
+               body.comment,promo_code,discount,seller_id,pct,seller_share,shop_share,
+               int(time.time())+SELLER_ORDER_HOLD_SECONDS if seller_id else 0)
             )
             oid = cur.lastrowid
             await conn.commit()
