@@ -5024,14 +5024,16 @@ async function sellerHtml(){
  '<div class="seller-feature-grid"><div><strong>70%</strong><small>Продавцу</small></div>'+
  '<div><strong>20%</strong><small>Магазину</small></div>'+
  '<div><strong>10%</strong><small>В резерв</small></div></div></div>';
- if(!profile)return top+'<div class="shx-panel"><h3>Стать продавцом</h3>'+
+ const calculator='<div class="shx-panel"><h3>⭐ Калькулятор комиссии</h3><div class="mini">Рассчитайте распределение Stars до публикации товара. Расчёт соответствует правилам реальных заказов.</div><div class="seller-inputs"><label>Цена товара в Stars<input id="sellerCalcPrice" type="number" min="1" max="1000000" value="100" inputmode="numeric"></label><label>Количество<input id="sellerCalcQty" type="number" min="1" max="1000" value="1" inputmode="numeric"></label></div><div id="sellerCalcResult" class="seller-income-row" aria-live="polite"></div><div class="mini">Предварительный расчёт, не выплата Stars.</div></div>';
+ const calculatorTop=top+calculator;
+ if(!profile)return calculatorTop+'<div class="shx-panel"><h3>Стать продавцом</h3>'
  '<div class="seller-inputs"><input id="sellerName" maxlength="72" placeholder="Имя магазина / продавца">'+
  '<input id="sellerContact" maxlength="120" placeholder="Контакт для связи (например, @username)">'+
  '<textarea id="sellerExperience" maxlength="700" placeholder="Какие товары поставляете, наличие и сроки выдачи"></textarea>'+
  '<label class="seller-accept"><input id="sellerRules" type="checkbox"><span>Подтверждаю наличие товаров, выполнение оплаченных заказов и соблюдение правил PUBG Mobile и Telegram</span></label>'+
  '<button class="buy" id="sellerApply">ОТПРАВИТЬ ЗАЯВКУ</button></div></div>';
  const status=profile.status==='approved'?'Одобрен':profile.status==='blocked'?'Заблокирован':'На рассмотрении';
- let html=top+'<div class="shx-panel"><div class="row" style="align-items:center;justify-content:space-between"><h3>Ваш статус</h3><span class="seller-status-pill '+esc(profile.status)+'">'+status+'</span></div>'+
+ let html=calculatorTop+'<div class="shx-panel"><div class="row" style="align-items:center;justify-content:space-between"><h3>Ваш статус</h3><span class="seller-status-pill '+esc(profile.status)+'">'+status+'</span></div>'+
  '<div class="name">'+esc(profile.display_name)+'</div><div class="mini">Новые заказы: продавцу 70% · магазину 20% · резерву 10% от оплаченных Stars. По старым заказам действуют сохранённые доли.</div></div>';
  if(profile.status!=='approved')return html;
  const orders=d.orders||[],settled=orders.filter(x=>x.settled),completed=orders.filter(x=>x.status==='Выполнен'&&!x.settled);
@@ -5070,6 +5072,8 @@ async function sellerHtml(){
  return html;
 }
 function bindSeller(){
+ const updateCalc=()=>{const p=Number(document.getElementById('sellerCalcPrice')?.value),q=Number(document.getElementById('sellerCalcQty')?.value),out=document.getElementById('sellerCalcResult');if(!out)return;if(!Number.isSafeInteger(p)||p<1||p>1000000||!Number.isSafeInteger(q)||q<1||q>1000){out.textContent='Укажите корректную цену и количество';return}const gross=p*q,fee=Math.ceil(gross*30/100),store=Math.min(fee,Math.ceil(gross*20/100)),reserve=fee-store,seller=gross-fee;out.innerHTML='<div><span>ВСЕГО</span><b>'+gross.toLocaleString('ru-RU')+' ⭐</b></div><div><span>ПРОДАВЦУ</span><b>'+seller.toLocaleString('ru-RU')+' ⭐</b></div><div><span>МАГАЗИНУ</span><b>'+store.toLocaleString('ru-RU')+' ⭐</b></div><div><span>РЕЗЕРВ</span><b>'+reserve.toLocaleString('ru-RU')+' ⭐</b></div>'};
+ ['sellerCalcPrice','sellerCalcQty'].forEach(id=>document.getElementById(id)?.addEventListener('input',updateCalc));updateCalc();
  const refresh=async()=>{app.innerHTML=await sellerHtml();bindSeller();addHomeExit()};
  const apply=document.getElementById('sellerApply');
  if(apply)apply.addEventListener('click',async()=>{
