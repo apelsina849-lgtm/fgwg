@@ -545,6 +545,9 @@ async def handle(msg):
             log(cid,uid,"suspected_scam",text)
             await send(cid,"⚠️ Возможная мошенническая схема. Не передавайте пароли и коды. Используйте только официальный магазин.",reply_parameters={"message_id":msg["message_id"],"allow_sending_without_reply":True})
             return
+    if chat.get("type") in ("group","supergroup"):
+        with db() as conn:
+            conn.execute("INSERT OR IGNORE INTO user_preferences(user_id,active_chat) VALUES(?,?)",(uid,cid))
     if chat.get("type") in ("group","supergroup") and len(text)>=3:
         try:
             if group_pref(cid)[2]: add_xp(cid,uid,user.get("first_name") or user.get("username") or "Игрок")
@@ -554,10 +557,12 @@ async def handle(msg):
     cmd=text.split()[0].split("@")[0].lower()
     if chat.get("type")=="private":
         row=owner_chat(uid)
-        if row:
+        if text in ("/admin","/settings") and row:
             await send(cid,admin_text(row),reply_markup=admin_menu(row))
+        elif text in ("/start","/menu","/help"):
+            await send(cid,"🐸 SHREKSICH AI — личный помощник по PUBG Metro Royale. Пиши вопрос прямо здесь. Ответ увидишь только ты.",reply_markup=private_menu(uid))
         else:
-            await send(cid,"🔒 Настройки доступны только владельцу чата.\\n\\nЧтобы привязать чат, его создатель должен отправить /setup в самом чате.")
+            await private_answer(uid,text,user_group(uid))
         return
     if chat.get("type") not in ("group","supergroup"):
         return
