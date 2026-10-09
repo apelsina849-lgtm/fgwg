@@ -2097,7 +2097,7 @@ async def catalog():
             await conn.execute("BEGIN IMMEDIATE")
             await expire_seller_reservations(conn)
             rows = await (await conn.execute(
-                "SELECT p.*,s.display_name seller_name FROM products p "
+                "SELECT p.*,s.display_name seller_name,COALESCE((SELECT ROUND(AVG(r.rating),2) FROM seller_reviews r WHERE r.seller_id=p.seller_id),0) seller_rating,COALESCE((SELECT COUNT(*) FROM seller_reviews r WHERE r.seller_id=p.seller_id),0) seller_review_count FROM products p "
                 "LEFT JOIN shop_sellers s ON s.telegram_id=p.seller_id "
                 "WHERE p.active=1 AND (p.seller_id=0 OR "
                 "(p.seller_status='active' AND p.seller_stock>0 AND s.status='approved')) "
@@ -5026,28 +5026,34 @@ function cards(list){
 }
 
 function marketplaceCatalogHtml(){
- const supplier=products.filter(p=>Number(p.seller_id||0)>0),main=products.filter(p=>Number(p.seller_id||0)===0);
- return '<section class="seller-catalog-head"><div class="seller-headline">SHREKSICH SHOP · METRO ROYALE</div>'+
- '<h1>🛒 Каталог товаров</h1><div class="seller-market-switch">'+
- '<button type="button" class="secondary" data-shop-section="all">Все · '+products.length+'</button>'+
- '<button type="button" class="secondary" data-shop-section="partners">Партнёры · '+supplier.length+'</button>'+
- '<button type="button" class="secondary" data-shop-section="official">Шрексич · '+main.length+'</button></div></section>'+
- '<section class="shop-list-section" data-shop-group="partners"><div class="shop-list-heading"><h3>🤝 Товары партнёров</h3><span class="seller-chip">'+supplier.length+' предложений</span></div>'+
- (supplier.length?cards(supplier):'<div class="empty">Пока нет товаров от продавцов</div>')+'</section>'+
- '<section class="shop-list-section" data-shop-group="official"><div class="shop-list-heading"><h3>📦 Товары Шрексича</h3><span class="seller-chip">'+main.length+' предложений</span></div>'+
- (main.length?cards(main):'<div class="empty">Нет товаров в наличии</div>')+'</section>';
+ const cats=[...new Set(products.map(p=>String(p.category||'Другое')))].sort((a,b)=>a.localeCompare(b,'ru'));
+ return '<section class="seller-catalog-head"><div class="seller-headline">SHREKSICH SHOP · METRO ROYALE</div><h1>🛒 Каталог товаров</h1><div class="mini">Товары Шрексича и проверенных продавцов · '+products.length+' предложений</div></section>'+
+ '<div class="shx-panel seller-inputs" style="margin:10px 0"><h3>🔎 Поиск и фильтры</h3><input id="shopSearch" placeholder="Название, описание или продавец" autocomplete="off">'+
+ '<div class="seller-income-row"><label class="mini">Категория<select id="shopCategory"><option value="">Все категории</option>'+cats.map(c=>'<option value="'+esc(c)+'">'+esc(c)+'</option>').join('')+'</select></label><label class="mini">Продавец<select id="shopSource"><option value="all">Все товары</option><option value="partners">Партнёры</option><option value="official">Шрексич</option></select></label></div>'+
+ '<div class="seller-income-row"><label class="mini">Цена от ⭐<input id="shopMin" type="number" min="0" inputmode="numeric" placeholder="От"></label><label class="mini">Цена до ⭐<input id="shopMax" type="number" min="0" inputmode="numeric" placeholder="До"></label></div>'+
+ '<div class="seller-income-row"><label class="mini">Рейтинг продавца<select id="shopRating"><option value="0">Любой рейтинг</option><option value="4.5">От 4,5 ⭐</option><option value="4">От 4 ⭐</option><option value="3">От 3 ⭐</option></select></label><label class="mini">Сортировка<select id="shopSort"><option value="default">По умолчанию</option><option value="cheap">Сначала дешёвые</option><option value="expensive">Сначала дорогие</option><option value="rating">По рейтингу</option><option value="new">Сначала новые</option><option value="stock">По наличию</option></select></label></div>'+
+ '<label class="seller-accept"><input type="checkbox" id="shopStock" checked> Только в наличии</label><button class="secondary" type="button" id="shopReset">Сбросить фильтры</button></div>'+
+ '<div class="mini" id="shopCount" aria-live="polite"></div><div id="shopResults"></div>';
 }
 function bindMarketplaceCatalog(){
- bindProductButtons();
- const filters=[...document.querySelectorAll('[data-shop-section]')];
- const applyFilter=value=>{
-  filters.forEach(b=>b.classList.toggle('active',b.dataset.shopSection===value));
-  document.querySelectorAll('[data-shop-group]').forEach(section=>{
-   section.classList.toggle('hide',value!=='all'&&section.dataset.shopGroup!==value)
-  })
+ const ids=['shopSearch','shopCategory','shopSource','shopMin','shopMax','shopRating','shopSort','shopStock'];
+ const render=()=>{
+  const val=id=>document.getElementById(id)?.value||'';
+  const query=val('shopSearch').trim().toLocaleLowerCase('ru'),cat=val('shopCategory'),source=val('shopSource'),min=val('shopMin')===''?0:Number(val('shopMin')),max=val('shopMax')===''?Infinity:Number(val('shopMax')),rating=Number(val('shopRating'));
+  const stockOnly=document.getElementById('shopStock').checked;
+  let found=products.filter(p=>{
+   const partner=Number(p.seller_id||0)>0,price=Number(p.stars_price||0),r=Number(p.seller_rating||0);
+   return (!query||[p.name,p.description,p.seller_name,p.category].some(x=>String(x||'').toLocaleLowerCase('ru').includes(query)))&&(!cat||p.category===cat)&&(source==='all'||(source==='partners'&&partner)||(source==='official'&&!partner))&&price>=min&&price<=max&&(!rating||(partner&&r>=rating))&&(!stockOnly||!partner||Number(p.seller_stock||0)>0);
+  });
+  const sort=val('shopSort');if(sort==='cheap')found.sort((a,b)=>Number(a.stars_price)-Number(b.stars_price));else if(sort==='expensive')found.sort((a,b)=>Number(b.stars_price)-Number(a.stars_price));else if(sort==='rating')found.sort((a,b)=>Number(b.seller_rating||0)-Number(a.seller_rating||0));else if(sort==='new')found.sort((a,b)=>Number(b.id)-Number(a.id));else if(sort==='stock')found.sort((a,b)=>Number(b.seller_stock||0)-Number(a.seller_stock||0));
+  document.getElementById('shopCount').textContent='Найдено: '+found.length+' из '+products.length;
+  const partners=found.filter(p=>Number(p.seller_id||0)>0),official=found.filter(p=>Number(p.seller_id||0)===0);
+  document.getElementById('shopResults').innerHTML=(partners.length?'<section class="shop-list-section"><div class="shop-list-heading"><h3>🤝 Продавцы · '+partners.length+'</h3></div>'+partners.map(p=>'<div class="mini" style="margin:7px 0 2px">🏪 '+esc(p.seller_name||'Продавец')+' · '+(Number(p.seller_review_count||0)>0?'⭐ '+Number(p.seller_rating).toFixed(1)+' ('+Number(p.seller_review_count)+' оценок)':'Пока без оценок')+'</div>'+cards([p])).join('')+'</section>':'')+(official.length?'<section class="shop-list-section"><div class="shop-list-heading"><h3>📦 Шрексич · '+official.length+'</h3></div>'+cards(official)+'</section>':'')+(!found.length?'<div class="empty">По этим фильтрам товаров нет. Попробуйте сбросить фильтры.</div>':'');
+  bindProductButtons();
  };
- filters.forEach(b=>b.addEventListener('click',()=>applyFilter(b.dataset.shopSection)));
- applyFilter('all')
+ ids.forEach(id=>document.getElementById(id)?.addEventListener(id==='shopStock'?'change':'input',render));
+ document.getElementById('shopReset')?.addEventListener('click',()=>{ids.forEach(id=>{const e=document.getElementById(id);if(!e)return;if(id==='shopStock')e.checked=true;else if(e.tagName==='SELECT')e.selectedIndex=0;else e.value=''});render()});
+ render();
 }
 function bindProductButtons(){document.querySelectorAll('[data-buy]').forEach(b=>b.addEventListener('click',()=>orderForm(Number(b.dataset.buy))))}
 
