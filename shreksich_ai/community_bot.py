@@ -475,6 +475,52 @@ def options(cid):
         row=conn.execute("SELECT cooldown,reward FROM bot_options WHERE chat_id=?",(cid,)).fetchone()
     return row or (15,25)
 
+PASS_REWARDS={2:"Разведчик",5:"Следопыт",10:"Ветеран",15:"Мастер Метро",20:"Легенда сезона"}
+
+def battle_pass(cid,uid):
+    season=int(time.time())//(30*86400)
+    with db() as conn:
+        row=conn.execute("SELECT xp FROM seasonal_xp WHERE chat_id=? AND user_id=? AND season=?",(cid,uid,season)).fetchone()
+        claimed={x[0] for x in conn.execute("SELECT level FROM battle_rewards WHERE chat_id=? AND user_id=? AND season=?",(cid,uid,season))}
+    xp=row[0] if row else 0
+    level=min(20,xp//100)
+    upcoming=[f"Уровень {n}: {name}"+(" ✅" if n in claimed else (" 🎁 доступно" if n<=level else "")) for n,name in PASS_REWARDS.items()]
+    return "🎖 БОЕВОЙ ПРОПУСК\\nСезон: "+str(season)+"\\nXP сезона: "+str(xp)+"\\nУровень: "+str(level)+"/20\\nСледующий уровень: "+str(max(0,(level+1)*100-xp))+" XP\\n\\n"+"\\n".join(upcoming)+"\\n\\nНапиши «забрать награды пропуска»."
+
+def claim_pass(cid,uid):
+    season=int(time.time())//(30*86400)
+    with db() as conn:
+        row=conn.execute("SELECT xp FROM seasonal_xp WHERE chat_id=? AND user_id=? AND season=?",(cid,uid,season)).fetchone()
+        level=min(20,(row[0] if row else 0)//100)
+        claimed=[]
+        for n,name in PASS_REWARDS.items():
+            if n<=level:
+                result=conn.execute("INSERT OR IGNORE INTO battle_rewards(chat_id,user_id,season,level) VALUES(?,?,?,?)",(cid,uid,season,n))
+                if result.rowcount: claimed.append(name)
+    return "🎁 Получены звания: "+", ".join(claimed) if claimed else "Новых наград пока нет. Зарабатывай XP сезона!"
+
+PUBG_GUIDES={
+    "эвакуация":"🧭 Эвакуация: до рейда выбери основной и запасной выход. После ценного лута избегай ненужных перестрелок, проверяй укрытия и слушай шаги.",
+    "броня":"🛡 Броня: учитывай прочность, уровень защиты и цену возможной потери. Проверяй состояние шлема и жилета перед рейдом.",
+    "оружие":"🔫 Оружие: подбирай под дистанцию и доступные патроны. Важны отдача, стоимость боеприпасов и привычный стиль стрельбы.",
+    "соло":"🐺 Соло: избегай открытых маршрутов, заранее продумай отход, не вступай в бой без преимущества и бери запас лечения.",
+    "команда":"🤝 Команда: распределяйте роли, называйте позиции противника, не бегите все в одну точку и согласуйте эвакуацию.",
+    "экономика":"💰 Экономика: оценивай чистую прибыль как стоимость добычи минус стоимость потерянного снаряжения и расходников.",
+}
+def pubg_guide(query):
+    q=query.lower()
+    if any(w in q for w in ("база знаний","все гайды","список гайдов")):
+        return "📚 БАЗА ЗНАНИЙ METRO ROYALE\\nТемы: "+", ".join(PUBG_GUIDES)+"\\nНапиши «гайд броня» или «гайд эвакуация»."
+    if any(w in q for w in ("гайд","инструкция","советы по")):
+        for key,value in PUBG_GUIDES.items():
+            if key in q: return value
+        return "📚 Выбери тему: "+", ".join(PUBG_GUIDES)
+    return None
+
+def record_usage(cid,uid,kind,success=True):
+    with db() as conn:
+        conn.execute("INSERT INTO usage_stats(chat_id,user_id,kind,ts,success) VALUES(?,?,?,?,?)",(cid,uid,kind,int(time.time()),int(success)))
+
 def user_group(uid):
     with db() as conn:
         row=conn.execute("SELECT active_chat FROM user_preferences WHERE user_id=?",(uid,)).fetchone()
