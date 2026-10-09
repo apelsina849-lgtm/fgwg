@@ -35,6 +35,9 @@ def db():
     c.execute("CREATE TABLE IF NOT EXISTS quiz(chat_id INTEGER PRIMARY KEY, question INTEGER, expires INTEGER, winner INTEGER)")
     c.execute("CREATE TABLE IF NOT EXISTS settings(chat_id INTEGER PRIMARY KEY, owner_id INTEGER NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, interval_minutes INTEGER NOT NULL DEFAULT 30, next_quiz INTEGER NOT NULL DEFAULT 0)")
     c.execute("CREATE TABLE IF NOT EXISTS scores(chat_id INTEGER,user_id INTEGER,name TEXT,wins INTEGER DEFAULT 0,PRIMARY KEY(chat_id,user_id))")
+    c.execute("CREATE TABLE IF NOT EXISTS profiles(chat_id INTEGER,user_id INTEGER,name TEXT,xp INTEGER DEFAULT 0,last_xp INTEGER DEFAULT 0,PRIMARY KEY(chat_id,user_id))")
+    c.execute("CREATE TABLE IF NOT EXISTS memory(chat_id INTEGER,user_id INTEGER,role TEXT,content TEXT,ts INTEGER)")
+    c.execute("CREATE TABLE IF NOT EXISTS preferences(chat_id INTEGER PRIMARY KEY,persona TEXT DEFAULT 'friendly',ai_enabled INTEGER DEFAULT 1,level_enabled INTEGER DEFAULT 1)")
     c.commit()
     return c
 def api(method, payload):
@@ -243,6 +246,44 @@ async def ask_ai(question):
         if "метро" in q or "metro" in q or "pubg" in q:
             return "🎮 В Metro Royale полезно заранее планировать маршрут эвакуации, следить за снаряжением и не рисковать ценным лутом без необходимости."
         return offline_answer(question)
+def rank_name(xp):
+    if xp>=2000: return "Легенда Метро"
+    if xp>=800: return "Охотник"
+    if xp>=250: return "Выживший"
+    return "Новичок"
+
+def group_pref(cid):
+    with db() as conn:
+        row=conn.execute("SELECT persona,ai_enabled,level_enabled FROM preferences WHERE chat_id=?",(cid,)).fetchone()
+    return row or ("friendly",1,1)
+
+def add_xp(cid,uid,name):
+    now=int(time.time())
+    with db() as conn:
+        conn.execute("INSERT OR IGNORE INTO profiles(chat_id,user_id,name,xp,last_xp) VALUES(?,?,?,0,0)",(cid,uid,name[:80]))
+        row=conn.execute("SELECT xp,last_xp FROM profiles WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()
+        if now-row[1]>=60:
+            conn.execute("UPDATE profiles SET xp=xp+5,last_xp=?,name=? WHERE chat_id=? AND user_id=?",(now,name[:80],cid,uid))
+            return row[0]+5
+    return row[0]
+
+def memory_context(cid,uid,question):
+    with db() as conn:
+        rows=conn.execute("SELECT role,content FROM memory WHERE chat_id=? AND user_id=? ORDER BY ts DESC,rowid DESC LIMIT 8",(cid,uid)).fetchall()
+    history="\\n".join(role+": "+content for role,content in reversed(rows))
+    return (history+"\\nПользователь: "+question) if history else question
+
+def remember(cid,uid,question,answer):
+    with db() as conn:
+        now=int(time.time())
+        conn.executemany("INSERT INTO memory(chat_id,user_id,role,content,ts) VALUES(?,?,?,?,?)",[(cid,uid,"Пользователь",question[:600],now),(cid,uid,"Шрек",answer[:900],now)])
+        conn.execute("DELETE FROM memory WHERE rowid IN (SELECT rowid FROM memory WHERE chat_id=? AND user_id=? ORDER BY ts DESC,rowid DESC LIMIT -1 OFFSET 20)",(cid,uid))
+
+def top_xp(cid):
+    with db() as conn:
+        rows=conn.execute("SELECT name,xp FROM profiles WHERE chat_id=? ORDER BY xp DESC LIMIT 10",(cid,)).fetchall()
+    return "🏆 РЕЙТИНГ АКТИВНОСТИ\\n\\n"+("\\n".join(f"{i}. {name} — {xp} XP ({rank_name(xp)})" for i,(name,xp) in enumerate(rows,1)) if rows else "Пока нет участников.")
+
 async def reply_to_question(chat_id,message_id,question):
     try:
         answer=await ask_ai(question)
