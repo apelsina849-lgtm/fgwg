@@ -243,7 +243,7 @@ async def ask_ai(question):
             return "🛒 Официальный магазин: "+SHOP_URL
         if "метро" in q or "metro" in q or "pubg" in q:
             return "🎮 В Metro Royale полезно заранее планировать маршрут эвакуации, следить за снаряжением и не рисковать ценным лутом без необходимости."
-        return "🤖 Бесплатный ИИ сейчас перегружен или недоступен. Попробуй ещё раз чуть позже."
+        return offline_answer(question)
 async def handle(msg):
     chat = msg.get("chat",{})
     user = msg.get("from",{})
