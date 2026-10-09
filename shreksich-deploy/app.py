@@ -2517,6 +2517,8 @@ async def inventory_resolve(item_id: int, body: InventoryResolveIn, x_telegram_i
 
 @app.get("/api/wins-feed")
 async def wins_feed():
+    # Один общий поток для всех игроков. Включает ценные ресурсы фермы и редкие
+    # выигрыши из кейсов/рулеток. Публикуем лишь открытые ники, не Telegram ID.
     conn = await db()
     try:
         rows = await (await conn.execute(
@@ -2524,11 +2526,47 @@ async def wins_feed():
             "CASE WHEN COALESCE(u.username,'')<>'' THEN '@'||u.username "
             "WHEN COALESCE(u.first_name,'')<>'' THEN u.first_name ELSE 'Игрок' END player "
             "FROM spin_history h LEFT JOIN users u ON u.telegram_id=h.telegram_id "
-            "WHERE h.reward_tier IN ('PURPLE','PINK','RED','GOLD','LEGENDARY','MYTHIC') ORDER BY h.id DESC LIMIT 35"
+            "WHERE h.reward_tier IN ('PURPLE','PINK','RED','GOLD','LEGENDARY','MYTHIC') ORDER BY h.id DESC LIMIT 45"
+        )).fetchall()
+        farm_rows = await (await conn.execute(
+            "SELECT f.id,f.details,f.created_at,"
+            "CASE WHEN COALESCE(u.username,'')<>'' THEN '@'||u.username "
+            "WHEN COALESCE(u.first_name,'')<>'' THEN u.first_name ELSE 'Игрок' END player "
+            "FROM farm_log f LEFT JOIN users u ON u.telegram_id=f.telegram_id "
+            "WHERE f.action='collect' ORDER BY f.id DESC LIMIT 180"
         )).fetchall()
     finally:
         await conn.close()
-    return [dict(r) for r in rows]
+    combined = [
+        {"id":f"spin-{row['id']}","origin":"spin","reward_name":row["reward_name"],
+         "reward_tier":row["reward_tier"],"created_at":row["created_at"],"player":row["player"]}
+        for row in rows
+    ]
+    for row in farm_rows:
+        try:
+            mined = json.loads(row["details"] or "{}")
+        except (json.JSONDecodeError,TypeError):
+            continue
+        if not isinstance(mined,dict):
+            continue
+        for resource_id, quantity in mined.items():
+            item = FARM_RESOURCE_BY_ID.get(resource_id)
+            if not item or item["tier"] not in ("PURPLE","PINK","RED","GOLD"):
+                continue
+            try:
+                count = max(0,int(quantity))
+            except (ValueError,TypeError):
+                continue
+            if count < 1:
+                continue
+            combined.append({
+                "id":f"farm-{row['id']}-{resource_id}",
+                "origin":"farm","reward_name":item["name"] + (f" ×{count}" if count>1 else ""),
+                "reward_tier":item["tier"],"created_at":row["created_at"],
+                "player":row["player"]
+            })
+    combined.sort(key=lambda x:(str(x["created_at"] or ""),str(x["id"])),reverse=True)
+    return combined[:35]
 
 
 @app.get("/api/referral")
