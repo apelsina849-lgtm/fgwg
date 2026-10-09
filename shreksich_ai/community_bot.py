@@ -250,7 +250,11 @@ async def handle_callback(query):
                 else:
                     conn.execute("UPDATE quiz SET winner=? WHERE chat_id=? AND winner IS NULL",(uid,cid))
                     conn.execute("INSERT OR REPLACE INTO scores VALUES(?,?,?,COALESCE((SELECT wins FROM scores WHERE chat_id=? AND user_id=?),0)+1)",(cid,uid,"Игрок",cid,uid))
-                    notice="🏆 Верно! Ты победил!"
+                    reward=options(cid)[1]
+                    conn.execute("INSERT OR IGNORE INTO profiles(chat_id,user_id,name,xp,last_xp) VALUES(?,?,?,0,0)",(cid,uid,(query.get("from") or {}).get("first_name","Игрок")))
+                    conn.execute("UPDATE profiles SET xp=xp+? WHERE chat_id=? AND user_id=?",(reward,cid,uid))
+                    conn.execute("INSERT OR IGNORE INTO achievements(chat_id,user_id,code,awarded_at) VALUES(?,?,?,?)",(cid,uid,"first_win",now))
+                    notice=f"🏆 Победа! +{reward} XP"
                     await edit(cid,mid,"🏆 ВИКТОРИНА ЗАВЕРШЕНА\n\nПравильный ответ: "+QUESTIONS[row[0]][1][int(answer_id)]+"\n\n🎉 Победитель определён!",{"inline_keyboard":[]})
         else:
             notice="Неизвестная кнопка."
