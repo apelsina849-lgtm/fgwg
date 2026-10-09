@@ -56,7 +56,7 @@ def menu():
 def back():
     return keyboard([[{"text":"⬅️ Главное меню","callback_data":"page:home"}]])
 def home_text():
-    return "🐸 ШРЕКСИЧ • ПОМОЩНИК\\n\\nВыбирай раздел кнопками ниже.\\n\\n🎮 Викторины по PUBG Metro Royale\\n🤖 Ответы на вопросы через /ai\\n🛒 Официальный магазин\\n\\nТрейды и выплаты через этого бота недоступны."
+    return "🐸 ШРЕКСИЧ • ПОМОЩНИК\n\nВыбирай раздел кнопками ниже.\n\n🎮 Викторины по PUBG Metro Royale\n🤖 Ответы на вопросы через /ai\n🛒 Официальный магазин\n\nТрейды и выплаты через этого бота недоступны."
 async def edit(chat, message_id, text, markup=None):
     return await call("editMessageText", chat_id=chat, message_id=message_id, text=text, reply_markup=markup or back())
 async def quiz_start(cid, message_id=None):
@@ -69,7 +69,7 @@ async def quiz_start(cid, message_id=None):
             index=random.randrange(len(QUESTIONS))
             conn.execute("INSERT OR REPLACE INTO quiz VALUES(?,?,?,NULL)",(cid,index,now+120))
     question,answers,_=QUESTIONS[index]
-    text="🎮 ВИКТОРИНА • 2 МИНУТЫ\\n\\n"+question+"\\n\\nВыбери правильный ответ:"
+    text="🎮 ВИКТОРИНА • 2 МИНУТЫ\n\n"+question+"\n\nВыбери правильный ответ:"
     buttons=keyboard([[{"text":f"{i+1}. {answer}","callback_data":f"quiz:answer:{index}:{i}"}] for i,answer in enumerate(answers)]+[[{"text":"⬅️ Главное меню","callback_data":"page:home"}]])
     if message_id:
         await edit(cid,message_id,text,buttons)
@@ -90,9 +90,9 @@ async def handle_callback(query):
         if data=="page:home":
             await edit(cid,mid,home_text(),menu())
         elif data=="page:help":
-            await edit(cid,mid,"📖 ПОМОЩЬ\\n\\n🎮 Викторина — отвечай кнопками\\n🤖 /ai твой вопрос — спросить ИИ\\n🛒 Магазин — перейти к покупкам\\n\\nВыбери раздел ниже.",keyboard([[{"text":"🎮 Викторина","callback_data":"quiz:new"}],[{"text":"⬅️ Главное меню","callback_data":"page:home"}]]))
+            await edit(cid,mid,"📖 ПОМОЩЬ\n\n🎮 Викторина — отвечай кнопками\n🤖 /ai твой вопрос — спросить ИИ\n🛒 Магазин — перейти к покупкам\n\nВыбери раздел ниже.",keyboard([[{"text":"🎮 Викторина","callback_data":"quiz:new"}],[{"text":"⬅️ Главное меню","callback_data":"page:home"}]]))
         elif data=="page:ai":
-            await edit(cid,mid,"🤖 ИИ-ПОМОЩНИК\\n\\nНапиши в чат команду:\\n/ai твой вопрос\\n\\nИИ доступен после подключения провайдера.",back())
+            await edit(cid,mid,"🤖 ИИ-ПОМОЩНИК\n\nНапиши в чат команду:\n/ai твой вопрос\n\nИИ доступен после подключения провайдера.",back())
         elif data=="quiz:new":
             await quiz_start(cid,mid)
         elif data.startswith("quiz:answer:"):
@@ -109,7 +109,7 @@ async def handle_callback(query):
                 else:
                     conn.execute("UPDATE quiz SET winner=? WHERE chat_id=? AND winner IS NULL",(uid,cid))
                     notice="🏆 Верно! Ты победил!"
-                    await edit(cid,mid,"🏆 ВИКТОРИНА ЗАВЕРШЕНА\\n\\nПравильный ответ: "+QUESTIONS[row[0]][1][int(answer_id)]+"\\n\\n🎉 Победитель определён!",keyboard([[{"text":"🎮 Новая викторина","callback_data":"quiz:new"}],[{"text":"⬅️ Главное меню","callback_data":"page:home"}]]))
+                    await edit(cid,mid,"🏆 ВИКТОРИНА ЗАВЕРШЕНА\n\nПравильный ответ: "+QUESTIONS[row[0]][1][int(answer_id)]+"\n\n🎉 Победитель определён!",keyboard([[{"text":"🎮 Новая викторина","callback_data":"quiz:new"}],[{"text":"⬅️ Главное меню","callback_data":"page:home"}]]))
         else:
             notice="Неизвестная кнопка."
     except Exception:
