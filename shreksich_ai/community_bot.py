@@ -355,10 +355,8 @@ def daily_progress(cid,uid):
 
 def daily_text(cid,uid):
     messages,questions,claimed=daily_progress(cid,uid)
-    return ("📅 ЗАДАНИЯ НА СЕГОДНЯ (UTC)\n\n"
-            f"💬 Написать 10 сообщений: {min(messages,10)}/10\n"
-            f"🐸 Задать Шреку 3 вопроса: {min(questions,3)}/3\n"
-            f"🎁 Награда: 50 XP — {'получена' if claimed else 'команда /claim' if messages>=10 and questions>=3 else 'пока недоступна'}")
+    status="получена" if claimed else ("команда /claim" if messages>=10 and questions>=3 else "пока недоступна")
+    return "📅 ЗАДАНИЯ НА СЕГОДНЯ (UTC)"+chr(10)+chr(10)+f"💬 Сообщения: {min(messages,10)}/10"+chr(10)+f"🐸 Вопросы Шреку: {min(questions,3)}/3"+chr(10)+"🎁 50 XP: "+status
 
 def add_daily(cid,uid,is_question=False):
     day=time.strftime("%Y-%m-%d",time.gmtime())
