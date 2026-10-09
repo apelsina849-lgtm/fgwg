@@ -375,6 +375,31 @@ def options(cid):
         row=conn.execute("SELECT cooldown,reward FROM bot_options WHERE chat_id=?",(cid,)).fetchone()
     return row or (15,25)
 
+def shrek_intent(question):
+    q=question.lower().strip(" .!?")
+    if any(w in q for w in ("забрать награду","получить награду","забрать xp","забрать опыт","получить xp")): return "claim"
+    if any(w in q for w in ("ежедневн","задани","квест","как заработать xp","как получить xp","как получать xp","как заработать опыт","как получить опыт")): return "daily"
+    if any(w in q for w in ("достижен","награды за достижения")): return "achievements"
+    if any(w in q for w in ("рейтинг","топ игроков","топ участников","лидерборд")): return "top"
+    if any(w in q for w in ("мой уровень","мой опыт","сколько у меня xp","сколько у меня опыта","мой профиль","мое звание","моё звание","сколько у меня хп")): return "profile"
+    return None
+
+async def shrek_intent_reply(cid,uid,question):
+    intent=shrek_intent(question)
+    if intent=="daily": return daily_text(cid,uid)
+    if intent=="claim": return "🎁 +50 XP! Награда получена." if claim_daily(cid,uid) else "Задание ещё не выполнено или награда уже получена. Спроси: Шрек, мои задания."
+    if intent=="top": return top_xp(cid)
+    if intent=="profile":
+        with db() as conn:
+            row=conn.execute("SELECT xp FROM profiles WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()
+        xp=row[0] if row else 0
+        return f"🐸 У тебя {xp} XP. Звание: {rank_name(xp)}."
+    if intent=="achievements":
+        with db() as conn:
+            row=conn.execute("SELECT COUNT(*) FROM achievements WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()
+        return "🏅 Достижения: "+("🥇 Первая победа в викторине" if row[0] else "пока нет. Победи в викторине!")
+    return None
+
 def daily_progress(cid,uid):
     day=time.strftime("%Y-%m-%d",time.gmtime())
     with db() as conn:
