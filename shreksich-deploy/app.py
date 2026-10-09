@@ -2054,6 +2054,42 @@ async def orders(x_telegram_init_data: str | None = Header(default=None)):
     return [dict(r) for r in rows]
 
 
+
+@app.post("/api/orders/{order_id}/cancel")
+async def cancel_unpaid_order(order_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    """Buyer may release a seller's reserved item before payment, exactly once."""
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            await expire_seller_reservations(conn)
+            row = await (await conn.execute(
+                "SELECT product_id,seller_id,status,telegram_charge_id FROM orders "
+                "WHERE id=? AND telegram_id=?",(order_id,uid)
+            )).fetchone()
+            if not row:
+                await conn.rollback()
+                raise HTTPException(404,"Заказ не найден")
+            if row["status"]!="Ожидает оплаты" or row["telegram_charge_id"]:
+                await conn.rollback()
+                raise HTTPException(409,"Отменить можно только неоплаченный заказ")
+            await conn.execute(
+                "UPDATE orders SET status='Отменён',updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (order_id,)
+            )
+            if int(row["seller_id"] or 0)>0:
+                await conn.execute(
+                    "UPDATE products SET seller_stock=seller_stock+1 WHERE id=? AND seller_id=?",
+                    (int(row["product_id"]),int(row["seller_id"]))
+                )
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"status":"Отменён"}
+
+
 @app.post("/api/orders/{order_id}/stars")
 async def stars(order_id: int, x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
@@ -3326,6 +3362,23 @@ async def admin_status(order_id:int, body:StatusIn, x_telegram_init_data: str | 
                 await conn.rollback()
                 raise HTTPException(404,"Заказ не найден")
             if int(row["seller_id"] or 0)>0:
+                charged = bool(row["telegram_charge_id"])
+                original_status = str(row["status"])
+                if charged and body.status in ("Ожидает оплаты","Ожидает проверки оплаты","Истёк"):
+                    await conn.rollback()
+                    raise HTTPException(409,"Нельзя возвращать оплаченный заказ в неоплаченное состояние")
+                if not charged and body.status not in ("Ожидает оплаты","Отменён"):
+                    await conn.rollback()
+                    raise HTTPException(409,"Статус оплаченного заказа доступен только после подтверждения Stars")
+                if original_status in ("Отменён","Истёк") and body.status!="Отменён":
+                    await conn.rollback()
+                    raise HTTPException(409,"Закрытый заказ нельзя возобновить: оформите новый заказ")
+                if charged and original_status=="Проверка оплаты" and body.status not in ("Проверка оплаты","Возврат"):
+                    await conn.rollback()
+                    raise HTTPException(409,"Платёж по истёкшей брони требует проверки и возврата Stars")
+                if body.status=="Проверка выдачи" and original_status!="Проверка выдачи":
+                    await conn.rollback()
+                    raise HTTPException(409,"Проверку выдачи может инициировать только продавец")
                 if body.status=="Выполнен" and (
                     not row["telegram_charge_id"] or row["status"]!="Проверка выдачи"
                     or not row["seller_delivery_note"]
