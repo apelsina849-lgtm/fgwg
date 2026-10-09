@@ -94,14 +94,13 @@ def keyboard(rows):
     return {"inline_keyboard": rows}
 def menu():
     return keyboard([
-        [{"text":"🎮 Викторина","callback_data":"quiz:new"},{"text":"🤖 ИИ-помощник","callback_data":"page:ai"}],
+        [{"text":"🤖 ИИ-помощник","callback_data":"page:ai"}],
         [{"text":"🛒 Магазин","url":SHOP_URL}],
-        [{"text":"📖 Помощь","callback_data":"page:help"}],
     ])
 def back():
     return keyboard([[{"text":"⬅️ Главное меню","callback_data":"page:home"}]])
 def home_text():
-    return "🐸 ШРЕКСИЧ • ПОМОЩНИК\n\nВыбирай раздел кнопками ниже.\n\n🎮 Викторины по PUBG Metro Royale\n🤖 Помощник без API-ключа через /ai\n🛒 Официальный магазин\n\nТрейды и выплаты через этого бота недоступны."
+    return "🐸 ШРЕКСИЧ • ИИ-ПОМОЩНИК\n\n🤖 Задай вопрос командой /ai или упомяни @Shrekchataibot в чате.\n🛒 Официальный магазин — по кнопке ниже."
 async def edit(chat, message_id, text, markup=None):
     return await call("editMessageText", chat_id=chat, message_id=message_id, text=text, reply_markup=markup or back())
 async def quiz_start(cid, message_id=None):
