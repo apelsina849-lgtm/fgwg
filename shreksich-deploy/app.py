@@ -4449,6 +4449,40 @@ background:radial-gradient(circle,#71e0ff1f,transparent 70%);pointer-events:none
 @media(max-width:360px){.farm-uc-miner-stats{gap:5px}.farm-uc-miner-stat{padding:8px 5px}.farm-uc-miner-stat strong{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.farm-uc-miner:before{animation:none}}
 
+
+/* SHOP marketplace: vendor-facing controls isolated from the existing store */
+.seller-hero{padding:20px 17px;border-radius:22px;border:1px solid #497f97;background:radial-gradient(circle at 80% 0%,#77c9eb25,transparent 48%),linear-gradient(137deg,#102e48,#091b2c 80%);box-shadow:0 12px 30px #0005;margin-bottom:15px}
+.seller-hero h1{margin:8px 0 3px;font-size:25px;font-weight:1000}
+.seller-hero .seller-headline{color:#9de3f7;font-size:11px;font-weight:900;letter-spacing:.15em}
+.seller-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:13px}
+.seller-feature-grid>div{min-width:0;padding:10px 7px;border:1px solid #35546f;border-radius:12px;background:#0b2034}
+.seller-feature-grid strong{display:block;color:#e9fbff;font-size:16px;font-weight:950}
+.seller-feature-grid small{font-size:9px;color:#9ebac7;line-height:1.4}
+.seller-status-pill{display:inline-flex;border-radius:9px;padding:5px 8px;font-weight:900;font-size:10px;background:#193953;border:1px solid #548bac;color:#b4e9ff}
+.seller-status-pill.approved,.seller-status-pill.active{background:#183b32;border-color:#459c7e;color:#a1f1bf}
+.seller-status-pill.blocked,.seller-status-pill.rejected{background:#431e2c;border-color:#be5975;color:#ffc1c4}
+.seller-stock-tag{color:#8ceec5;font-weight:900;font-size:11px}
+.seller-market-card{padding:12px;border:1px solid #365974;background:linear-gradient(140deg,#122840,#0b182a);border-radius:16px;margin:9px 0;overflow-wrap:anywhere}
+.seller-market-card h3{margin:4px 0 7px;font-size:15px;color:#f3faff}
+.seller-market-card .mini{font-size:11px}
+.seller-market-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.seller-market-actions button{flex:1 1 110px;font-size:11px}
+.seller-inputs{display:grid;gap:9px}
+.seller-inputs input,.seller-inputs textarea,.seller-inputs select{width:100%;max-width:100%;box-sizing:border-box}
+.seller-income-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.seller-income-row>div{background:#132c44;border:1px solid #42657e;padding:12px;border-radius:12px}
+.seller-income-row span{display:block;font-size:10px;color:#a0bcce}
+.seller-income-row b{display:block;margin-top:4px;font-size:19px;color:#ddf6ff}
+.seller-help{font-size:11px;color:#aac3d2;line-height:1.5;margin-top:10px}
+.seller-accept{display:flex;gap:9px;align-items:start;font-size:12px}
+.seller-accept input{width:auto;flex:0 0 auto}
+.seller-badge{color:#9bd9ff;font-size:10px;font-weight:900}
+.seller-chip{display:inline-flex;font-size:10px;font-weight:850;border:1px solid #467189;border-radius:8px;padding:4px 8px;background:#10283b}
+.seller-admin-list{max-height:600px;overflow-y:auto}
+.seller-admin-box{margin:10px 0;padding:12px;border:1px solid #45637d;border-radius:15px;background:#11253b}
+.seller-admin-box .seller-market-actions{margin-top:12px}
+@media(max-width:390px){.seller-feature-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.seller-hero h1{font-size:22px}}
+
 </style>
 </head>
 <body>
@@ -4702,7 +4736,11 @@ async function loadWinsFeed(){
 }
 
 function cards(list){
- return '<div class="grid">'+list.map(p=>'<div class="card"><div class="cat">'+esc(p.category)+'</div><div class="name">'+esc(p.name)+'</div><div class="desc">'+esc(p.description)+'</div><div class="price">'+stars(p.stars_price)+'</div><button class="buy" data-buy="'+p.id+'">Купить за Stars</button></div>').join('')+'</div>'
+ return '<div class="grid">'+list.map(p=>'<div class="card"><div class="cat">'+esc(p.category)+'</div>'+
+ '<div class="name">'+esc(p.name)+'</div><div class="desc">'+esc(p.description)+'</div>'+
+ (Number(p.seller_id||0)>0?'<div class="seller-badge">✓ ПРОДАВЕЦ: '+esc(p.seller_name||'Проверенный продавец')+'</div>'+
+ '<div class="seller-stock-tag">● В наличии: '+Number(p.seller_stock||0)+' шт.</div>':'')+
+ '<div class="price">'+stars(p.stars_price)+'</div><button class="buy" data-buy="'+p.id+'">Купить за Stars</button></div>').join('')+'</div>'
 }
 function bindProductButtons(){document.querySelectorAll('[data-buy]').forEach(b=>b.addEventListener('click',()=>orderForm(Number(b.dataset.buy))))}
 
@@ -4762,6 +4800,7 @@ function home(){
  homeTile('Награды','Активность и UC','tasks','farm','activity')+
  homeTile('Промокоды','Бонусные билеты','promo','spin')+
  homeTile('Вывод UC','Обмен UC Credits','uc','farm','uc')+
+ homeTile('Продавцам','Стань поставщиком','catalog','seller')+
  homeTile('Поддержка','Помощь и вопросы','help','support')+
  '</div>'+
  '<section class="shx-live"><div class="shx-live-head"><span>LIVE ДРОПЫ</span><small><span class="shx-online"></span>Реальные находки игроков</small></div><div id="homeLiveCards">'+homeWinsHtml()+'</div></section>'+
@@ -4771,12 +4810,96 @@ function home(){
 function bindHome(){
  document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{farmJumpTarget=b.dataset.goSection||'';go(b.dataset.go)}));
 }
+
+/* SUPPLIER MARKETPLACE — seller is bound to Telegram auth, not a nickname. */
+async function sellerHtml(){
+ const d=await api('/api/seller'),profile=d.profile;
+ const top='<div class="seller-hero"><div class="seller-headline">SHREKSICH · PARTNERS</div><h1>🤝 Кабинет продавца</h1>'+
+ '<div class="mini" style="color:#b9ddeb">Товары, заказы и комиссии под контролем магазина</div>'+
+ '<div class="seller-feature-grid"><div><strong>20%</strong><small>Базовая комиссия магазина</small></div>'+
+ '<div><strong>Stars</strong><small>Оплата покупателя</small></div>'+
+ '<div><strong>24/7</strong><small>Приём заказов</small></div></div></div>';
+ if(!profile)return top+'<div class="shx-panel"><h3>Стать продавцом</h3>'+
+ '<div class="seller-inputs"><input id="sellerName" maxlength="72" placeholder="Имя магазина / продавца">'+
+ '<input id="sellerContact" maxlength="120" placeholder="Контакт для связи (например, @username)">'+
+ '<textarea id="sellerExperience" maxlength="700" placeholder="Какие товары поставляете, наличие и сроки выдачи"></textarea>'+
+ '<label class="seller-accept"><input id="sellerRules" type="checkbox"><span>Подтверждаю наличие товаров, выполнение оплаченных заказов и соблюдение правил PUBG Mobile и Telegram</span></label>'+
+ '<button class="buy" id="sellerApply">ОТПРАВИТЬ ЗАЯВКУ</button></div></div>';
+ const status=profile.status==='approved'?'Одобрен':profile.status==='blocked'?'Заблокирован':'На рассмотрении';
+ let html=top+'<div class="shx-panel"><div class="row" style="align-items:center;justify-content:space-between"><h3>Ваш статус</h3><span class="seller-status-pill '+esc(profile.status)+'">'+status+'</span></div>'+
+ '<div class="name">'+esc(profile.display_name)+'</div><div class="mini">Комиссия магазина: '+Number(profile.commission_pct||20)+'% · Ваша доля: '+(100-Number(profile.commission_pct||20))+'% от стоимости оплаченного заказа</div></div>';
+ if(profile.status!=='approved')return html;
+ const orders=d.orders||[],settled=orders.filter(x=>x.settled),completed=orders.filter(x=>x.status==='Выполнен'&&!x.settled);
+ const paidSum=settled.reduce((a,x)=>a+Number(x.seller_share_stars||0),0);
+ const toSettle=completed.reduce((a,x)=>a+Number(x.seller_share_stars||0),0);
+ html+='<div class="seller-income-row"><div><span>К РАСЧЁТУ · УЧЁТ ⭐</span><b>'+toSettle+' ⭐</b></div><div><span>ОТМЕЧЕНО РАСЧЁТОВ · ⭐</span><b>'+paidSum+' ⭐</b></div></div>'+
+ '<div class="seller-help">Доли рассчитываются от оплаты за товар после скидок. Это учёт обязательств в эквиваленте Stars, а не автоматический перевод Stars. Расчёты проводит администрация отдельно.</div>'+
+ '<div class="shx-panel"><h3>➕ Добавить товар</h3><div class="seller-inputs">'+
+ '<input id="sellerListingName" maxlength="120" placeholder="Название товара">'+
+ '<input id="sellerListingCategory" maxlength="80" placeholder="Категория (Metro Royale, квесты…)">'+
+ '<textarea id="sellerListingDesc" maxlength="1200" placeholder="Описание, комплект и условия выдачи"></textarea>'+
+ '<input id="sellerListingStars" type="number" min="1" max="100000" placeholder="Цена за 1 шт. в Stars">'+
+ '<input id="sellerListingStock" type="number" min="1" max="1000" placeholder="Количество в наличии">'+
+ '<button class="buy" id="sellerAddListing">ОТПРАВИТЬ НА ПРОВЕРКУ</button></div></div>'+
+ '<h3 style="margin:16px 0 7px">Ваши товары</h3>'+
+ ((d.listings||[]).map(x=>'<div class="seller-market-card"><span class="seller-status-pill '+esc(x.seller_status)+'">'+esc(x.seller_status)+'</span>'+
+ '<h3>'+esc(x.name)+'</h3><div class="mini">'+esc(x.category)+' · '+Number(x.stars_price)+' ⭐</div>'+
+ '<div class="seller-stock-tag">Доступно: '+Number(x.seller_stock)+' шт.</div>'+
+ '<div class="seller-market-actions"><input type="number" id="sellerRestock'+x.id+'" min="1" max="1000" placeholder="+ остаток" style="width:110px">'+
+ '<button class="secondary" data-seller-restock="'+x.id+'">Пополнить</button></div></div>').join('')||'<div class="empty">Товаров пока нет</div>')+
+ '<h3 style="margin:16px 0 7px">Оплаченные заказы</h3>'+
+ (orders.map(x=>'<div class="seller-market-card"><div class="mini">#'+x.number+' · '+esc(x.status)+'</div>'+
+ '<h3>'+esc(x.product_name)+'</h3><div class="mini">UID: '+esc(x.uid)+' · Ник: '+esc(x.nickname||'—')+'</div>'+
+ (x.comment?'<div class="mini">Комментарий: '+esc(x.comment)+'</div>':'')+
+ '<div class="seller-market-actions"><span class="seller-chip">Цена '+Number(x.stars_amount)+' ⭐</span>'+
+ '<span class="seller-chip">Доля '+Number(x.seller_share_stars)+' ⭐</span>'+
+ (x.settled?'<span class="seller-status-pill approved">Расчёт отмечен</span>':'')+'</div>'+
+ (['Оплачен','Принят','В работе'].includes(x.status)?'<div class="seller-inputs" style="margin-top:10px">'+
+ '<textarea id="sellerProof'+x.id+'" maxlength="700" placeholder="Подтверждение выдачи: что и как передали покупателю"></textarea>'+
+ '<button class="buy" data-seller-deliver="'+x.id+'">ПЕРЕДАНО ПОКУПАТЕЛЮ</button></div>':'')+
+ (x.seller_delivery_note?'<div class="mini">Подтверждение: '+esc(x.seller_delivery_note)+'</div>':'')+'</div>').join('')||'<div class="empty">Новых оплаченных заказов нет</div>');
+ return html;
+}
+function bindSeller(){
+ const refresh=async()=>{app.innerHTML=await sellerHtml();bindSeller();addHomeExit()};
+ const apply=document.getElementById('sellerApply');
+ if(apply)apply.addEventListener('click',async()=>{
+  apply.disabled=true;
+  try{await api('/api/seller/apply',{method:'POST',body:JSON.stringify({
+   display_name:document.getElementById('sellerName').value,contact:document.getElementById('sellerContact').value,
+   experience:document.getElementById('sellerExperience').value,rules_confirmed:document.getElementById('sellerRules').checked
+  })});await refresh()}catch(e){alert(e.message);apply.disabled=false}
+ });
+ const add=document.getElementById('sellerAddListing');
+ if(add)add.addEventListener('click',async()=>{
+  add.disabled=true;try{await api('/api/seller/listings',{method:'POST',body:JSON.stringify({
+   name:document.getElementById('sellerListingName').value,category:document.getElementById('sellerListingCategory').value,
+   description:document.getElementById('sellerListingDesc').value,
+   stars_price:Number(document.getElementById('sellerListingStars').value),
+   stock:Number(document.getElementById('sellerListingStock').value)
+  })});await refresh()}catch(e){alert(e.message);add.disabled=false}
+ });
+ document.querySelectorAll('[data-seller-restock]').forEach(btn=>btn.addEventListener('click',async()=>{
+  const id=Number(btn.dataset.sellerRestock);
+  btn.disabled=true;try{await api('/api/seller/listings/'+id+'/restock',{method:'POST',body:JSON.stringify({
+   stock_to_add:Number(document.getElementById('sellerRestock'+id).value)
+  })});await refresh()}catch(e){alert(e.message);btn.disabled=false}
+ }));
+ document.querySelectorAll('[data-seller-deliver]').forEach(btn=>btn.addEventListener('click',async()=>{
+  const id=Number(btn.dataset.sellerDeliver);
+  if(!confirm('Заказ действительно выдан покупателю?'))return;
+  btn.disabled=true;try{await api('/api/seller/orders/'+id+'/delivered',{method:'POST',body:JSON.stringify({
+   note:document.getElementById('sellerProof'+id).value
+  })});await refresh()}catch(e){alert(e.message);btn.disabled=false}
+ }));
+}
+
 function profileHtml(){
  const u=me||{},f=homeFarmData||farmCachedData||{},display=String(u.username?'@'+u.username:u.first_name||'Игрок');
  return '<div class="shx-page-title"><button class="shx-back" data-go="home">← Главная</button><h1>Профиль</h1></div>'+
  '<section class="shx-profile"><div class="shx-profile-top"><div class="shx-avatar">'+esc(display.replace(/^@/,'').charAt(0).toUpperCase()||'S')+'</div><div><div class="shx-username">'+esc(display)+'</div><div class="shx-user-sub">Жетон: '+esc(u.token||'—')+'</div></div></div>'+
  '<div class="shx-wallets"><div class="shx-wallet">'+farmCoinIcon()+'<div><div class="shx-wallet-count">'+Number(f.shrek_coins||0)+'</div><div class="shx-wallet-name">ShrekCOIN</div></div></div><div class="shx-wallet">'+farmUcIcon()+'<div><div class="shx-wallet-count">'+Number(f.uc_available||0)+'</div><div class="shx-wallet-name">UC Credits</div></div></div><div class="shx-wallet"><div class="shx-star">✦</div><div><div class="shx-wallet-count">'+Number(f.shr||0)+'</div><div class="shx-wallet-name">SHR</div></div></div></div></section>'+
- '<section class="shx-panel"><h3>Управление аккаунтом</h3><div class="shx-profile-actions"><button data-go="orders">📦 Мои заказы</button><button data-go="inventory">🎒 Инвентарь</button><button data-go="farm">🌾 Моя ферма</button><button data-go="referral">👥 Рефералы</button><button data-go="settings">⚙ Настройки</button><button data-go="support">💬 Поддержка</button></div></section>';
+ '<section class="shx-panel"><h3>Управление аккаунтом</h3><div class="shx-profile-actions"><button data-go="seller">🤝 Продавцам</button><button data-go="orders">📦 Мои заказы</button><button data-go="inventory">🎒 Инвентарь</button><button data-go="farm">🌾 Моя ферма</button><button data-go="referral">👥 Рефералы</button><button data-go="settings">⚙ Настройки</button><button data-go="support">💬 Поддержка</button></div></section>';
 }
 function bindProfile(){document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));}
 
@@ -6143,7 +6266,8 @@ async function render(){
  try{
   if(ADMIN){app.innerHTML=await adminHtml();bindAdmin();return}
   if(tab==='home'){try{homeFarmData=await api('/api/farm')}catch(_){} app.innerHTML=home();bindHome()}
-  else if(tab==='catalog'){app.innerHTML='<h2>Каталог</h2>'+cards(products);bindProductButtons()}
+  else if(tab==='catalog'){products=await api('/api/catalog');app.innerHTML='<h2>Каталог</h2>'+cards(products);bindProductButtons()}
+  else if(tab==='seller'){app.innerHTML=await sellerHtml();bindSeller()}
   else if(tab==='spin'){app.innerHTML=await spinHtml();bindSpin()}
   else if(tab==='roulette'){app.innerHTML=await rouletteHtml();bindRoulette()}
   else if(tab==='orders'){app.innerHTML=await ordersHtml()}
