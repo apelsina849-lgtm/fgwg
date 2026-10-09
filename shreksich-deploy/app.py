@@ -4987,13 +4987,13 @@ window.addEventListener('error',e=>showFatal('Ошибка интерфейса:
 window.addEventListener('unhandledrejection',e=>showFatal('Ошибка загрузки: '+((e.reason&&e.reason.message)||String(e.reason||''))));
 
 async function api(path,options={}){
- const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),15000);
+ const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),30000);
  try{
   const r=await fetch(path,Object.assign({},options,{headers:Object.assign({},headers,options.headers||{}),signal:ctl.signal}));
   let d={};try{d=await r.json()}catch(_){}
   if(!r.ok){const detail=Array.isArray(d.detail)?d.detail.map(x=>{const field=(x.loc||[]).filter(v=>v!=='body').join('.');return (field?field+': ':'')+(x.msg||'Неверное значение')}).join('; '):typeof d.detail==='string'?d.detail:('HTTP '+r.status);throw new Error(detail)}
   return d;
- }catch(e){if(e&&e.name==='AbortError')throw new Error('Сервер не ответил за 15 секунд');throw e}
+ }catch(e){if(e&&e.name==='AbortError')throw new Error('Сервер не ответил за 30 секунд');throw e}
  finally{clearTimeout(timer)}
 }
 function openTelegram(url){try{if(tg&&tg.openTelegramLink)tg.openTelegramLink(url);else window.open(url,'_blank')}catch(_){window.open(url,'_blank')}}
@@ -5281,7 +5281,7 @@ async function createOrder(id){
  try{
   const o=await api('/api/orders',{method:'POST',body:JSON.stringify({product_id:id,uid:document.getElementById('uid').value,nickname:document.getElementById('nick').value,comment:document.getElementById('comment').value,promo_code:document.getElementById('promo').value})});
   showPay(o)
- }catch(e){btn.disabled=false;btn.textContent='Создать заказ';alert(e.message)}
+ }catch(e){btn.disabled=false;btn.textContent='Создать заказ';if(String(e.message).includes('не ответил')){alert('Соединение с сервером прервалось. Проверьте «Мои заказы» перед повторной попыткой — заказ мог сохраниться.');go('orders')}else alert(e.message)}
 }
 function showPay(o){
  const sale=o.discount_percent?'<div class="ok">Промокод '+esc(o.promo_code)+' • -'+o.discount_percent+'%</div>':'';
