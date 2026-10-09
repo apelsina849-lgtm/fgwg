@@ -96,6 +96,7 @@ def admin_menu(row):
         [{"text":"🎮 Автовикторины "+("✅" if enabled else "❌"),"callback_data":"admin:toggle"}],
         [{"text":"⏱ 15 мин","callback_data":"admin:interval:15"},{"text":"⏱ 30 мин","callback_data":"admin:interval:30"},{"text":"⏱ 60 мин","callback_data":"admin:interval:60"}],
         [{"text":"🎮 Провести викторину","callback_data":"admin:quiz"}],
+        [{"text":"⏳ Частота ответов","callback_data":"admin:cooldown"},{"text":"🎁 Награда XP","callback_data":"admin:reward"}],
         [{"text":"📊 Статистика","callback_data":"admin:stats"},{"text":"🧠 Очистить память","callback_data":"admin:memory_confirm"}],
         [{"text":"🔄 Обновить","callback_data":"admin:refresh"}],
     ])
@@ -202,6 +203,20 @@ async def handle_callback(query):
             with db() as conn:
                 conn.execute("INSERT OR IGNORE INTO preferences(chat_id) VALUES(?)",(row[0],))
                 conn.execute("UPDATE preferences SET persona=? WHERE chat_id=?",(new,row[0]))
+        elif data=="admin:cooldown":
+            old=options(row[0])[0]
+            choices=[0,10,15,30,60]
+            new=choices[(choices.index(old)+1)%len(choices)] if old in choices else 15
+            with db() as conn:
+                conn.execute("INSERT OR IGNORE INTO bot_options(chat_id) VALUES(?)",(row[0],))
+                conn.execute("UPDATE bot_options SET cooldown=? WHERE chat_id=?",(new,row[0]))
+        elif data=="admin:reward":
+            old=options(row[0])[1]
+            choices=[0,10,25,50,100]
+            new=choices[(choices.index(old)+1)%len(choices)] if old in choices else 25
+            with db() as conn:
+                conn.execute("INSERT OR IGNORE INTO bot_options(chat_id) VALUES(?)",(row[0],))
+                conn.execute("UPDATE bot_options SET reward=? WHERE chat_id=?",(new,row[0]))
         elif data=="admin:memory_clear":
             with db() as conn:
                 conn.execute("DELETE FROM memory WHERE chat_id=?",(row[0],))
