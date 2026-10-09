@@ -1,5 +1,6 @@
 """SHREKSICH AI: isolated community bot MVP. No access to shop balances."""
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -19,6 +20,9 @@ SHOP_URL = os.getenv("SHREKSICH_SHOP_URL", "https://shreksich-app-y25m-productio
 AI_URL = os.getenv("SHREKSICH_AI_API_URL", "")
 AI_KEY = os.getenv("SHREKSICH_AI_API_KEY", "")
 AI_MODEL = os.getenv("SHREKSICH_AI_MODEL", "")
+VISION_MODEL = os.getenv("SHREKSICH_VISION_MODEL", "")
+TRANSCRIBE_URL = os.getenv("SHREKSICH_TRANSCRIBE_URL", "")
+VOICE_MODEL = os.getenv("SHREKSICH_VOICE_MODEL", "")
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("shreksich-ai")
 QUESTIONS = [
