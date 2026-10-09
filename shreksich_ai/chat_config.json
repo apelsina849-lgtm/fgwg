@@ -1,0 +1,11 @@
+{
+  "community_chat_url": "https://t.me/chatshreksi4",
+  "community_chat_username": "chatshreksi4",
+  "deployment_status": "pending_token_rotation",
+  "features": [
+    "ai",
+    "guard",
+    "games",
+    "trade"
+  ]
+}
