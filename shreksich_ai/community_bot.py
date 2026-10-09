@@ -610,6 +610,12 @@ async def handle(msg):
         return
     if cmd in ("/start","/help","/menu"):
         return  # No public menus in the group; owner controls are private.
+    elif cmd in ("/top","/daily","/claim","/achievements","/profile","/ai"):
+        try:
+            await private_answer(uid,{"\/top":"покажи рейтинг","\/daily":"мои задания","\/claim":"забрать награду","\/achievements":"мои достижения","\/profile":"мой профиль","\/ai":text.partition(" ")[2].strip() or "помоги с PUBG"}.get(cmd,"мой профиль"),cid)
+        except Exception:
+            LOG.info("User %s must start private bot first",uid)
+        return
     elif cmd=="/top": await send(cid,top_xp(cid))
     elif cmd=="/daily": await send(cid,daily_text(cid,uid))
     elif cmd=="/achievements":
