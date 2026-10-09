@@ -130,11 +130,11 @@ def admin_text(row):
     persona,ai_on,xp_on=group_pref(cid)
     cooldown,reward=options(cid)
     anti_scam,anti_flood=moderation_pref(cid)
-    voice_on,image_on,duels_on=ai_features(cid)
+    duels_on=ai_features(cid)[2]
     return (f"🐸 SHREKSICH AI 2.0 • ПАНЕЛЬ ВЛАДЕЛЬЦА\n\nЧат: {cid}\n"
             f"ИИ: {'включён' if ai_on else 'выключен'}\nХарактер: {persona}\n"
             f"XP: {'включён' if xp_on else 'выключен'}\n"
-            f"Автовикторины: {'включены' if enabled else 'выключены'} (каждые {interval} мин)"+chr(10)+f"Ответы ИИ: не чаще раза в {cooldown} сек"+chr(10)+f"Награда за викторину: {reward} XP"+chr(10)+f"Антискам: {bool(anti_scam)} | Антифлуд: {bool(anti_flood)}"+chr(10)+f"Фото: {bool(image_on)} | Голос: {bool(voice_on)} | Дуэли: {bool(duels_on)}")
+            f"Автовикторины: {'включены' if enabled else 'выключены'} (каждые {interval} мин)"+chr(10)+f"Ответы ИИ: не чаще раза в {cooldown} сек"+chr(10)+f"Награда за викторину: {reward} XP"+chr(10)+f"Антискам: {bool(anti_scam)} | Антифлуд: {bool(anti_flood)}"+chr(10)+f"Дуэли: {bool(duels_on)}")
 def admin_stats(cid):
     with db() as conn:
         players=conn.execute("SELECT COUNT(*) FROM profiles WHERE chat_id=?",(cid,)).fetchone()[0]
@@ -330,8 +330,8 @@ async def handle_callback(query):
             with db() as conn:
                 conn.execute("INSERT OR IGNORE INTO preferences(chat_id) VALUES(?)",(row[0],))
                 conn.execute("UPDATE preferences SET persona=? WHERE chat_id=?",(new,row[0]))
-        elif data in ("admin:images","admin:voice","admin:duels"):
-            column={"admin:images":"images_enabled","admin:voice":"voice_enabled","admin:duels":"duels_enabled"}[data]
+        elif data=="admin:duels":
+            column="duels_enabled"
             with db() as conn:
                 conn.execute("INSERT OR IGNORE INTO ai_options(chat_id) VALUES(?)",(row[0],))
                 conn.execute(f"UPDATE ai_options SET {column}=1-{column} WHERE chat_id=?",(row[0],))
