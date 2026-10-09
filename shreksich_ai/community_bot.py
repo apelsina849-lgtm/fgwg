@@ -821,6 +821,42 @@ async def handle(msg):
     cid,uid=chat.get("id"),user.get("id")
     if not cid or not uid or user.get("is_bot"): return
     text=(msg.get("text") or msg.get("caption") or "").strip()
+    if chat.get("type")=="private" and msg.get("photo"):
+        group=user_group(uid)
+        if not group:
+            await send(uid,"Сначала напиши Шреку в группе, чтобы привязать профиль.")
+            return
+        await send(uid,"📸 Анализирую скриншот...")
+        try:
+            answer=await asyncio.to_thread(vision_query,msg["photo"][-1]["file_id"],text)
+            record_usage(group,uid,"vision",bool(VISION_MODEL))
+            await send(uid,answer,reply_markup=private_menu(uid))
+        except Exception:
+            LOG.exception("Vision analysis failed")
+            record_usage(group,uid,"vision",False)
+            await send(uid,"⚠️ Не удалось обработать изображение. Попробуй позже.")
+        return
+    if chat.get("type")=="private" and msg.get("voice"):
+        group=user_group(uid)
+        if not group:
+            await send(uid,"Сначала напиши Шреку в группе, чтобы привязать профиль.")
+            return
+        try:
+            transcript=await asyncio.to_thread(transcribe_voice,msg["voice"]["file_id"])
+            if not transcript:
+                await send(uid,"🎙 Распознавание голоса пока не подключено. Напиши вопрос текстом.")
+                return
+            record_usage(group,uid,"voice",True)
+            await private_answer(uid,transcript,group)
+            if TTS_URL and TTS_MODEL:
+                answer=await ask_ai(transcript)
+                audio=await asyncio.to_thread(tts_audio,answer)
+                if audio: await asyncio.to_thread(multipart_voice,uid,audio)
+        except Exception:
+            LOG.exception("Voice processing failed")
+            record_usage(group,uid,"voice",False)
+            await send(uid,"⚠️ Не удалось обработать голосовое сообщение.")
+        return
     if not text: return
     now=time.time()
     if chat.get("type") in ("group","supergroup"):
