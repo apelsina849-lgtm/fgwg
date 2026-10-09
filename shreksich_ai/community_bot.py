@@ -289,10 +289,10 @@ async def handle(msg):
         return
     with db() as conn:
         bound=conn.execute("SELECT 1 FROM settings WHERE chat_id=?",(cid,)).fetchone()
-    if not bound:
+    if not bound and not re.match(r"^шрек(?:[\s,:.!?—-]+)",text,flags=re.I):
         return
     if chat.get("type") in ("group","supergroup") and not text.startswith("/"):
-        match=re.match(r"^шрек(?:[\\s,:.!?—-]+)(.+)$",text,flags=re.I|re.S)
+        match=re.match(r"^шрек(?:[\s,:.!?—-]+)(.+)$",text,flags=re.I|re.S)
         if match:
             question=match.group(1).strip()
             if question:
