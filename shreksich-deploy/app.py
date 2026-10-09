@@ -718,7 +718,7 @@ async def init_db():
       contact TEXT NOT NULL,
       experience TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'pending',
-      commission_pct INTEGER NOT NULL DEFAULT 20,
+      commission_pct INTEGER NOT NULL DEFAULT 30,
       rules_confirmed INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -747,12 +747,25 @@ async def init_db():
         "seller_commission_pct":"INTEGER NOT NULL DEFAULT 0",
         "seller_share_stars":"INTEGER NOT NULL DEFAULT 0",
         "platform_share_stars":"INTEGER NOT NULL DEFAULT 0",
+        "reserve_share_stars":"INTEGER NOT NULL DEFAULT 0",
         "seller_reserved_until":"INTEGER NOT NULL DEFAULT 0",
         "seller_delivery_note":"TEXT NOT NULL DEFAULT ''",
         "seller_submitted_at":"TEXT NOT NULL DEFAULT ''",
     }.items():
         if col not in seller_order_cols:
             await conn.execute(f"ALTER TABLE orders ADD COLUMN {col} {ddl}")
+    # One-time new terms migration: future orders use 30% combined commission.
+    # Older order snapshots are deliberately untouched, even if already paid.
+    terms_change = await (await conn.execute(
+        "SELECT value FROM settings WHERE key='seller_commission_20_10_v2'"
+    )).fetchone()
+    if not terms_change:
+        await conn.execute(
+            "UPDATE shop_sellers SET commission_pct=30,updated_at=CURRENT_TIMESTAMP"
+        )
+        await conn.execute(
+            "INSERT INTO settings(key,value) VALUES('seller_commission_20_10_v2','1')"
+        )
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_seller_products ON products(seller_id,seller_status,active)")
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_seller_orders ON orders(seller_id,status)")
     promo_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(promos)")).fetchall()}
@@ -1466,7 +1479,7 @@ class SellerDeliveryIn(BaseModel):
 
 class AdminSellerDecisionIn(BaseModel):
     status: str
-    commission_pct: int = Field(default=20,ge=5,le=60)
+    commission_pct: int = Field(default=30,ge=30,le=30)
 
 class AdminSellerListingDecisionIn(BaseModel):
     status: str
@@ -1610,13 +1623,17 @@ async def expire_seller_reservations(conn):
             (o["product_id"],)
         )
 
-def shop_order_shares(stars_amount: int, commission_pct: int):
-    # Marketplace terms use the post-discount Stars charge and the seller's
-    # commission rate frozen on order creation. This is gross accounting only.
+def shop_order_shares(stars_amount: int, commission_pct: int = 30):
+    # 70% seller / 20% store / 10% reserve. Stars are indivisible.
+    # Round the total 30% deduction up, then allocate approximately 20/10
+    # inside it; ensure seller + store + reserve equals the paid amount.
     total=max(0,int(stars_amount))
-    pct=max(0,min(100,int(commission_pct)))
-    owner=(total*pct+99)//100
-    return (total-owner,owner)
+    if int(commission_pct)!=30:
+        raise ValueError("Комиссия новых заказов должна составлять 30%")
+    platform=(total*30+99)//100
+    store=min(platform,(total*20+99)//100)
+    reserve=platform-store
+    return (total-platform,store,reserve)
 
 
 @app.get("/api/seller")
@@ -1643,7 +1660,7 @@ async def seller_dashboard(x_telegram_init_data: str | None = Header(default=Non
         # No buyer data is shared before a payment is confirmed.
         jobs=await (await conn.execute(
             "SELECT id,number,product_name,stars_amount,seller_share_stars,platform_share_stars,"
-            "status,uid,nickname,comment,seller_delivery_note,updated_at "
+            "reserve_share_stars,status,uid,nickname,comment,seller_delivery_note,updated_at "
             "FROM orders WHERE seller_id=? AND telegram_charge_id<>'' ORDER BY id DESC LIMIT 100",
             (uid,)
         )).fetchall()
@@ -1807,7 +1824,7 @@ async def admin_sellers(x_telegram_init_data: str | None = Header(default=None))
         )).fetchall()
         jobs=await (await conn.execute(
             "SELECT o.id,o.number,o.product_name,o.status,o.stars_amount,o.seller_share_stars,"
-            "o.platform_share_stars,o.seller_delivery_note,o.telegram_charge_id,o.seller_id,"
+            "o.platform_share_stars,o.reserve_share_stars,o.seller_delivery_note,o.telegram_charge_id,o.seller_id,"
             "s.display_name seller_name,COALESCE(x.id,0) settled_id "
             "FROM orders o JOIN shop_sellers s ON s.telegram_id=o.seller_id "
             "LEFT JOIN seller_settlement_log x ON x.order_id=o.id "
@@ -1828,8 +1845,8 @@ async def admin_seller_decision(seller_id:int,body:AdminSellerDecisionIn,
         conn=await db()
         try:
             cur=await conn.execute(
-                "UPDATE shop_sellers SET status=?,commission_pct=?,updated_at=CURRENT_TIMESTAMP "
-                "WHERE telegram_id=?",(body.status,body.commission_pct,seller_id)
+                "UPDATE shop_sellers SET status=?,commission_pct=30,updated_at=CURRENT_TIMESTAMP "
+                "WHERE telegram_id=?",(body.status,seller_id)
             )
             if cur.rowcount!=1:
                 raise HTTPException(404,"Продавец не найден")
@@ -1962,8 +1979,9 @@ async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(
             stars_amount = max(1, (int(p["stars_price"]) * (100 - discount) + 99) // 100)
             last = await (await conn.execute("SELECT COALESCE(MAX(number),10499) n FROM orders")).fetchone()
             number = int(last["n"]) + 1
-            pct = int(seller["commission_pct"] or 20) if seller else 0
-            seller_share,shop_share = shop_order_shares(stars_amount,pct) if seller else (0,0)
+            pct = 30 if seller else 0
+            seller_share,store_share,reserve_share = shop_order_shares(stars_amount,pct) if seller else (0,0,0)
+            platform_share = store_share+reserve_share
             if seller_id:
                 reserved = await conn.execute(
                     "UPDATE products SET seller_stock=seller_stock-1 WHERE id=? AND seller_id=? "
@@ -1976,10 +1994,10 @@ async def create_order(body: OrderIn, x_telegram_init_data: str | None = Header(
             cur = await conn.execute(
               "INSERT INTO orders(number,telegram_id,product_id,product_name,amount,stars_amount,"
               "uid,nickname,comment,promo_code,discount_percent,seller_id,seller_commission_pct,"
-              "seller_share_stars,platform_share_stars,seller_reserved_until) "
-              "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              "seller_share_stars,platform_share_stars,reserve_share_stars,seller_reserved_until) "
+              "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
               (number,int(u["id"]),p["id"],p["name"],p["price"],stars_amount,body.uid,body.nickname,
-               body.comment,promo_code,discount,seller_id,pct,seller_share,shop_share,
+               body.comment,promo_code,discount,seller_id,pct,seller_share,platform_share,reserve_share,
                int(time.time())+SELLER_ORDER_HOLD_SECONDS if seller_id else 0)
             )
             oid = cur.lastrowid
