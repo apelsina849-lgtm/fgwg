@@ -804,12 +804,12 @@ def top_xp(cid):
 async def reply_to_question(chat_id,message_id,question,user_id=0):
     try:
         if not group_pref(chat_id)[1]: return
-        try:
-            await private_answer(user_id,question,chat_id)
-        except Exception as exc:
-            LOG.info("User %s has not opened private bot chat: %s",user_id,exc)
+        answer=await shrek_intent_reply(chat_id,user_id,question)
+        if answer is None:
+            answer=await ask_ai(question)
+        await send(chat_id,str(answer)[:3500],reply_parameters={"message_id":message_id,"allow_sending_without_reply":True})
     except Exception:
-        LOG.exception("Private answer failed")
+        LOG.exception("Group answer failed")
 
 async def handle(msg):
     chat = msg.get("chat",{})
