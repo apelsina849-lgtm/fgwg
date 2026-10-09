@@ -4313,6 +4313,10 @@ function caseItemsOf(cfg){
  const allowed=new Set(cfg?.contents||[]);
  return (spinState?.rewards||[]).filter(x=>allowed.has(x.name)).slice().sort((a,b)=>Number(a.value_stars)-Number(b.value_stars)||a.name.localeCompare(b.name,'ru'));
 }
+function caseItemCountText(n){
+ const count=Number(n)||0,part=count%100,tail=count%10;
+ return count+' '+(part>=11&&part<=14?'предметов':tail===1?'предмет':tail>=2&&tail<=4?'предмета':'предметов');
+}
 function caseSelectedPreview(cfg){
  if(!cfg)return '';
  const all=caseItemsOf(cfg);
@@ -4325,7 +4329,7 @@ function caseSelectedPreview(cfg){
  return '<div class="shx-panel case-prizes-panel" style="margin-top:13px"><h3 style="margin:0 0 5px">🎁 Предметы кейса «'+esc(cfg.name)+'»</h3>'+
  '<div class="muted" style="font-size:11px">Награды этого кейса, объёмные стикеры и рамки по редкости. Стоимость указана в SHR.</div>'+
  '<div class="case-loot-grid">'+tierSamples.map(caseLootCard).join('')+'</div>'+
- '<button type="button" class="secondary case-view-all" aria-expanded="false" aria-controls="spinAllItemsContent" id="spinAllItems">Показать все '+all.length+' предметов и шансы ↓</button>'+
+ '<button type="button" class="secondary case-view-all" aria-expanded="false" aria-controls="spinAllItemsContent" id="spinAllItems">Показать все '+caseItemCountText(all.length)+' и шансы ↓</button>'+
  '<div class="case-all-items hide" id="spinAllItemsContent"></div></div>';
 }
 
@@ -4672,7 +4676,7 @@ function bindSpin(){
   }
   panel.classList.toggle('hide',!willOpen);
   allItems.setAttribute('aria-expanded',willOpen?'true':'false');
-  allItems.textContent=willOpen?'Скрыть все предметы ↑':'Показать все '+caseItemsOf(cfg).length+' предметов и шансы ↓';
+  allItems.textContent=willOpen?'Скрыть все предметы ↑':'Показать все '+caseItemCountText(caseItemsOf(cfg).length)+' и шансы ↓';
  });
  const farmBtn=document.getElementById('spinFarmBtn');if(farmBtn)farmBtn.addEventListener('click',()=>go('farm'));
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
