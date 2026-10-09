@@ -90,6 +90,39 @@ def api(method, payload):
         raise RuntimeError(f"Telegram {method}: HTTP {exc.code}: {details}") from exc
     if not obj.get("ok"): raise RuntimeError(str(obj))
     return obj["result"]
+def telegram_file(file_id,limit=8_000_000):
+    info=api("getFile",{"file_id":file_id})
+    path=info["file_path"]
+    if info.get("file_size",0)>limit: raise ValueError("File too large")
+    url="https://api.telegram.org/file/bot"+TOKEN+"/"+path
+    with urllib.request.urlopen(url,timeout=20) as response:
+        data=response.read(limit+1)
+    if len(data)>limit: raise ValueError("File too large")
+    return data
+
+def vision_query(file_id,caption=""):
+    if not (AI_URL and AI_KEY and VISION_MODEL):
+        return "📸 Анализ скриншотов пока не подключён: администратору нужно настроить ИИ-модель с поддержкой изображений. Не присылай пароли или коды."
+    image=telegram_file(file_id)
+    encoded=base64.b64encode(image).decode("ascii")
+    prompt="Ты эксперт PUBG Mobile Metro Royale. Проанализируй видимые предметы, экипировку и риски. Не выдумывай цены или скрытые детали. Дай конкретные рекомендации по рейду. "+caption[:300]
+    body={"model":VISION_MODEL,"messages":[{"role":"user","content":[{"type":"text","text":prompt},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,"+encoded}}]}],"max_tokens":500}
+    request=urllib.request.Request(AI_URL,data=json.dumps(body).encode(),headers={"Authorization":"Bearer "+AI_KEY,"Content-Type":"application/json"})
+    with urllib.request.urlopen(request,timeout=35) as response:
+        result=json.load(response)["choices"][0]["message"]["content"]
+    return str(result)[:3500]
+
+def transcribe_voice(file_id):
+    if not (TRANSCRIBE_URL and AI_KEY):
+        return None
+    audio=telegram_file(file_id,limit=12_000_000)
+    boundary="----shreksichvoice"
+    payload=("--"+boundary+"\\r\\nContent-Disposition: form-data; name=\"model\"\\r\\n\\r\\n"+(VOICE_MODEL or "whisper-1")+"\\r\\n--"+boundary+"\\r\\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.ogg\"\\r\\nContent-Type: audio/ogg\\r\\n\\r\\n").encode()+audio+("\\r\\n--"+boundary+"--\\r\\n").encode()
+    request=urllib.request.Request(TRANSCRIBE_URL,data=payload,headers={"Authorization":"Bearer "+AI_KEY,"Content-Type":"multipart/form-data; boundary="+boundary})
+    with urllib.request.urlopen(request,timeout=35) as response:
+        result=json.load(response)
+    return result.get("text","")[:1500]
+
 async def call(method, **kwargs):
     return await asyncio.to_thread(api, method, kwargs)
 async def send(chat, text, **kwargs):
