@@ -166,7 +166,9 @@ async def quiz_start(cid, message_id=None):
         conn.execute("INSERT OR REPLACE INTO quiz_history VALUES(?,?,?)",(cid,index,now))
     question,answers,_=QUESTIONS[index]
     text="🎮 ВИКТОРИНА • 2 МИНУТЫ\n\n"+question+"\n\nВыбери правильный ответ:"
-    buttons=keyboard([[{"text":f"{i+1}. {answer}","callback_data":f"quiz:answer:{index}:{i}"}] for i,answer in enumerate(answers)]+[[{"text":"⬅️ Главное меню","callback_data":"page:home"}]])
+    order=list(range(len(answers)))
+    random.shuffle(order)
+    buttons=keyboard([[{"text":f"{position+1}. {answers[i]}","callback_data":f"quiz:answer:{index}:{i}"}] for position,i in enumerate(order)])
     if message_id:
         await edit(cid,message_id,text,buttons)
     else:
@@ -483,6 +485,7 @@ def shrek_intent(question):
     if any(w in q for w in ("забрать награду","получить награду","забрать xp","забрать опыт","получить xp")): return "claim"
     if any(w in q for w in ("ежедневн","задани","квест","как заработать xp","как получить xp","как получать xp","как заработать опыт","как получить опыт")): return "daily"
     if any(w in q for w in ("достижен","награды за достижения")): return "achievements"
+    if any(w in q for w in ("сезон","рейтинг месяца")): return "season"
     if any(w in q for w in ("рейтинг","топ игроков","топ участников","лидерборд")): return "top"
     if any(w in q for w in ("мой уровень","мой опыт","сколько у меня xp","сколько у меня опыта","мой профиль","мое звание","моё звание","сколько у меня хп")): return "profile"
     return None
@@ -491,6 +494,7 @@ async def shrek_intent_reply(cid,uid,question):
     intent=shrek_intent(question)
     if intent=="daily": return daily_text(cid,uid)
     if intent=="claim": return "🎁 +50 XP! Награда получена." if claim_daily(cid,uid) else "Задание ещё не выполнено или награда уже получена. Спроси: Шрек, мои задания."
+    if intent=="season": return season_top(cid)
     if intent=="top": return top_xp(cid)
     if intent=="profile":
         with db() as conn:
