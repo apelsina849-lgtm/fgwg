@@ -2178,6 +2178,51 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
     }
 
 
+
+@app.post("/api/farm/uc/claim")
+async def claim_mined_uc(x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    now = int(time.time())
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            state = await ensure_farm_state(conn,uid)
+            progress,ready,rate,_ = farm_uc_progress(state,now)
+            if ready <= 0:
+                await conn.rollback()
+                raise HTTPException(409,"Добыча UC ещё не готова")
+            reserve = await uc_fund(conn)
+            available = int(reserve["available_credits"] or 0) if reserve else 0
+            if available <= 0:
+                await conn.rollback()
+                raise HTTPException(409,"Фонд UC Credits временно исчерпан")
+            award = min(ready,rate,available)
+            await conn.execute(
+                "UPDATE farm_state SET uc_credits=uc_credits+?,uc_mine_last_at=?,"
+                "uc_mine_progress=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",
+                (award,now,progress-award*86400,uid)
+            )
+            await conn.execute(
+                "UPDATE uc_mining_fund SET available_credits=available_credits-?,"
+                "issued_credits=issued_credits+?,updated_at=CURRENT_TIMESTAMP WHERE id=1",
+                (award,award)
+            )
+            await conn.execute(
+                "INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",
+                (uid,"uc_mined",json.dumps({"credits":award,"level":int(state["level"] or 1)}))
+            )
+            await conn.commit()
+            after = await (await conn.execute(
+                "SELECT uc_credits,uc_reserved FROM farm_state WHERE telegram_id=?",(uid,)
+            )).fetchone()
+        finally:
+            await conn.close()
+    return {"ok":True,"uc_credits_added":award,
+            "uc_available":max(0,int(after["uc_credits"])-int(after["uc_reserved"]))}
+
+
 @app.post("/api/farm/collect")
 async def farm_collect(x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
@@ -2396,6 +2441,10 @@ async def farm_activity_reward(x_telegram_init_data: str | None = Header(default
             if last_activity and now-last_activity < 20*3600:
                 await conn.rollback()
                 raise HTTPException(429,"Награда за активность уже получена")
+            reserve = await uc_fund(conn)
+            if not reserve or int(reserve["available_credits"] or 0) < FARM_DAILY_UC_CREDITS:
+                await conn.rollback()
+                raise HTTPException(409,"Фонд UC Credits временно исчерпан")
             streak = int(state["activity_streak"] or 0)
             if last_activity and now-last_activity <= 48*3600:
                 streak += 1
@@ -2413,6 +2462,11 @@ async def farm_activity_reward(x_telegram_init_data: str | None = Header(default
                     "ON CONFLICT(telegram_id,case_id) DO UPDATE SET tickets=tickets+1",
                     (uid,case_ticket)
                 )
+            await conn.execute(
+                "UPDATE uc_mining_fund SET available_credits=available_credits-?,"
+                "issued_credits=issued_credits+?,updated_at=CURRENT_TIMESTAMP WHERE id=1",
+                (FARM_DAILY_UC_CREDITS,FARM_DAILY_UC_CREDITS)
+            )
             await conn.execute(
                 "UPDATE farm_state SET uc_credits=uc_credits+?,last_activity_at=?,activity_streak=?,activity_total=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",
                 (FARM_DAILY_UC_CREDITS,now,streak,total,uid)
@@ -2809,6 +2863,60 @@ async def admin_tickets(x_telegram_init_data: str | None = Header(default=None))
     finally:
         await conn.close()
     return [dict(r) for r in rows]
+
+
+
+class UCProfitFundIn(BaseModel):
+    credits: int = Field(ge=1,le=100000)
+    note: str = Field(min_length=4,max_length=220)
+    profit_verified: bool = False
+
+@app.get("/api/admin/uc-fund")
+async def admin_uc_fund(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn = await db()
+    try:
+        pool = await uc_fund(conn)
+        orders = await (await conn.execute(
+            "SELECT COALESCE(SUM(stars_amount),0) total FROM orders WHERE telegram_charge_id<>''"
+        )).fetchone()
+        cases = await (await conn.execute(
+            "SELECT COALESCE(SUM(stars_amount),0) total FROM case_openings WHERE telegram_charge_id<>''"
+        )).fetchone()
+        logs = await (await conn.execute(
+            "SELECT id,credited_amount,note,created_at FROM uc_mining_fund_log ORDER BY id DESC LIMIT 15"
+        )).fetchall()
+    finally:
+        await conn.close()
+    return {"available":int(pool["available_credits"] or 0),
+            "funded":int(pool["funded_credits"] or 0),
+            "issued":int(pool["issued_credits"] or 0),
+            "gross_stars":int(orders["total"] or 0)+int(cases["total"] or 0),
+            "history":[dict(r) for r in logs]}
+
+@app.post("/api/admin/uc-fund")
+async def fund_uc_from_profit(body: UCProfitFundIn, x_telegram_init_data: str | None = Header(default=None)):
+    admin = await owner(x_telegram_init_data)
+    if not body.profit_verified:
+        raise HTTPException(400,"Подтвердите резерв из чистой прибыли после себестоимости призов и комиссий")
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            await conn.execute(
+                "UPDATE uc_mining_fund SET available_credits=available_credits+?,"
+                "funded_credits=funded_credits+?,updated_at=CURRENT_TIMESTAMP WHERE id=1",
+                (body.credits,body.credits)
+            )
+            await conn.execute(
+                "INSERT INTO uc_mining_fund_log(operator_id,credited_amount,note) VALUES(?,?,?)",
+                (int(admin["id"]),body.credits,body.note.strip())
+            )
+            await conn.commit()
+            pool = await uc_fund(conn)
+        finally:
+            await conn.close()
+    return {"ok":True,"added":body.credits,"available":int(pool["available_credits"])}
 
 
 @app.get("/api/admin/stats")
