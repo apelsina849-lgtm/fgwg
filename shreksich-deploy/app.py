@@ -5144,6 +5144,7 @@ async function resolveInventory(id,action,btn){
 let farmCatalogExpanded=false;
 let farmCatalogFilter='ALL';
 let farmCachedData=null;
+let farmUcMineTicker=null;
 let farmCoinSerial=0;
 function farmCoinIcon(){
  const id='shxcoin'+(++farmCoinSerial);
@@ -5348,9 +5349,9 @@ async function farmHtml(){
 
  '<section class="farm-uc-miner"><div class="farm-uc-miner-head"><div><div class="farm-eyebrow">UC MINING</div><div class="farm-uc-miner-label">🎮 Добыча UC Credits</div></div>'+farmUcIcon()+'</div>'+
  '<div class="farm-uc-miner-stats"><div class="farm-uc-miner-stat"><small>СКОРОСТЬ ФЕРМЫ</small><strong>+'+ucm.daily_rate+' UC/сутки</strong></div>'+
- '<div class="farm-uc-miner-stat"><small>ДОБЫТО</small><strong>'+ucm.ready+' UC Credits</strong></div>'+
- '<div class="farm-uc-miner-stat"><small>СЛЕДУЮЩИЙ UC</small><strong>'+(ucm.ready>=ucm.capacity?'ГОТОВО':formatReset(ucm.next_seconds))+'</strong></div></div>'+
- '<div class="farm-uc-miner-track"><span style="width:'+mineProgress.toFixed(2)+'%"></span></div>'+
+ '<div class="farm-uc-miner-stat"><small>ДОБЫТО</small><strong id="farmUcMineReady">'+ucm.ready+' UC Credits</strong></div>'+
+ '<div class="farm-uc-miner-stat"><small>СЛЕДУЮЩИЙ UC</small><strong id="farmUcMineNext">'+(ucm.ready>=ucm.capacity?'ГОТОВО':formatReset(ucm.next_seconds))+'</strong></div></div>'+
+ '<div class="farm-uc-miner-track"><span id="farmUcMineFill" style="width:'+mineProgress.toFixed(2)+'%"></span></div>'+
  '<div class="farm-uc-miner-foot"><span>Уровень '+d.level+' / '+d.max_level+'</span><span>Фонд: '+ucm.reserve_available+' UC</span></div>'+
  '<button class="farm-uc-miner-claim" id="farmUcMineClaim" '+(ucm.claimable>0?'':'disabled')+'>🎮 ЗАБРАТЬ '+ucm.claimable+' UC CREDITS</button>'+
  (ucm.reserve_available<=0?'<div class="farm-uc-paused">Выдача приостановлена: фонд UC Credits не пополнен</div>':'')+'</section>'+
@@ -5378,6 +5379,30 @@ function refreshFarmUcNeed(){
 
 const FARM_TIER_ORDER_JS=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD'];
 function bindFarm(){
+ if(farmUcMineTicker){clearInterval(farmUcMineTicker);farmUcMineTicker=null}
+ const mineState=farmCachedData?.uc_mining||null;
+ if(mineState){
+  const at=Date.now(),period=Math.ceil(86400/Math.max(1,Number(mineState.daily_rate||1)));
+  const originalReady=Number(mineState.ready||0),toNext=Math.max(0,Number(mineState.next_seconds||period));
+  const capacity=Math.max(1,Number(mineState.capacity||1));
+  const reserve=Math.max(0,Number(mineState.reserve_available||0));
+  const tick=()=>{
+   if(tab!=='farm'){if(farmUcMineTicker)clearInterval(farmUcMineTicker);farmUcMineTicker=null;return}
+   const passed=Math.floor((Date.now()-at)/1000);
+   const earned=originalReady>=capacity?0:passed>=toNext?1+Math.floor((passed-toNext)/period):0;
+   const ready=Math.min(capacity,originalReady+earned);
+   const remaining=ready>=capacity?0:earned>0?Math.max(0,period-(passed-toNext)%period):Math.max(0,toNext-passed);
+   const readyNode=document.getElementById('farmUcMineReady'),nextNode=document.getElementById('farmUcMineNext');
+   const fill=document.getElementById('farmUcMineFill'),btn=document.getElementById('farmUcMineClaim');
+   if(readyNode)readyNode.textContent=ready+' UC Credits';
+   if(nextNode)nextNode.textContent=ready>=capacity?'ГОТОВО':formatReset(remaining)||'<1 мин';
+   if(fill)fill.style.width=(ready>0?100:Math.max(0,Math.min(100,100*(1-remaining/period))))+'%';
+   const claimable=Math.min(ready,reserve);
+   if(btn){btn.disabled=claimable<1;btn.textContent='🎮 ЗАБРАТЬ '+claimable+' UC CREDITS'}
+  };
+  farmUcMineTicker=setInterval(tick,1000);
+  tick();
+ }
  const cat=document.getElementById('farmCatalogToggle');
  if(cat)cat.addEventListener('click',()=>go('farm-catalog'));
  document.querySelectorAll('[data-farm-filter]').forEach(b=>b.addEventListener('click',()=>{
