@@ -744,8 +744,6 @@ async def init_db():
     }.items():
         if col not in product_cols:
             await conn.execute(f"ALTER TABLE products ADD COLUMN {col} {ddl}")
-    # One-time compatibility: make previously submitted, still-pending listings from approved sellers visible.
-    await conn.execute("UPDATE products SET active=1,seller_status='active' WHERE seller_id>0 AND seller_stock>0 AND seller_status='pending' AND seller_id IN (SELECT telegram_id FROM shop_sellers WHERE status='approved')")
     seller_order_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(orders)")).fetchall()}
     for col,ddl in {
         "seller_id":"INTEGER NOT NULL DEFAULT 0",
@@ -1766,7 +1764,7 @@ async def seller_create_listing(body: SellerListingIn, x_telegram_init_data: str
                 raise HTTPException(409,"Максимум 100 товаров на одного продавца")
             cursor=await conn.execute(
                 "INSERT INTO products(category,name,description,price,stars_price,active,sort_order,"
-                "seller_id,seller_stock,seller_status) VALUES(?,?,?,?,?,1,100,?,?,'active')",
+                "seller_id,seller_stock,seller_status) VALUES(?,?,?,?,?,0,100,?,?,'pending')",
                 (body.category.strip(),body.name.strip(),body.description.strip() or "Товар продавца. Условия выдачи уточняйте перед покупкой.",body.stars_price,
                  body.stars_price,uid,body.stock)
             )
@@ -1774,7 +1772,11 @@ async def seller_create_listing(body: SellerListingIn, x_telegram_init_data: str
             lid=cursor.lastrowid
         finally:
             await conn.close()
-    return {"ok":True,"id":lid,"status":"active"}
+    try:
+        await tg("sendMessage",{"chat_id":OWNER_ID,"text":"📦 Новый товар на модерации в Шрексиче!\\nПродавец ID: "+str(uid)+"\\nТовар #"+str(lid)+": "+body.name.strip()[:100]+"\\nЦена: "+str(body.stars_price)+" ⭐ · Остаток: "+str(body.stock)+"\\nОткройте админ-панель → Продавцы → Модерация товаров."})
+    except Exception:
+        pass
+    return {"ok":True,"id":lid,"status":"pending"}
 
 @app.post("/api/seller/listings/{listing_id}/restock")
 async def seller_restock(listing_id:int, body:SellerRestockIn,
@@ -2056,6 +2058,17 @@ async def admin_seller_listing(listing_id:int,body:AdminSellerListingDecisionIn,
             await conn.commit()
         finally:
             await conn.close()
+    try:
+        conn=await db()
+        try:
+            product=await (await conn.execute("SELECT seller_id,name FROM products WHERE id=?",(listing_id,))).fetchone()
+        finally:
+            await conn.close()
+        if product:
+            message=("✅ Товар опубликован в каталоге" if body.status=="active" else "❌ Товар отклонён" if body.status=="rejected" else "⏸ Товар скрыт из каталога")
+            await tg("sendMessage",{"chat_id":int(product["seller_id"]),"text":message+": "+str(product["name"])[:120]})
+    except Exception:
+        pass
     return {"ok":True}
 
 @app.post("/api/admin/seller-orders/{order_id}/settle")
@@ -5159,8 +5172,8 @@ async function sellerHtml(){
  '<textarea id="sellerListingDesc" maxlength="1200" placeholder="Что получает покупатель? (необязательно)"></textarea>'+
  '<input id="sellerListingStars" type="number" min="1" max="100000" placeholder="Цена за 1 шт. в Stars">'+
  '<input id="sellerListingStock" type="number" min="1" max="1000" value="1" placeholder="Количество в наличии">'+
- '<button class="buy" id="sellerAddListing">✓ ОПУБЛИКОВАТЬ В КАТАЛОГЕ</button></div></div>'+
- '<div class="mini">Товар появляется в каталоге сразу. Администрация может скрыть объявление при нарушениях.</div><h3 style="margin:16px 0 7px">Ваши товары</h3>'+
+ '<button class="buy" id="sellerAddListing">📨 ОТПРАВИТЬ НА МОДЕРАЦИЮ</button></div></div>'+
+ '<div class="mini">Товар появится в каталоге после одобрения администратором. О решении сообщит бот.</div><h3 style="margin:16px 0 7px">Ваши товары</h3>'+
  ((d.listings||[]).map(x=>'<div class="seller-market-card"><span class="seller-status-pill '+esc(x.seller_status)+'">'+esc(x.seller_status)+'</span>'+
  '<h3>'+esc(x.name)+'</h3><div class="mini">'+esc(x.category)+' · '+Number(x.stars_price)+' ⭐</div>'+
  '<div class="seller-stock-tag">Доступно: '+Number(x.seller_stock)+' шт.</div>'+
@@ -6599,7 +6612,7 @@ function adminSellers(){
  let html='<section class="seller-hero"><div class="seller-headline">OWNER PANEL · MARKETPLACE</div><h1>🤝 Продавцы</h1>'+
  '<div class="mini">Модерация товаров, распределение заказов и расчёты с поставщиками</div>'+
  '<div class="seller-feature-grid"><div><strong>'+sellers.length+'</strong><small>Заявки и продавцы</small></div>'+
- '<div><strong>'+listings.length+'</strong><small>Товары поставщиков</small></div>'+
+ '<div><strong>'+listings.filter(x=>x.seller_status==='pending').length+'</strong><small>Товаров ждут проверки</small></div>'+
  '<div><strong>'+outstanding.length+'</strong><small>К расчёту</small></div></div></section>'+
  '<div class="seller-income-row"><div><span>РАСЧЁТЫ С ПРОДАВЦАМИ</span><b>'+totalSeller+' ⭐</b></div>'+
  '<div><span>МАГАЗИН · 20%</span><b>'+shopCut+' ⭐</b></div>'+
@@ -6621,7 +6634,7 @@ function adminSellers(){
  '<div class="empty">Заявок пока нет</div>');
  html+='<h3 style="margin:18px 0 9px">История удалений</h3>'+(removals.map(x=>'<div class="seller-admin-box"><b>'+esc(x.display_name)+'</b> · ID '+Number(x.seller_id)+'<div class="mini">Причина: '+esc(x.reason)+'</div><div class="mini">Дата и время (UTC): '+esc(x.removed_at)+'</div></div>').join('')||'<div class="mini">Удалений пока нет</div>');
  html+='<h3 style="margin:18px 0 9px">Модерация товаров</h3>'+
- (listings.map(x=>'<div class="seller-admin-box"><div class="row"><span class="seller-status-pill '+esc(x.seller_status)+'">'+esc(x.seller_status)+'</span>'+
+ (listings.slice().sort((a,b)=>(a.seller_status==='pending'?0:1)-(b.seller_status==='pending'?0:1)).map(x=>'<div class="seller-admin-box"><div class="row"><span class="seller-status-pill '+esc(x.seller_status)+'">'+esc(x.seller_status)+'</span>'+
  '<span class="seller-stock-tag">В наличии '+Number(x.seller_stock||0)+'</span></div>'+
  '<h3>'+esc(x.name)+'</h3><div class="mini">'+esc(x.seller_name||'')+
  ' · '+Number(x.stars_price||0)+' ⭐ · '+esc(x.category)+'</div>'+
