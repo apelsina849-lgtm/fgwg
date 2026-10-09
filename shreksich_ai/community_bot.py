@@ -38,8 +38,12 @@ def db():
 def api(method, payload):
     data = json.dumps(payload).encode()
     req = urllib.request.Request("https://api.telegram.org/bot"+TOKEN+"/"+method, data=data, headers={"Content-Type":"application/json"})
-    with urllib.request.urlopen(req, timeout=20) as response:
-        obj = json.load(response)
+    try:
+        with urllib.request.urlopen(req, timeout=20) as response:
+            obj = json.load(response)
+    except urllib.error.HTTPError as exc:
+        details=exc.read(1000).decode("utf-8","replace")
+        raise RuntimeError(f"Telegram {method}: HTTP {exc.code}: {details}") from exc
     if not obj.get("ok"): raise RuntimeError(str(obj))
     return obj["result"]
 async def call(method, **kwargs):
@@ -88,6 +92,10 @@ async def handle_callback(query):
         return
     notice=""
     try:
+        await call("answerCallbackQuery",callback_query_id=qid)
+    except Exception as exc:
+        LOG.warning("Callback acknowledgement failed: %s",exc)
+    try:
         if data=="page:home":
             await edit(cid,mid,home_text(),menu())
         elif data=="page:help":
@@ -117,7 +125,8 @@ async def handle_callback(query):
         LOG.exception("Callback failed")
         notice="Не удалось обновить сообщение. Попробуй ещё раз."
     finally:
-        await call("answerCallbackQuery",callback_query_id=qid,text=notice[:180],show_alert=False)
+        if notice:
+            LOG.info("Callback result: %s",notice)
 def log(chat, user, kind, detail):
     with db() as c:
         c.execute("INSERT INTO events(chat_id,user_id,kind,detail,ts) VALUES(?,?,?,?,?)",(chat,user,kind,detail[:500],int(time.time())))
@@ -203,6 +212,7 @@ async def handle(msg):
     if cmd in ("/start","/help","/menu"):
         await send(cid,home_text(),reply_markup=menu())
     elif cmd=="/shop": await send(cid,SHOP_URL)
+    elif cmd=="/ping": await send(cid,"✅ Бот на связи. Меню: /start")
     elif cmd=="/ai":
         question=text.partition(" ")[2].strip()
         if not question: await send(cid,"Напиши /ai и свой вопрос.")
@@ -234,6 +244,7 @@ async def main():
             updates=await call("getUpdates",offset=offset,timeout=15,allowed_updates=["message","callback_query"])
             for update in updates:
                 offset=update["update_id"]+1
+                LOG.info("Update received: %s", "callback" if "callback_query" in update else "message")
                 try:
                     if "callback_query" in update:
                         await handle_callback(update["callback_query"])
