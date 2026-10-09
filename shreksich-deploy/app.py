@@ -386,6 +386,42 @@ FARM_RESOURCES = [
 ]
 FARM_RESOURCE_BY_ID = {x["id"]:x for x in FARM_RESOURCES}
 
+# Улучшения фермы за ShrekCOINS. Эти монеты нельзя обменять на Stars/UC.
+FARM_COIN_MAX_LEVEL = 5
+FARM_COIN_MODULES = {
+    "drill": {"column":"drill_level", "name":"Буровая станция", "icon":"⚙️", "base":55,
+              "description":"Время добычи сокращается на 9% за уровень."},
+    "warehouse": {"column":"warehouse_level", "name":"Дополнительный склад", "icon":"📦", "base":85,
+                  "description":"Вместимость склада увеличивается на 24 за уровень."},
+    "trader": {"column":"trader_level", "name":"Торговый терминал", "icon":"💹", "base":120,
+               "description":"Цена продажи ресурсов повышается на 15% за уровень."},
+}
+
+def farm_coin_upgrade_cost(module: str, level: int) -> int:
+    spec = FARM_COIN_MODULES[module]
+    return int(round(spec["base"] * (1.75 ** max(0, min(level, FARM_COIN_MAX_LEVEL)))))
+
+def farm_mining_interval(level: int, drill_level: int = 0) -> int:
+    return max(90, farm_interval_seconds(level) * (100 - 9 * max(0,min(FARM_COIN_MAX_LEVEL,int(drill_level)))) // 100)
+
+def farm_total_capacity(level: int, warehouse_level: int = 0) -> int:
+    return farm_capacity(level) + 24 * max(0,min(FARM_COIN_MAX_LEVEL,int(warehouse_level)))
+
+def farm_sale_price(item: dict, trader_level: int = 0) -> int:
+    return max(1, int(round(int(item["coins"]) * (100 + 15 * max(0,min(FARM_COIN_MAX_LEVEL,int(trader_level)))) / 100)))
+
+def farm_coin_modules(state) -> list[dict]:
+    results = []
+    for key, spec in FARM_COIN_MODULES.items():
+        level = max(0, min(FARM_COIN_MAX_LEVEL, int(state[spec["column"]] or 0)))
+        results.append({
+            "id":key, "name":spec["name"], "icon":spec["icon"],
+            "description":spec["description"], "level":level,
+            "max_level":FARM_COIN_MAX_LEVEL,
+            "cost":farm_coin_upgrade_cost(key,level) if level<FARM_COIN_MAX_LEVEL else 0
+        })
+    return results
+
 def farm_upgrade_cost(level: int) -> int:
     level = max(1,min(FARM_MAX_LEVEL,int(level)))
     if level >= FARM_MAX_LEVEL:
@@ -756,6 +792,9 @@ async def init_db():
         "last_activity_at":"INTEGER NOT NULL DEFAULT 0",
         "activity_streak":"INTEGER NOT NULL DEFAULT 0",
         "activity_total":"INTEGER NOT NULL DEFAULT 0",
+        "drill_level":"INTEGER NOT NULL DEFAULT 0",
+        "warehouse_level":"INTEGER NOT NULL DEFAULT 0",
+        "trader_level":"INTEGER NOT NULL DEFAULT 0",
     }.items():
         if col not in farm_cols:
             await conn.execute(f"ALTER TABLE farm_state ADD COLUMN {col} {ddl}")
@@ -1287,6 +1326,10 @@ class InventoryResolveIn(BaseModel):
 class FarmSellIn(BaseModel):
     resource_id: str = Field(min_length=1, max_length=64)
     qty: int = Field(default=1, ge=1, le=100000)
+
+
+class FarmCoinUpgradeIn(BaseModel):
+    module: str = Field(min_length=3, max_length=20)
 
 
 class FarmWithdrawIn(BaseModel):
@@ -1998,15 +2041,18 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
 
     level = int(state["level"] or 1)
     now = int(time.time())
-    interval = farm_interval_seconds(level)
+    drill_level = int(state["drill_level"] or 0)
+    warehouse_level = int(state["warehouse_level"] or 0)
+    trader_level = int(state["trader_level"] or 0)
+    interval = farm_mining_interval(level,drill_level)
     stored = sum(int(x["qty"] or 0) for x in inv_rows)
-    cap = farm_capacity(level)
+    cap = farm_total_capacity(level,warehouse_level)
     available_cycles = max(0,min(cap-stored,(now-int(state["last_mine_at"] or now))//interval))
     inventory = []
     for r in inv_rows:
         item = FARM_RESOURCE_BY_ID.get(r["resource_id"])
         if item:
-            inventory.append({**item,"qty":int(r["qty"] or 0),"total_coins":int(r["qty"] or 0)*int(item["coins"])})
+            inventory.append({**item,"coins":farm_sale_price(item,trader_level),"qty":int(r["qty"] or 0),"total_coins":int(r["qty"] or 0)*farm_sale_price(item,trader_level)})
     activity_ready = bool(int(state["last_collect_at"] or 0) > int(state["last_activity_at"] or 0) and now-int(state["last_activity_at"] or 0)>=20*3600)
     return {
         "level":level,"max_level":FARM_MAX_LEVEL,"stage":farm_stage(level),
@@ -2019,8 +2065,9 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
         "daily_uc_credits":FARM_DAILY_UC_CREDITS,
         "interval_seconds":interval,"capacity":cap,"stored":stored,
         "available_cycles":int(available_cycles),
-        "next_cycle_seconds":max(0,interval-max(0,now-int(state["last_mine_at"] or now))%interval) if stored<cap else 0,
+        "next_cycle_seconds":(0 if available_cycles>0 else max(0,interval-max(0,now-int(state["last_mine_at"] or now))%interval)) if stored<cap else 0,
         "upgrade_cost":farm_upgrade_cost(level),
+        "coin_upgrades":farm_coin_modules(state),
         "tier_weights":farm_tier_weights(level),
         "inventory":inventory,
         "resources":FARM_RESOURCES,
@@ -2042,12 +2089,12 @@ async def farm_collect(x_telegram_init_data: str | None = Header(default=None)):
             state = await ensure_farm_state(conn,uid)
             level = int(state["level"] or 1)
             now = int(time.time())
-            interval = farm_interval_seconds(level)
+            interval = farm_mining_interval(level,int(state["drill_level"] or 0))
             stored_row = await (await conn.execute(
                 "SELECT COALESCE(SUM(qty),0) q FROM farm_inventory WHERE telegram_id=?",(uid,)
             )).fetchone()
             stored = int(stored_row["q"] or 0)
-            capacity = farm_capacity(level)
+            capacity = farm_total_capacity(level,int(state["warehouse_level"] or 0))
             room = max(0,capacity-stored)
             if room <= 0:
                 await conn.execute("UPDATE farm_state SET last_mine_at=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(now,uid))
@@ -2109,7 +2156,7 @@ async def farm_sell(body: FarmSellIn, x_telegram_init_data: str | None = Header(
             if qty <= 0:
                 await conn.rollback()
                 raise HTTPException(409,"Этого ресурса нет на складе")
-            value = qty * int(item["coins"])
+            value = qty * farm_sale_price(item,int(state["trader_level"] or 0))
             await conn.execute(
                 "UPDATE farm_inventory SET qty=qty-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND resource_id=?",
                 (qty,uid,resource_id)
@@ -2137,7 +2184,7 @@ async def farm_sell_all(x_telegram_init_data: str | None = Header(default=None))
         conn = await db()
         try:
             await conn.execute("BEGIN IMMEDIATE")
-            await ensure_farm_state(conn,uid)
+            state = await ensure_farm_state(conn,uid)
             rows = await (await conn.execute(
                 "SELECT resource_id,qty FROM farm_inventory WHERE telegram_id=? AND qty>0",(uid,)
             )).fetchall()
@@ -2147,7 +2194,7 @@ async def farm_sell_all(x_telegram_init_data: str | None = Header(default=None))
                 item = FARM_RESOURCE_BY_ID.get(r["resource_id"])
                 if not item: continue
                 qty = int(r["qty"] or 0)
-                total += qty * int(item["coins"]); sold += qty
+                total += qty * farm_sale_price(item,int(state["trader_level"] or 0)); sold += qty
             if sold <= 0:
                 await conn.rollback()
                 raise HTTPException(409,"Склад пуст")
@@ -2186,6 +2233,49 @@ async def farm_upgrade(x_telegram_init_data: str | None = Header(default=None)):
         finally:
             await conn.close()
     return {"ok":True,"level":level+1,"cost":cost}
+
+
+@app.post("/api/farm/coin-upgrade")
+async def farm_coin_upgrade(body: FarmCoinUpgradeIn, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    module = body.module.strip()
+    spec = FARM_COIN_MODULES.get(module)
+    if not spec:
+        raise HTTPException(400,"Неизвестный модуль фермы")
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            state = await ensure_farm_state(conn,uid)
+            old_level = int(state[spec["column"]] or 0)
+            if old_level >= FARM_COIN_MAX_LEVEL:
+                await conn.rollback()
+                raise HTTPException(409,"Модуль уже максимально улучшен")
+            cost = farm_coin_upgrade_cost(module,old_level)
+            if int(state["shrek_coins"] or 0) < cost:
+                await conn.rollback()
+                raise HTTPException(409,f"Нужно {cost} ShrekCOINS")
+            if module == "drill":
+                now = int(time.time())
+                base_level = int(state["level"] or 1)
+                previous_interval = farm_mining_interval(base_level,old_level)
+                improved_interval = farm_mining_interval(base_level,old_level+1)
+                elapsed = max(0,now-int(state["last_mine_at"] or now))
+                complete_cycles, part_seconds = divmod(elapsed,previous_interval)
+                adjusted_elapsed = complete_cycles*improved_interval + part_seconds*improved_interval//previous_interval
+                await conn.execute("UPDATE farm_state SET last_mine_at=? WHERE telegram_id=?",(now-adjusted_elapsed,uid))
+            column = spec["column"]  # Только фиксированные серверные имена, не данные запроса.
+            await conn.execute(
+                f"UPDATE farm_state SET shrek_coins=shrek_coins-?,{column}={column}+1,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",
+                (cost,uid)
+            )
+            await conn.execute("INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",
+                               (uid,"coin_upgrade",json.dumps({"module":module,"from":old_level,"to":old_level+1,"coins":cost})))
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"module":module,"level":old_level+1,"spent":cost}
 
 
 @app.post("/api/farm/activity")
@@ -3142,6 +3232,15 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .farm-tier-chances{display:flex;gap:6px;overflow-x:auto;margin:10px 0 14px}.farm-chance{flex:0 0 auto;border-radius:12px;padding:7px 9px;background:#12161a;border:1px solid #2a3036;font-size:10px}
 .farm-activity{background:linear-gradient(135deg,#10191c,#132c25);border:1px solid #245c45;border-radius:18px;padding:13px;margin:12px 0}.farm-activity b{color:#6df5b0}
 .farm-withdraw{background:#111418;border:1px solid #2b3036;border-radius:18px;padding:13px;margin-top:12px}
+.farm-modules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 17px}
+.farm-module{border:1px solid #34414a;border-radius:17px;padding:11px;background:linear-gradient(145deg,#172027,#0e1217)}
+.farm-module-header{display:flex;gap:7px;align-items:center;font-size:13px;font-weight:900}
+.farm-module-icon{font-size:23px}
+.farm-module-desc{font-size:11px;color:#a8b3ba;line-height:1.4;min-height:46px;margin:9px 0}
+.farm-module-progress{height:5px;border-radius:9px;background:#29333a;overflow:hidden;margin:10px 0}
+.farm-module-progress span{display:block;height:100%;background:linear-gradient(90deg,#16abac,#c4f9ff)}
+.farm-module button{width:100%;font-size:11px;padding:9px 4px}
+@media(max-width:520px){.farm-modules{grid-template-columns:1fr}.farm-module-desc{min-height:0}}
 @media(max-width:390px){.farm-metrics{grid-template-columns:1fr 1fr}.farm-inventory{grid-template-columns:1fr}.farm-actions{grid-template-columns:1fr}}
 .rarity-catalog{margin:18px 0 8px}
 .rarity-catalog-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:10px}
@@ -3468,7 +3567,7 @@ function home(){
  sticker('HYPE SPIN','1 free / 24h','spin','st-purple','data-go="spin"')+
  sticker('Мои заказы','Статусы покупок','orders','st-blue','data-go="orders"')+
  sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+
- sticker('Metro Farm','Добыча и прокачка','farm','st-gold','data-go="farm"')+
+ sticker('Metro Farm','Добыча, склад, модули','farm','st-gold','data-go="farm"')+
  sticker('Рефералы','Билеты и бонусы','referral','st-red','data-go="referral"')+
  sticker('Новости','@shreksi4PubgNEWS','news','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+
  sticker('Наш чат','@chatshreksi4','chat','st-cyan','data-tg="https://t.me/chatshreksi4"')+
@@ -3927,12 +4026,14 @@ async function farmHtml(){
  ).join('');
  const withdrawals=(d.withdrawals||[]).map(w=>'<div class="order"><div class="name">'+w.uc_amount+' UC • '+esc(w.status)+'</div><div class="mini">UID '+esc(w.pubg_uid)+' • '+formatDropDate(w.created_at)+'</div></div>').join('');
  const upText=d.level>=d.max_level?'МАКСИМАЛЬНЫЙ УРОВЕНЬ':'УЛУЧШИТЬ ЗА '+d.upgrade_cost+' SHR';
+ const modules=(d.coin_upgrades||[]).map(m=>'<div class="farm-module"><div class="farm-module-header"><span class="farm-module-icon">'+esc(m.icon)+'</span>'+esc(m.name)+'</div><div class="farm-module-desc">'+esc(m.description)+'</div><div class="mini">Уровень '+m.level+' / '+m.max_level+'</div><div class="farm-module-progress"><span style="width:'+(100*m.level/m.max_level)+'%"></span></div><button class="secondary" data-farm-module="'+esc(m.id)+'" '+(m.level>=m.max_level||d.shrek_coins<m.cost?'disabled':'')+'>'+(m.level>=m.max_level?'МАКС. УРОВЕНЬ':'УЛУЧШИТЬ • 🟢 '+m.cost)+'</button></div>').join('');
  return '<section class="hero"><div class="cat">METRO FARM</div><h1>Ферма ресурсов</h1><div class="muted">Прокачивайте ферму за SHR. Чем выше уровень, тем быстрее добыча, больше склад и выше шанс редкого Metro-ресурса.</div></section>'+
  '<div class="farm-scene stage-'+d.stage+'"><div class="farm-sky"></div><div class="farm-ground"></div><div class="farm-conveyor"></div><div class="farm-core"></div><div class="farm-tower left"></div><div class="farm-tower right"></div><div class="farm-drone">🚁</div><div class="farm-crate">📦</div><div class="farm-level-badge">LEVEL '+d.level+' / '+d.max_level+' • STAGE '+d.stage+'</div></div>'+
  '<div class="farm-metrics"><div class="farm-metric"><span class="mini">SHR</span><b>'+d.shr+'</b></div><div class="farm-metric"><span class="mini">SHREKCOINS</span><b>🟢 '+d.shrek_coins+'</b></div><div class="farm-metric"><span class="mini">UC CREDITS</span><b>🎮 '+d.uc_available+'</b></div></div>'+
  '<div class="farm-actions"><button class="buy" id="farmCollect" '+(d.available_cycles<=0?'disabled':'')+'>СОБРАТЬ ДОБЫЧУ • '+d.available_cycles+'</button><button class="secondary" id="farmUpgrade" '+(d.level>=d.max_level?'disabled':'')+'>'+upText+'</button></div>'+
  '<div class="mini">Склад: '+d.stored+' / '+d.capacity+' • цикл '+Math.ceil(d.interval_seconds/60)+' мин • до следующего '+formatReset(d.next_cycle_seconds)+'</div>'+
- '<div class="farm-tier-chances">'+chances+'</div>'+
+ '<div class="farm-tier-chances">'+chances+'</div>'+ 
+ '<h3>Модули фермы за ShrekCOINS</h3><div class="mini">Монеты от продажи добычи можно тратить на развитие фермы. Модули постоянные.</div><div class="farm-modules">'+modules+'</div>'+
  '<div class="farm-activity"><div class="cat">НАГРАДА ЗА АКТИВНОСТЬ</div><div><b>Серия: '+d.activity_streak+' дн.</b> • всего активных дней '+d.activity_total+'</div><div class="muted">Соберите добычу и заберите +'+d.daily_uc_credits+' UC Credits. Каждый 7-й день серии — бесплатный билет CASE29, каждый 30-й — CASE79.</div><button class="buy" id="farmActivity" style="margin-top:9px" '+(d.activity_ready?'':'disabled')+'>'+(d.activity_ready?'ЗАБРАТЬ НАГРАДУ':'СНАЧАЛА СОБЕРИТЕ ДОБЫЧУ')+'</button></div>'+
  '<div class="row" style="align-items:center"><h3 style="margin:0;flex:1">Склад фермы</h3><button class="secondary" id="farmSellAll" '+((d.inventory||[]).length?'':'disabled')+'>Продать всё</button></div>'+
  '<div class="farm-inventory">'+(items||'<div class="empty">Склад пуст. Дождитесь добычи и нажмите «Собрать».</div>')+'</div>'+
@@ -3941,6 +4042,7 @@ async function farmHtml(){
 }
 const FARM_TIER_ORDER_JS=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD'];
 function bindFarm(){
+ document.querySelectorAll('[data-farm-module]').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;try{const d=await api('/api/farm/coin-upgrade',{method:'POST',body:JSON.stringify({module:b.dataset.farmModule})});alert('Модуль улучшен до '+d.level+' уровня • -'+d.spent+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);b.disabled=false}}));
  const collect=document.getElementById('farmCollect');if(collect&&!collect.disabled)collect.addEventListener('click',async()=>{collect.disabled=true;try{const d=await api('/api/farm/collect',{method:'POST'});alert('Ферма добыла '+d.count+' предмет(ов)');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);collect.disabled=false}});
  const up=document.getElementById('farmUpgrade');if(up&&!up.disabled)up.addEventListener('click',async()=>{up.disabled=true;try{const d=await api('/api/farm/upgrade',{method:'POST'});alert('Ферма улучшена до '+d.level+' уровня');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);up.disabled=false}});
  document.querySelectorAll('[data-farm-sell]').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;try{const d=await api('/api/farm/sell',{method:'POST',body:JSON.stringify({resource_id:b.dataset.farmSell,qty:Number(b.dataset.farmQty||1)})});sfxSell();alert('+'+d.coins_added+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);b.disabled=false}}));
