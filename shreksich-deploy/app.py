@@ -1032,6 +1032,7 @@ def keyboard(user_id: int):
                  {"text":"🎡 Рулетка","web_app":{"url":BASE_URL + "/?tab=roulette"}}])
     rows.append([{"text":"📦 Мои заказы","web_app":{"url":BASE_URL + "/?tab=orders"}},
                  {"text":"💬 Поддержка","web_app":{"url":BASE_URL + "/?tab=support"}}])
+    rows.append([{"text":"🤝 Стать продавцом","web_app":{"url":BASE_URL + "/?tab=seller"}}])
     rows.append([{"text":"📢 Новости","url":"https://t.me/shreksi4PubgNEWS"},
                  {"text":"💬 Наш чат","url":"https://t.me/chatshreksi4"}])
     if user_id == OWNER_ID:
@@ -1129,6 +1130,22 @@ async def send_farm(chat_id: int):
     })
 
 
+
+async def send_seller(chat_id: int):
+    await tg("sendMessage", {
+        "chat_id":chat_id,
+        "parse_mode":"HTML",
+        "text":("🤝 <b>Партнёрская программа Шрексич SHOP</b>\n\n"
+                "Добавляйте товары Metro Royale на витрину после одобрения администрации.\n"
+                "Доли по новым заказам: продавцу 70%, магазину 20%, резерву 10% от оплаченных Stars.\n"
+                "Расчёты с продавцами ведутся отдельно от Stars-платежей покупателей."),
+        "reply_markup":{"inline_keyboard":[
+            [{"text":"🤝 Открыть кабинет продавца","web_app":{"url":BASE_URL + "/?tab=seller"}}],
+            [{"text":"🛒 Каталог товаров","web_app":{"url":BASE_URL + "/?tab=catalog"}}]
+        ]}
+    })
+
+
 async def send_token(chat_id: int, user_id: int):
     conn = await db()
     try:
@@ -1214,6 +1231,9 @@ async def process_update(update: dict):
         return
     if msg and text.split("@")[0].split(" ")[0] == "/farm":
         await send_farm(int(msg["chat"]["id"]))
+        return
+    if msg and text.split("@")[0].split(" ")[0] == "/seller":
+        await send_seller(int(msg["chat"]["id"]))
         return
     if msg and (text.startswith("/faq") or text.startswith("/help")):
         await send_faq(int(msg["chat"]["id"]))
@@ -1419,6 +1439,7 @@ async def polling():
           {"command":"start","description":"Главное меню"},
           {"command":"shop","description":"Открыть магазин"},
           {"command":"farm","description":"🌾 Открыть ферму"},
+          {"command":"seller","description":"🤝 Стать продавцом"},
           {"command":"roulette","description":"🎡 Бесплатная рулетка"},
           {"command":"faq","description":"Ответы на вопросы"},
           {"command":"ref","description":"Реферальная ссылка"},
