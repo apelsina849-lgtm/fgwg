@@ -213,6 +213,33 @@ async def handle_callback(query):
     if not cid or not mid or not uid:
         await call("answerCallbackQuery",callback_query_id=qid)
         return
+    if data.startswith("riddle:") and (msg.get("chat") or {}).get("type")=="private":
+        _,group_id,question_id,answer_id=data.split(":")
+        group_id=int(group_id)
+        expected=(int(time.time())//86400+uid)%len(RIDDLES)
+        if int(question_id)!=expected:
+            answer="Загадка уже обновилась. Запроси новую."
+        elif int(answer_id)==RIDDLES[expected][2]:
+            answer="🧩 Правильно! "+("+15 XP" if reward_challenge(group_id,uid,"riddle",15) else "Сегодня награда уже получена.")
+        else:
+            answer="❌ Неверно, попробуй ещё."
+        await call("answerCallbackQuery",callback_query_id=qid,text=answer,show_alert=True)
+        return
+    if data.startswith("duel:") and (msg.get("chat") or {}).get("type")=="private":
+        _,duel_id,answer_id=data.split(":")
+        with db() as conn:
+            row=conn.execute("SELECT chat_id,challenger,opponent,answer,created_at,finished FROM duels WHERE id=?",(int(duel_id),)).fetchone()
+            if not row or uid not in (row[1],row[2]) or row[5] or row[4]<int(time.time())-600:
+                answer="Дуэль завершена или недоступна."
+            elif int(answer_id)!=row[3]:
+                answer="❌ Неверно. Попробуй ещё."
+            else:
+                result=conn.execute("UPDATE duels SET finished=1 WHERE id=? AND finished=0",(int(duel_id),))
+                answer="🏆 Победа в дуэли!" if result.rowcount else "Уже есть победитель."
+        if answer=="🏆 Победа в дуэли!":
+            answer+=" "+("+20 XP" if reward_challenge(row[0],uid,"duel",20) else "Дневная награда уже получена.")
+        await call("answerCallbackQuery",callback_query_id=qid,text=answer,show_alert=True)
+        return
     if data.startswith("me:") and (msg.get("chat") or {}).get("type")=="private":
         group=user_group(uid)
         action=data.split(":",1)[1]
