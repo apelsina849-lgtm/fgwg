@@ -22,10 +22,28 @@ AI_MODEL = os.getenv("SHREKSICH_AI_MODEL", "")
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("shreksich-ai")
 QUESTIONS = [
-    ("Как называется режим PUBG Mobile, посвящённый добыче и эвакуации?", ["Metro Royale", "Arena", "Payload"], 0),
-    ("Что важнее при эвакуации с ценным лутом?", ["Игнорировать карту", "Планировать безопасный маршрут", "Выбрасывать всё"], 1),
-    ("Что важно проверить перед эвакуацией в Metro Royale?", ["Маршрут до точки выхода", "Цвет интерфейса", "Количество друзей"], 0),
+    ("Как называется режим с добычей и эвакуацией?", ["Metro Royale","Arena","Payload"], 0),
+    ("Что проверить перед эвакуацией?", ["Безопасный маршрут","Цвет меню","Ник"], 0),
+    ("Что помогает услышать врага?", ["Наушники","Скин","Аватар"], 0),
+    ("Что брать для лечения?", ["Аптечки","Краску","Лишний прицел"], 0),
+    ("Что делать при нехватке патронов?", ["Искать выход","Стрелять в воздух","Бежать в бой"], 0),
+    ("Как уменьшить риск потери экипировки?", ["Подбирать снаряжение по риску","Не брать лечение","Игнорировать карту"], 0),
+    ("Что помогает команде?", ["Голосовая связь","Случайные маршруты","Молчание"], 0),
+    ("Что делать при засаде у выхода?", ["Искать другой путь","Бежать напролом","Выбросить оружие"], 0),
+    ("Как проверить подозрительную комнату?", ["Осмотреть углы","Войти спиной","Не смотреть"], 0),
+    ("Для чего запас расходников?", ["Для выживания","Для аватара","Для FPS"], 0),
+    ("Что важно при выборе оружия?", ["Патроны и дистанция","Цвет","Название"], 0),
+    ("Почему опасно стоять на открытом месте?", ["Можно попасть под огонь","Пропадёт ник","Упадёт уровень"], 0),
+    ("Что сделать после получения ценного лута?", ["Оценить путь выхода","Искать бой","Выбросить броню"], 0),
+    ("Что делать, если напарник ранен?", ["Проверить угрозу","Бежать без прикрытия","Игнорировать врагов"], 0),
+    ("Как избежать внезапного боя?", ["Следить за звуками","Играть без звука","Не смотреть"], 0),
+    ("Что полезно при небольшом бюджете?", ["Недорогие рейды","Рисковать всем","Не брать патроны"], 0),
+    ("Что проверить перед рейдом?", ["Броню, патроны и лечение","Язык телефона","Аватар"], 0),
+    ("Что помогает контролировать стрельбу?", ["Контроль отдачи","Случайные прыжки","Выключенный прицел"], 0),
+    ("Почему опасен бесплатный лут от незнакомцев?", ["Возможен обман","Всегда безопасно","Это официальный обмен"], 0),
+    ("Что важнее при отходе после боя?", ["Укрытия и маршрут","Цвет прицела","Эмоции"], 0),
 ]
+
 SCAM = re.compile(r"(?:telegram\.gift|t\.me/[^\s]+\\?start=|бесплатн.{0,20}(?:uc|зв[её]зд)|пришли.{0,20}(?:пароль|код входа)|переведи.{0,30}(?:на карту|на кошел[её]к))", re.I)
 FLOOD = {}
 def db():
@@ -35,6 +53,7 @@ def db():
     c.execute("CREATE TABLE IF NOT EXISTS quiz(chat_id INTEGER PRIMARY KEY, question INTEGER, expires INTEGER, winner INTEGER)")
     c.execute("CREATE TABLE IF NOT EXISTS settings(chat_id INTEGER PRIMARY KEY, owner_id INTEGER NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, interval_minutes INTEGER NOT NULL DEFAULT 30, next_quiz INTEGER NOT NULL DEFAULT 0)")
     c.execute("CREATE TABLE IF NOT EXISTS scores(chat_id INTEGER,user_id INTEGER,name TEXT,wins INTEGER DEFAULT 0,PRIMARY KEY(chat_id,user_id))")
+    c.execute("CREATE TABLE IF NOT EXISTS quiz_history(chat_id INTEGER,question INTEGER,played_at INTEGER,PRIMARY KEY(chat_id,question))")
     c.execute("CREATE TABLE IF NOT EXISTS profiles(chat_id INTEGER,user_id INTEGER,name TEXT,xp INTEGER DEFAULT 0,last_xp INTEGER DEFAULT 0,PRIMARY KEY(chat_id,user_id))")
     c.execute("CREATE TABLE IF NOT EXISTS memory(chat_id INTEGER,user_id INTEGER,role TEXT,content TEXT,ts INTEGER)")
     c.execute("CREATE TABLE IF NOT EXISTS preferences(chat_id INTEGER PRIMARY KEY,persona TEXT DEFAULT 'friendly',ai_enabled INTEGER DEFAULT 1,level_enabled INTEGER DEFAULT 1)")
@@ -111,10 +130,16 @@ async def quiz_start(cid, message_id=None):
     with db() as conn:
         row=conn.execute("SELECT question,expires,winner FROM quiz WHERE chat_id=?",(cid,)).fetchone()
         if row and row[1]>now and row[2] is None:
-            index=row[0]
-        else:
-            index=random.randrange(len(QUESTIONS))
-            conn.execute("INSERT OR REPLACE INTO quiz VALUES(?,?,?,NULL)",(cid,index,now+120))
+            return
+        played={q for (q,) in conn.execute("SELECT question FROM quiz_history WHERE chat_id=?",(cid,)).fetchall() if q<len(QUESTIONS)}
+        if len(played)>=len(QUESTIONS):
+            conn.execute("DELETE FROM quiz_history WHERE chat_id=?",(cid,))
+            played=set()
+        choices=[i for i in range(len(QUESTIONS)) if i not in played and (not row or i!=row[0])]
+        if not choices: choices=[i for i in range(len(QUESTIONS)) if i not in played]
+        index=random.choice(choices)
+        conn.execute("INSERT OR REPLACE INTO quiz VALUES(?,?,?,NULL)",(cid,index,now+120))
+        conn.execute("INSERT OR REPLACE INTO quiz_history VALUES(?,?,?)",(cid,index,now))
     question,answers,_=QUESTIONS[index]
     text="🎮 ВИКТОРИНА • 2 МИНУТЫ\n\n"+question+"\n\nВыбери правильный ответ:"
     buttons=keyboard([[{"text":f"{i+1}. {answer}","callback_data":f"quiz:answer:{index}:{i}"}] for i,answer in enumerate(answers)]+[[{"text":"⬅️ Главное меню","callback_data":"page:home"}]])
