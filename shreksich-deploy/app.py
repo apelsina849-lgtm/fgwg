@@ -3707,6 +3707,31 @@ input,textarea,select{background:#0a1625;border-color:#2c455e}
 .farm-uc-need{margin:12px 0;padding:12px;border:1px solid #326b83;border-radius:13px;background:linear-gradient(125deg,#123045,#102231);color:#c8f4ff;font-size:12px;line-height:1.5}
 .farm-uc-need strong{color:#f0faff}
 
+
+/* Post-release mobile polish: keep farm improvements readable on small phones */
+.case-view-all{width:100%;margin-top:7px;background:linear-gradient(130deg,#162b46,#102237);border:1px solid #507bad;color:#cce8ff;font-size:12px;min-height:44px}
+.case-all-items{margin-top:13px;padding-top:11px;border-top:1px solid #2e4b68}
+.case-all-items h4{font-size:14px;color:#e1edff;margin:2px 0 9px}
+.case-odds-list{display:flex;flex-wrap:wrap;gap:6px}
+.case-odds-chip{font-size:10px;border-radius:12px;padding:7px 9px;font-weight:900;background:#14263b;border:1px solid #526b81;color:#d0dfef}
+.case-odds-chip[data-tier="GRAY"]{color:#c9d2dd;background:#202d39;border-color:#75869a}
+.case-odds-chip[data-tier="CYAN"]{color:#7ceefc;background:#102c38;border-color:#2791b5}
+.case-odds-chip[data-tier="BLUE"]{color:#91c0ff;background:#142a50;border-color:#397be3}
+.case-odds-chip[data-tier="PURPLE"]{color:#d5a8ff;background:#2d2146;border-color:#814bcc}
+.case-odds-chip[data-tier="PINK"]{color:#ff9fd8;background:#411f39;border-color:#bd509a}
+.case-odds-chip[data-tier="RED"]{color:#ffa0a6;background:#421c28;border-color:#c75262}
+.case-odds-chip[data-tier="GOLD"]{color:#ffe596;background:#443312;border-color:#c3963d}
+@media(max-width:580px){
+ .farm-ui .farm-modules{display:grid;grid-template-columns:minmax(0,1fr)!important;gap:10px}
+ .farm-ui .farm-module{display:grid;grid-template-columns:minmax(0,1fr) minmax(112px,35%);column-gap:10px;row-gap:5px;align-items:center;padding:11px;border:1px solid #426480;background:linear-gradient(120deg,#173349,#112435 70%,#262b28);border-radius:15px}
+ .farm-ui .farm-module-header{grid-column:1;grid-row:1;display:flex;align-items:center;gap:8px;text-align:left;font-size:13px;line-height:1.2;overflow-wrap:anywhere}
+ .farm-ui .farm-module-icon{display:inline-flex;align-items:center;justify-content:center;font-size:28px;margin:0;flex:0 0 29px}
+ .farm-ui .farm-module-desc{grid-column:1;grid-row:2;min-height:0;font-size:10px;text-align:left;line-height:1.35;color:#afc3d5;margin:2px 0;overflow-wrap:anywhere}
+ .farm-ui .farm-module .mini{grid-column:2;grid-row:1;font-size:10px;text-align:center;color:#c5d4e6;margin:0}
+ .farm-ui .farm-module-progress{grid-column:1;grid-row:3;margin:5px 0 0}
+ .farm-ui .farm-module button{grid-column:2;grid-row:2/span 2;width:100%;min-height:48px;font-size:10px;padding:8px 4px;line-height:1.3;white-space:normal;overflow-wrap:anywhere}
+}
+
 </style>
 </head>
 <body>
@@ -4297,10 +4322,11 @@ function caseSelectedPreview(cfg){
  for(const r of all){if(!seen.has(r.tier)){seen.add(r.tier);tierSamples.push(r)}}
  for(const r of all){if(tierSamples.length>=6)break;if(!tierSamples.includes(r))tierSamples.push(r)}
  tierSamples.sort((a,b)=>a.value_stars-b.value_stars);
- return '<div class="shx-panel" style="margin-top:13px"><h3 style="margin:0 0 5px">🎁 Предметы кейса «'+esc(cfg.name)+'»</h3>'+
- '<div class="muted" style="font-size:11px">Примеры наград, объёмные стикеры и цветные рамки редкости. Стоимость указана в SHR.</div>'+
+ return '<div class="shx-panel case-prizes-panel" style="margin-top:13px"><h3 style="margin:0 0 5px">🎁 Предметы кейса «'+esc(cfg.name)+'»</h3>'+
+ '<div class="muted" style="font-size:11px">Награды этого кейса, объёмные стикеры и рамки по редкости. Стоимость указана в SHR.</div>'+
  '<div class="case-loot-grid">'+tierSamples.map(caseLootCard).join('')+'</div>'+
- '<button type="button" class="secondary" style="width:100%" id="spinAllItems">Все '+all.length+' предметов и шансы →</button></div>';
+ '<button type="button" class="secondary case-view-all" aria-expanded="false" aria-controls="spinAllItemsContent" id="spinAllItems">Показать все '+all.length+' предметов и шансы ↓</button>'+
+ '<div class="case-all-items hide" id="spinAllItemsContent"></div></div>';
 }
 
 function spinSourceLabel(source){
@@ -4630,7 +4656,24 @@ async function spinHtml(){
 }
 function bindSpin(){
  bindSpinCasePicker();
- const allItems=document.getElementById('spinAllItems');if(allItems)allItems.addEventListener('click',()=>go('case-catalog'));
+ const allItems=document.getElementById('spinAllItems');
+ if(allItems)allItems.addEventListener('click',()=>{
+  if(spinNavigationLocked)return;
+  const panel=document.getElementById('spinAllItemsContent'),cfg=selectedCase();if(!panel||!cfg)return;
+  const willOpen=panel.classList.contains('hide');
+  if(willOpen&&!panel.dataset.loaded){
+   const rewards=caseItemsOf(cfg);
+   const tiers=(cfg.tiers||[]).filter(t=>Number(t.chance)>0).map(t=>
+    '<span class="case-odds-chip" data-tier="'+esc(t.tier)+'">'+caseTierLabel(cfg.id,t.tier)+' · '+Number(t.chance)+'%</span>').join('');
+   panel.innerHTML='<h4>Шансы и содержимое «'+esc(cfg.name)+'»</h4><div class="case-odds-list">'+tiers+'</div>'+
+    '<div class="muted" style="font-size:11px;margin:12px 0 5px">Все '+rewards.length+' предметов по возрастанию стоимости. Награда определяется случайно на сервере.</div>'+
+    '<div class="case-loot-grid case-all-grid">'+rewards.map(caseLootCard).join('')+'</div>';
+   panel.dataset.loaded='1';
+  }
+  panel.classList.toggle('hide',!willOpen);
+  allItems.setAttribute('aria-expanded',willOpen?'true':'false');
+  allItems.textContent=willOpen?'Скрыть все предметы ↑':'Показать все '+caseItemsOf(cfg).length+' предметов и шансы ↓';
+ });
  const farmBtn=document.getElementById('spinFarmBtn');if(farmBtn)farmBtn.addEventListener('click',()=>go('farm'));
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
