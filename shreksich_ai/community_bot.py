@@ -548,6 +548,28 @@ def challenge_question(uid):
     question,answers,_=RIDDLES[index]
     return index,question,answers
 
+async def start_riddle(uid,cid):
+    index,question,answers=challenge_question(uid)
+    await send(uid,"🧩 ЗАГАДКА ДНЯ\\n"+question,reply_markup=keyboard([[{"text":f"{i+1}. {answer}","callback_data":f"riddle:{cid}:{index}:{i}"}] for i,answer in enumerate(answers)]))
+
+async def start_duel(uid,cid):
+    with db() as conn:
+        row=conn.execute("SELECT user_id FROM profiles WHERE chat_id=? AND user_id!=? ORDER BY last_xp DESC LIMIT 1",(cid,uid)).fetchone()
+    if not row:
+        await send(uid,"⚔️ Для дуэли нужен ещё хотя бы один участник сообщества.")
+        return
+    opponent=row[0]
+    question_index=random.randrange(len(QUESTIONS))
+    with db() as conn:
+        result=conn.execute("INSERT INTO duels(chat_id,challenger,opponent,question,answer,created_at) VALUES(?,?,?,?,?,?)",(cid,uid,opponent,question_index,QUESTIONS[question_index][2],int(time.time())))
+        duel_id=result.lastrowid
+    question,answers,_=QUESTIONS[question_index]
+    markup=keyboard([[{"text":answer,"callback_data":f"duel:{duel_id}:{i}"}] for i,answer in enumerate(answers)])
+    await send(uid,"⚔️ ДУЭЛЬ ЗНАНИЙ\\n"+question+"\\nПервый верный ответ побеждает!",reply_markup=markup)
+    try: await send(opponent,"⚔️ Тебя вызвали на дуэль знаний!\\n"+question,reply_markup=markup)
+    except Exception:
+        await send(uid,"Напарник ещё не открыл личный чат с ботом. Приглашение доставлено только тебе.")
+
 def user_group(uid):
     with db() as conn:
         row=conn.execute("SELECT active_chat FROM user_preferences WHERE user_id=?",(uid,)).fetchone()
