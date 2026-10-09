@@ -733,6 +733,7 @@ async def init_db():
     );
     CREATE INDEX IF NOT EXISTS idx_shop_sellers_status ON shop_sellers(status);
     CREATE TABLE IF NOT EXISTS seller_warnings(id INTEGER PRIMARY KEY AUTOINCREMENT,seller_id INTEGER NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE IF NOT EXISTS seller_removals(id INTEGER PRIMARY KEY AUTOINCREMENT,seller_id INTEGER NOT NULL,display_name TEXT NOT NULL,reason TEXT NOT NULL,removed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS seller_reviews(id INTEGER PRIMARY KEY AUTOINCREMENT,seller_id INTEGER NOT NULL,buyer_id INTEGER NOT NULL,rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),comment TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(seller_id,buyer_id));
     """)
     product_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(products)")).fetchall()}
@@ -1712,9 +1713,14 @@ async def seller_apply(body: SellerApplicationIn, x_telegram_init_data: str | No
             old=await (await conn.execute(
                 "SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,)
             )).fetchone()
+            if old and old["status"]=="removed":
+                old=None
             if old and old["status"]=="blocked":
                 await conn.rollback()
                 raise HTTPException(403,"Заявка заблокирована администрацией")
+            if old and old["status"]=="pending":
+                await conn.rollback()
+                raise HTTPException(409,"Ваша заявка уже на рассмотрении")
             if old and old["status"]=="approved":
                 await conn.rollback()
                 raise HTTPException(409,"Вы уже продавец")
@@ -1903,6 +1909,7 @@ async def admin_sellers(x_telegram_init_data: str | None = Header(default=None))
             "LEFT JOIN shop_sellers s ON s.telegram_id=p.seller_id "
             "WHERE p.seller_id>0 ORDER BY p.id DESC LIMIT 500"
         )).fetchall()
+        removals=await (await conn.execute("SELECT seller_id,display_name,reason,removed_at FROM seller_removals ORDER BY id DESC LIMIT 200")).fetchall()
         jobs=await (await conn.execute(
             "SELECT o.id,o.number,o.product_name,o.status,o.stars_amount,o.seller_share_stars,"
             "o.platform_share_stars,o.reserve_share_stars,o.seller_delivery_note,o.telegram_charge_id,o.seller_id,"
@@ -1914,8 +1921,52 @@ async def admin_sellers(x_telegram_init_data: str | None = Header(default=None))
     finally:
         await conn.close()
     return {"sellers":[dict(x) for x in sellers],"listings":[dict(x) for x in listings],
-            "orders":[dict(x) for x in jobs]}
+            "orders":[dict(x) for x in jobs],"removals":[dict(x) for x in removals]}
 
+
+
+class SellerRemovalIn(BaseModel):
+    reason: str = Field(min_length=5,max_length=600)
+
+class SellerContactIn(BaseModel):
+    message: str = Field(min_length=1,max_length=1500)
+
+@app.post("/api/admin/sellers/{seller_id}/contact")
+async def admin_contact_seller(seller_id:int,body:SellerContactIn,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        seller=await (await conn.execute("SELECT telegram_id FROM shop_sellers WHERE telegram_id=?",(seller_id,))).fetchone()
+        if not seller: raise HTTPException(404,"Продавец не найден")
+    finally:
+        await conn.close()
+    try:
+        await tg("sendMessage",{"chat_id":seller_id,"text":"💬 Сообщение от администрации Шрексича:\\n"+body.message.strip()+"\\n\\nДля ответа напишите администрации через поддержку бота."})
+    except Exception:
+        raise HTTPException(502,"Telegram не доставил сообщение. Продавец должен сначала запустить бота.")
+    return {"ok":True}
+
+@app.post("/api/admin/sellers/{seller_id}/remove")
+async def admin_remove_seller(seller_id:int,body:SellerRemovalIn,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            seller=await (await conn.execute("SELECT display_name,status FROM shop_sellers WHERE telegram_id=?",(seller_id,))).fetchone()
+            if not seller or seller["status"]=="removed":
+                await conn.rollback()
+                raise HTTPException(409,"Продавец уже удалён или не найден")
+            await conn.execute("INSERT INTO seller_removals(seller_id,display_name,reason) VALUES(?,?,?)",(seller_id,seller["display_name"],body.reason.strip()))
+            await conn.execute("UPDATE shop_sellers SET status='removed',updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(seller_id,))
+            await conn.execute("UPDATE products SET active=0,seller_status='paused' WHERE seller_id=?",(seller_id,))
+            await conn.commit()
+        finally:
+            await conn.close()
+    try:
+        await tg("sendMessage",{"chat_id":seller_id,"text":"⛔ Ваш статус продавца удалён. Причина: "+body.reason.strip()+"\\nДля возвращения подайте новую заявку в разделе «Продавцам»."})
+    except Exception: pass
+    return {"ok":True}
 
 class SellerWarningIn(BaseModel):
     reason: str = Field(min_length=5,max_length=600)
@@ -5078,7 +5129,7 @@ async function sellerHtml(){
  const calculator='<div class="shx-panel"><h3>⭐ Калькулятор комиссии</h3><div class="mini">Рассчитайте распределение Stars до публикации товара. Расчёт соответствует правилам реальных заказов.</div><div class="seller-inputs"><label>Цена товара в Stars<input id="sellerCalcPrice" type="number" min="1" max="1000000" value="100" inputmode="numeric"></label><label>Количество<input id="sellerCalcQty" type="number" min="1" max="1000" value="1" inputmode="numeric"></label></div><div id="sellerCalcResult" class="seller-income-row" aria-live="polite"></div><div class="mini">Предварительный расчёт, не выплата Stars.</div></div>';
  const sellerRulesHtml='<details class="shx-panel" style="margin-top:12px"><summary style="cursor:pointer;font-weight:800">📜 Правила продавцов · прочитать перед заявкой</summary><div class="mini" style="line-height:1.7;margin-top:12px"><b>1. Честные объявления.</b> Продавайте только товары и услуги, которые действительно можете предоставить. Указывайте точное описание, цену в Stars, количество и сроки передачи.<br><b>2. Законность и правила игры.</b> Запрещены мошенничество, краденые предметы и аккаунты, взлом, читы, передача чужих персональных данных и товары, нарушающие правила PUBG Mobile или Telegram.<br><b>3. Выполнение заказов.</b> После подтверждённой оплаты своевременно связывайтесь с покупателем, передавайте товар согласованным способом и сохраняйте доказательства выдачи. Не отмечайте заказ выполненным до фактической передачи.<br><b>4. Остатки и доступность.</b> Следите за количеством товаров. Если выдача временно невозможна — приостановите объявление и сообщите администрации об оплаченных заказах.<br><b>5. Общение и безопасность.</b> Общайтесь уважительно. Не запрашивайте пароли, коды Telegram, данные банковских карт и другие секреты. Не уводите оплаченные заказы за пределы площадки.<br><b>6. Споры и возвраты.</b> При проблеме с заказом незамедлительно уведомите администрацию, предоставьте подтверждения и содействуйте разрешению спора. Решения о возврате и компенсации принимаются после проверки.<br><b>7. Комиссия.</b> Для новых заказов действует распределение: 70% продавцу, 20% магазину, 10% в резерв, с округлением целых Stars. Начисление в кабинете — учёт обязательства, а не автоматическая выплата. Способ и сроки расчётов согласовываются с администрацией.<br><b>8. Модерация.</b> Администрация вправе отклонить заявку, снять объявление или ограничить продажи при нарушениях. Уже оплаченные обязательства при этом сохраняются.<br><b>9. Ответственность.</b> Продавец отвечает за достоверность информации, наличие товара и надлежащее исполнение заказа. Площадка может запрашивать доказательства выдачи.<br><b>10. Серьёзные нарушения и чёрный список.</b> За мошенничество, подделку доказательств выдачи, присвоение оплаченного товара, повторные обманы покупателей или другие серьёзные нарушения администрация вправе немедленно удалить продавца из маркетплейса, заблокировать его кабинет и внести в чёрный список без повторного допуска. Начисленные, но ещё не выплаченные Stars по спорным заказам могут быть заморожены на время проверки; их возврат или удержание определяется результатами разбирательства, правилами Telegram и применимым законодательством. Уже подтверждённые законные обязательства перед продавцом не аннулируются автоматически.</div></details>';
  const calculatorTop=top+calculator+sellerRulesHtml;
- if(!profile)return calculatorTop+'<div class="shx-panel"><h3>🛍 Стать продавцом Шрексича</h3><p class="mini">Подайте заявку, дождитесь одобрения администратора и размещайте товары за Telegram Stars.</p><div class="seller-feature-grid"><div><strong>1</strong><small>Заявка</small></div><div><strong>2</strong><small>Одобрение</small></div><div><strong>3</strong><small>Продажи</small></div></div>'+ 
+ if(!profile||profile.status==='removed')return calculatorTop+'<div class="shx-panel"><h3>🛍 Стать продавцом Шрексича</h3><p class="mini">Подайте заявку, дождитесь одобрения администратора и размещайте товары за Telegram Stars.</p><div class="seller-feature-grid"><div><strong>1</strong><small>Заявка</small></div><div><strong>2</strong><small>Одобрение</small></div><div><strong>3</strong><small>Продажи</small></div></div>'+ 
  '<div class="seller-inputs"><input id="sellerName" maxlength="72" placeholder="Имя магазина / продавца">'+
  '<input id="sellerContact" maxlength="120" placeholder="Контакт для связи (например, @username)">'+
  '<textarea id="sellerExperience" maxlength="700" placeholder="Какие товары поставляете, наличие и сроки выдачи"></textarea>'+
@@ -6525,7 +6576,7 @@ function adminUcFunding(){
 
 function adminSellers(){
  const d=adminData.sellers||{sellers:[],listings:[],orders:[]};
- const sellers=d.sellers||[],listings=d.listings||[],orders=d.orders||[];
+ const sellers=(d.sellers||[]).filter(x=>x.status!=='removed'),listings=d.listings||[],orders=d.orders||[],removals=d.removals||[];
  const outstanding=orders.filter(x=>x.status==='Выполнен'&&!x.settled_id);
  const totalSeller=orders.filter(x=>x.settled_id).reduce((v,x)=>v+Number(x.seller_share_stars||0),0);
  const completedOrders=orders.filter(x=>x.status==='Выполнен');
@@ -6551,9 +6602,10 @@ function adminSellers(){
  '<div class="mini">Telegram: '+(x.username?'@'+esc(x.username):'username не указан')+' · ID: '+x.telegram_id+'</div>'+ 
  '<div class="mini">⭐ Рейтинг: '+(x.avg_rating?Number(x.avg_rating).toFixed(2)+'/5':'Нет оценок')+' · Отзывов: '+Number(x.review_count||0)+' · Выговоров: '+Number(x.warning_count||0)+'</div>'+ 
  '<div class="seller-market-actions">'+(x.status==='pending'?'<button class="buy" data-seller-approve="'+x.telegram_id+'">✓ Одобрить заявку</button>':'<button class="secondary" data-seller-history="'+x.telegram_id+'">📋 Данные и отзывы</button><button class="secondary" data-seller-warning="'+x.telegram_id+'">⚠️ Выдать выговор</button>')+
- '<a style="display:inline-flex;align-items:center;padding:10px;color:#9de8ff" href="'+(x.username?'https://t.me/'+encodeURIComponent(x.username):'tg://user?id='+Number(x.telegram_id))+'" target="_blank" rel="noopener noreferrer">💬 Написать продавцу</a>'+
- (x.status==='blocked'?'':'<button class="danger" data-seller-block="'+x.telegram_id+'">Заблокировать</button>')+'</div><div id="sellerHistory'+x.telegram_id+'"></div></div>').join('')||
+ '<button class="secondary" data-seller-contact="'+x.telegram_id+'">💬 Написать продавцу</button>'+(x.username?'<a style="color:#9de8ff;padding:10px" href="https://t.me/'+encodeURIComponent(x.username)+'" target="_blank" rel="noopener noreferrer">Открыть @'+esc(x.username)+'</a>':'')+
+ (x.status==='blocked'?'':'<button class="danger" data-seller-block="'+x.telegram_id+'">Заблокировать</button>')+'<button class="danger" data-seller-remove="'+x.telegram_id+'">🗑 Удалить продавца</button>'+'</div><div id="sellerHistory'+x.telegram_id+'"></div></div>').join('')||
  '<div class="empty">Заявок пока нет</div>');
+ html+='<h3 style="margin:18px 0 9px">История удалений</h3>'+(removals.map(x=>'<div class="seller-admin-box"><b>'+esc(x.display_name)+'</b> · ID '+Number(x.seller_id)+'<div class="mini">Причина: '+esc(x.reason)+'</div><div class="mini">Дата и время (UTC): '+esc(x.removed_at)+'</div></div>').join('')||'<div class="mini">Удалений пока нет</div>');
  html+='<h3 style="margin:18px 0 9px">Модерация товаров</h3>'+
  (listings.map(x=>'<div class="seller-admin-box"><div class="row"><span class="seller-status-pill '+esc(x.seller_status)+'">'+esc(x.seller_status)+'</span>'+
  '<span class="seller-stock-tag">В наличии '+Number(x.seller_stock||0)+'</span></div>'+
@@ -6602,6 +6654,8 @@ function bindAdmin(){
  };
  document.querySelectorAll('[data-seller-history]').forEach(b=>b.addEventListener('click',async()=>{try{const d=await api('/api/admin/sellers/'+b.dataset.sellerHistory+'/history');const el=document.getElementById('sellerHistory'+b.dataset.sellerHistory);if(el)el.innerHTML='<h4>Выговоры</h4>'+(d.warnings.map(x=>'<div class="mini">⚠️ '+esc(x.reason)+' · '+esc(x.created_at)+'</div>').join('')||'<div class="mini">Нет выговоров</div>')+'<h4>Отзывы покупателей</h4>'+(d.reviews.map(x=>'<div class="mini">⭐ '+Number(x.rating)+'/5 · '+esc(x.comment)+' · '+esc(x.created_at)+'</div>').join('')||'<div class="mini">Пока нет отзывов</div>')}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-seller-warning]').forEach(b=>b.addEventListener('click',async()=>{const reason=prompt('Укажите причину выговора (не менее 5 символов)');if(reason===null)return;if(reason.trim().length<5){alert('Причина должна содержать не менее 5 символов');return}try{await api('/api/admin/sellers/'+b.dataset.sellerWarning+'/warnings',{method:'POST',body:JSON.stringify({reason:reason.trim()})});await refreshAdmin()}catch(e){alert(e.message)}}));
+ document.querySelectorAll('[data-seller-contact]').forEach(b=>b.addEventListener('click',async()=>{const message=prompt('Сообщение продавцу от администрации (придёт в Telegram-бот):');if(!message||!message.trim())return;try{await api('/api/admin/sellers/'+b.dataset.sellerContact+'/contact',{method:'POST',body:JSON.stringify({message:message.trim()})});alert('Сообщение отправлено продавцу в Telegram')}catch(e){alert(e.message)}}));
+ document.querySelectorAll('[data-seller-remove]').forEach(b=>b.addEventListener('click',async()=>{const reason=prompt('Укажите причину удаления продавца (минимум 5 символов):');if(reason===null)return;if(reason.trim().length<5){alert('Укажите причину от 5 символов');return}if(!confirm('Удалить статус продавца? Все его объявления будут скрыты, а повторное вступление потребует новой заявки. История заказов сохранится.'))return;try{await api('/api/admin/sellers/'+b.dataset.sellerRemove+'/remove',{method:'POST',body:JSON.stringify({reason:reason.trim()})});await refreshAdmin()}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-seller-approve]').forEach(b=>b.addEventListener('click',()=>adminSellerChange(b.dataset.sellerApprove,'approved')));
  document.querySelectorAll('[data-seller-block]').forEach(b=>b.addEventListener('click',()=>{if(confirm('Отключить продавца от новых заказов?'))adminSellerChange(b.dataset.sellerBlock,'blocked')}));
  const listingChange=async(id,status)=>{
