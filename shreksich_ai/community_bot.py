@@ -128,7 +128,10 @@ def admin_stats(cid):
         xp=conn.execute("SELECT COALESCE(SUM(xp),0) FROM profiles WHERE chat_id=?",(cid,)).fetchone()[0]
         memory=conn.execute("SELECT COUNT(*) FROM memory WHERE chat_id=?",(cid,)).fetchone()[0]
         wins=conn.execute("SELECT COALESCE(SUM(wins),0) FROM scores WHERE chat_id=?",(cid,)).fetchone()[0]
-    return f"📊 СТАТИСТИКА\n\nУчастников: {players}\nВсего XP: {xp}\nПобед: {wins}\nЗаписей памяти: {memory}"
+        teams=conn.execute("SELECT COUNT(*) FROM teammates WHERE chat_id=? AND created_at>?",(cid,int(time.time())-7*86400)).fetchone()[0]
+        events=conn.execute("SELECT COUNT(*) FROM event_signups WHERE chat_id=?",(cid,)).fetchone()[0]
+        alerts=conn.execute("SELECT COUNT(*) FROM events WHERE chat_id=? AND ts>?",(cid,int(time.time())-86400)).fetchone()[0]
+    return f"📊 СТАТИСТИКА\n\nУчастников: {players}\nВсего XP: {xp}\nПобед: {wins}\nЗаписей памяти: {memory}\nЗаявок в команду: {teams}\nРегистраций на событие: {events}\nСобытий безопасности за сутки: {alerts}"
 async def periodic_quizzes():
     while True:
         await asyncio.sleep(30)
