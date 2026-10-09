@@ -635,6 +635,26 @@ async def private_answer(uid,question,cid):
     if cid is None:
         await send(uid,"Сначала напиши Шреку в группе сообщества, чтобы привязать свой профиль.")
         return
+    q=question.lower()
+    if "боевой пропуск" in q or "батл пасс" in q or "battle pass" in q:
+        await send(uid,battle_pass(cid,uid),reply_markup=private_menu(uid))
+        return
+    if "забрать награды пропуска" in q or "забрать награду пропуска" in q:
+        await send(uid,claim_pass(cid,uid),reply_markup=private_menu(uid))
+        return
+    if "испытани" in q:
+        await send(uid,challenge_text(cid,uid),reply_markup=private_menu(uid))
+        return
+    if "загадк" in q:
+        await start_riddle(uid,cid)
+        return
+    if "дуэл" in q:
+        await start_duel(uid,cid)
+        return
+    guide=pubg_guide(question)
+    if guide:
+        await send(uid,guide,reply_markup=private_menu(uid))
+        return
     if ("ищу команд" in question.lower() or "найди команд" in question.lower() or "ищу напарник" in question.lower() or "отмена поиска команд" in question.lower()):
         await send(uid,find_team(cid,uid,question),reply_markup=private_menu(uid))
         return
