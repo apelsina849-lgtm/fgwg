@@ -85,16 +85,31 @@ def group_owner(cid,uid):
         LOG.exception("Cannot verify group creator")
         return False
 def admin_menu(row):
-    cid,enabled,interval,next_quiz=row
+    cid,enabled,interval,_=row
+    persona,ai_on,xp_on=group_pref(cid)
     return keyboard([
-        [{"text":"🎮 Запустить викторину","callback_data":"admin:quiz"}],
-        [{"text":("⏸ Остановить" if enabled else "▶️ Включить")+" автовикторины","callback_data":"admin:toggle"}],
+        [{"text":"🤖 ИИ "+("✅" if ai_on else "❌"),"callback_data":"admin:ai"},{"text":"⭐ XP "+("✅" if xp_on else "❌"),"callback_data":"admin:xp"}],
+        [{"text":"🐸 Характер: "+{"friendly":"Дружелюбный","expert":"Эксперт PUBG","serious":"Серьёзный"}.get(persona,persona),"callback_data":"admin:persona"}],
+        [{"text":"🎮 Автовикторины "+("✅" if enabled else "❌"),"callback_data":"admin:toggle"}],
         [{"text":"⏱ 15 мин","callback_data":"admin:interval:15"},{"text":"⏱ 30 мин","callback_data":"admin:interval:30"},{"text":"⏱ 60 мин","callback_data":"admin:interval:60"}],
+        [{"text":"🎮 Провести викторину","callback_data":"admin:quiz"}],
+        [{"text":"📊 Статистика","callback_data":"admin:stats"},{"text":"🧠 Очистить память","callback_data":"admin:memory_confirm"}],
         [{"text":"🔄 Обновить","callback_data":"admin:refresh"}],
     ])
 def admin_text(row):
-    cid,enabled,interval,next_quiz=row
-    return f"🐸 SHREKSICH AI • УПРАВЛЕНИЕ\\n\\nЧат: {cid}\\nАвтовикторины: {'включены' if enabled else 'выключены'}\\nИнтервал: {interval} мин\\n\\nНастройки доступны только владельцу привязанного чата."
+    cid,enabled,interval,_=row
+    persona,ai_on,xp_on=group_pref(cid)
+    return (f"🐸 SHREKSICH AI 2.0 • ПАНЕЛЬ ВЛАДЕЛЬЦА\n\nЧат: {cid}\n"
+            f"ИИ: {'включён' if ai_on else 'выключен'}\nХарактер: {persona}\n"
+            f"XP: {'включён' if xp_on else 'выключен'}\n"
+            f"Автовикторины: {'включены' if enabled else 'выключены'} (каждые {interval} мин)")
+def admin_stats(cid):
+    with db() as conn:
+        players=conn.execute("SELECT COUNT(*) FROM profiles WHERE chat_id=?",(cid,)).fetchone()[0]
+        xp=conn.execute("SELECT COALESCE(SUM(xp),0) FROM profiles WHERE chat_id=?",(cid,)).fetchone()[0]
+        memory=conn.execute("SELECT COUNT(*) FROM memory WHERE chat_id=?",(cid,)).fetchone()[0]
+        wins=conn.execute("SELECT COALESCE(SUM(wins),0) FROM scores WHERE chat_id=?",(cid,)).fetchone()[0]
+    return f"📊 СТАТИСТИКА\n\nУчастников: {players}\nВсего XP: {xp}\nПобед: {wins}\nЗаписей памяти: {memory}"
 async def periodic_quizzes():
     while True:
         await asyncio.sleep(30)
