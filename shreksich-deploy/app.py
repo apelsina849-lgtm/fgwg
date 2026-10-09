@@ -5026,12 +5026,12 @@ async function sellerHtml(){
  '<div><strong>10%</strong><small>В резерв</small></div></div></div>';
  const calculator='<div class="shx-panel"><h3>⭐ Калькулятор комиссии</h3><div class="mini">Рассчитайте распределение Stars до публикации товара. Расчёт соответствует правилам реальных заказов.</div><div class="seller-inputs"><label>Цена товара в Stars<input id="sellerCalcPrice" type="number" min="1" max="1000000" value="100" inputmode="numeric"></label><label>Количество<input id="sellerCalcQty" type="number" min="1" max="1000" value="1" inputmode="numeric"></label></div><div id="sellerCalcResult" class="seller-income-row" aria-live="polite"></div><div class="mini">Предварительный расчёт, не выплата Stars.</div></div>';
  const calculatorTop=top+calculator;
- if(!profile)return calculatorTop+'<div class="shx-panel"><h3>Стать продавцом</h3>'
+ if(!profile)return calculatorTop+'<div class="shx-panel"><h3>🛍 Стать продавцом Шрексича</h3><p class="mini">Подайте заявку, дождитесь одобрения администратора и размещайте товары за Telegram Stars.</p><div class="seller-feature-grid"><div><strong>1</strong><small>Заявка</small></div><div><strong>2</strong><small>Одобрение</small></div><div><strong>3</strong><small>Продажи</small></div></div>'+ 
  '<div class="seller-inputs"><input id="sellerName" maxlength="72" placeholder="Имя магазина / продавца">'+
  '<input id="sellerContact" maxlength="120" placeholder="Контакт для связи (например, @username)">'+
  '<textarea id="sellerExperience" maxlength="700" placeholder="Какие товары поставляете, наличие и сроки выдачи"></textarea>'+
  '<label class="seller-accept"><input id="sellerRules" type="checkbox"><span>Подтверждаю наличие товаров, выполнение оплаченных заказов и соблюдение правил PUBG Mobile и Telegram</span></label>'+
- '<button class="buy" id="sellerApply">ОТПРАВИТЬ ЗАЯВКУ</button></div></div>';
+ '<button class="buy" id="sellerApply">🛍 СТАТЬ ПРОДАВЦОМ · ПОДАТЬ ЗАЯВКУ</button></div></div>';
  const status=profile.status==='approved'?'Одобрен':profile.status==='blocked'?'Заблокирован':'На рассмотрении';
  let html=calculatorTop+'<div class="shx-panel"><div class="row" style="align-items:center;justify-content:space-between"><h3>Ваш статус</h3><span class="seller-status-pill '+esc(profile.status)+'">'+status+'</span></div>'+
  '<div class="name">'+esc(profile.display_name)+'</div><div class="mini">Новые заказы: продавцу 70% · магазину 20% · резерву 10% от оплаченных Stars. По старым заказам действуют сохранённые доли.</div></div>';
