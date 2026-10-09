@@ -436,6 +436,10 @@ async def reply_to_question(chat_id,message_id,question,user_id=0):
     try:
         persona,enabled,_=group_pref(chat_id)
         if not enabled: return
+        direct=await shrek_intent_reply(chat_id,user_id,question)
+        if direct is not None:
+            await send(chat_id,direct,reply_parameters={"message_id":message_id,"allow_sending_without_reply":True})
+            return
         cooldown,_=options(chat_id)
         now=time.monotonic()
         if now-AI_LAST_ANSWER.get(chat_id,0)<cooldown: return
