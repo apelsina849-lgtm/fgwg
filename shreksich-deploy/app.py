@@ -1764,7 +1764,7 @@ async def seller_create_listing(body: SellerListingIn, x_telegram_init_data: str
                 raise HTTPException(409,"Максимум 100 товаров на одного продавца")
             cursor=await conn.execute(
                 "INSERT INTO products(category,name,description,price,stars_price,active,sort_order,"
-                "seller_id,seller_stock,seller_status) VALUES(?,?,?,?,?,0,100,?,?,'pending')",
+                "seller_id,seller_stock,seller_status) VALUES(?,?,?,?,?,1,100,?,?,'active')",
                 (body.category.strip(),body.name.strip(),body.description.strip() or "Товар продавца. Условия выдачи уточняйте перед покупкой.",body.stars_price,
                  body.stars_price,uid,body.stock)
             )
@@ -1772,7 +1772,7 @@ async def seller_create_listing(body: SellerListingIn, x_telegram_init_data: str
             lid=cursor.lastrowid
         finally:
             await conn.close()
-    return {"ok":True,"id":lid,"status":"pending"}
+    return {"ok":True,"id":lid,"status":"active"}
 
 @app.post("/api/seller/listings/{listing_id}/restock")
 async def seller_restock(listing_id:int, body:SellerRestockIn,
@@ -5157,8 +5157,8 @@ async function sellerHtml(){
  '<textarea id="sellerListingDesc" maxlength="1200" placeholder="Что получает покупатель? (необязательно)"></textarea>'+
  '<input id="sellerListingStars" type="number" min="1" max="100000" placeholder="Цена за 1 шт. в Stars">'+
  '<input id="sellerListingStock" type="number" min="1" max="1000" value="1" placeholder="Количество в наличии">'+
- '<button class="buy" id="sellerAddListing">ОТПРАВИТЬ НА ПРОВЕРКУ</button></div></div>'+
- '<h3 style="margin:16px 0 7px">Ваши товары</h3>'+
+ '<button class="buy" id="sellerAddListing">✓ ОПУБЛИКОВАТЬ В КАТАЛОГЕ</button></div></div>'+
+ '<div class="mini">Товар появляется в каталоге сразу. Администрация может скрыть объявление при нарушениях.</div><h3 style="margin:16px 0 7px">Ваши товары</h3>'+
  ((d.listings||[]).map(x=>'<div class="seller-market-card"><span class="seller-status-pill '+esc(x.seller_status)+'">'+esc(x.seller_status)+'</span>'+
  '<h3>'+esc(x.name)+'</h3><div class="mini">'+esc(x.category)+' · '+Number(x.stars_price)+' ⭐</div>'+
  '<div class="seller-stock-tag">Доступно: '+Number(x.seller_stock)+' шт.</div>'+
@@ -6624,7 +6624,7 @@ function adminSellers(){
  '<h3>'+esc(x.name)+'</h3><div class="mini">'+esc(x.seller_name||'')+
  ' · '+Number(x.stars_price||0)+' ⭐ · '+esc(x.category)+'</div>'+
  '<div class="mini">'+esc(x.description||'')+'</div>'+
- '<div class="seller-market-actions"><button class="buy" data-seller-listing-approve="'+x.id+'">В каталог</button>'+
+ '<div class="seller-market-actions">'+(x.seller_status==='active'?'<span class="seller-chip">✓ В каталоге</span>':'<button class="buy" data-seller-listing-approve="'+x.id+'">В каталог</button>')+
  '<button class="secondary" data-seller-listing-pause="'+x.id+'">Скрыть</button>'+
  '<button class="danger" data-seller-listing-reject="'+x.id+'">Отклонить</button></div></div>').join('')||
  '<div class="empty">Продавцы пока не добавляли товары</div>');
