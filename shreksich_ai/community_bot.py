@@ -563,6 +563,8 @@ def claim_daily(cid,uid):
         if result.rowcount:
             conn.execute("INSERT OR IGNORE INTO profiles(chat_id,user_id,name,xp,last_xp) VALUES(?,?,?,0,0)",(cid,uid,"Игрок"))
             conn.execute("UPDATE profiles SET xp=xp+50 WHERE chat_id=? AND user_id=?",(cid,uid))
+            season=int(time.time())//(30*86400)
+            conn.execute("INSERT INTO seasonal_xp(chat_id,user_id,season,xp) VALUES(?,?,?,50) ON CONFLICT(chat_id,user_id,season) DO UPDATE SET xp=xp+50",(cid,uid,season))
             return True
     return False
 
