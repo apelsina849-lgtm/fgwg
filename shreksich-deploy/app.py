@@ -3419,6 +3419,113 @@ body.keyboard-open .wrap{padding-bottom:30px}
 
 .farm-collectible-icon{display:grid;place-items:center;width:86px;height:80px}
 .farm-collectible .farm-object-svg{width:83px;height:83px;display:block;filter:drop-shadow(2px 5px 2px #0007) drop-shadow(-1px -1px 1px #ffffff55)}
+
+
+/* SHREKSICH PREMIUM NAVY — responsive redesign based on approved layout */
+:root{--bg:#050d19;--card:#0e1a2b;--line:#24374d;--gold:#ffc947;--muted:#91a7be;--blue:#62b9ff}
+html,body{background:#050d19;color:#ecf5ff}
+body:before{background:radial-gradient(ellipse at 10% 3%,#15406b69,transparent 46%),radial-gradient(ellipse at 85% 34%,#1b28495d,transparent 46%);z-index:0}
+.wrap{max-width:800px;padding:12px 12px calc(115px + env(safe-area-inset-bottom));}
+.top{margin:5px 2px 15px;padding:9px 2px}
+.brand{font-size:20px;letter-spacing:.3px;text-shadow:0 2px 12px #0009}.brand b{color:#ffd26b}
+.pill{background:#0b2036;border-color:#274765;color:#8bcfff}
+.hero{background:linear-gradient(125deg,#112238,#101823 62%,#382b14);border-color:#405577}
+.card,.order{background:linear-gradient(145deg,#122238,#0c1624);border-color:#28415c;box-shadow:0 9px 27px #0005}
+.secondary{background:#17263a;border:1px solid #30455c;color:#e4f2ff}
+.buy{background:linear-gradient(140deg,#ffe39a,#f5bd35 58%,#d99918);color:#221600}
+input,textarea,select{background:#0a1625;border-color:#2c455e}
+.nav{bottom:max(8px,env(safe-area-inset-bottom));max-width:760px;width:calc(100% - 16px);border-radius:19px;background:#081523f5;border:1px solid #2a455c;box-shadow:0 -8px 36px #020a17df,0 0 18px #286ab222;padding:6px 4px;gap:0}
+.nav button{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;min-width:0;gap:4px;border-radius:13px;color:#8498ac;font-size:10px;padding:8px 0 6px;white-space:nowrap}
+.nav button.active{background:linear-gradient(180deg,#332912a8,#1d2541);color:#ffda71}
+.nav-ico{font-size:22px;line-height:1;display:block;font-weight:900;color:#97b8d3}
+.nav button.active .nav-ico{color:#ffca4d;text-shadow:0 0 16px #ffc94d9e}
+.wins{background:#071727;border-color:#2e4a68;border-radius:13px;box-shadow:inset 0 1px #ffffff12;margin:0 0 16px}
+.wins:before{background:linear-gradient(135deg,#1cbd8d,#079477);color:#fff;padding:0 9px}
+.shx-home{display:block}
+.shx-profile{position:relative;overflow:hidden;border:1px solid #3c6281;border-radius:23px;padding:16px 16px 12px;background:radial-gradient(ellipse at 90% 0,#173657,#091625 67%);box-shadow:inset 0 1px #bce8ff22,0 14px 45px #0008}
+.shx-profile:before{content:"";pointer-events:none;position:absolute;inset:0;background:linear-gradient(130deg,#b5e7ff09,transparent 44%,#ffc84c05)}
+.shx-profile-top{display:flex;align-items:center;gap:11px;position:relative}
+.shx-avatar{border:2px solid #c2a159;flex:0 0 59px;width:59px;height:59px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 38% 20%,#3e6176,#1a263a 60%,#080d16);box-shadow:0 0 0 3px #071629,0 6px 15px #0007;color:#ffe19c;font-size:28px;font-weight:950}
+.shx-username{font-size:17px;font-weight:950;color:#f2f7ff;overflow-wrap:anywhere}
+.shx-user-sub{font-size:10px;color:#8da6bc;margin-top:6px}
+.shx-profile-quick{margin-left:auto;width:37px;height:37px;flex:0 0 37px;border-radius:12px;border:1px solid #365779;background:#0e2238;color:#e7f6ff;padding:7px;font-size:20px}
+.shx-wallets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;align-items:stretch;margin-top:15px;padding-top:13px;border-top:1px solid #2b4861;position:relative}
+.shx-wallet{min-width:0;display:flex;align-items:center;gap:7px;padding:2px 6px}
+.shx-wallet:not(:last-child){border-right:1px solid #244663}
+.shx-wallet svg{height:34px;width:34px;flex:0 0 34px;filter:drop-shadow(0 3px 5px #000b)}
+.shx-wallet-count{min-width:0;font-size:16px;font-weight:950;line-height:1.1;color:#fff;overflow:hidden;text-overflow:ellipsis}
+.shx-wallet-name{font-size:9px;line-height:1.1;margin-top:5px;color:#88a5bd}
+.shx-star{font-size:27px;color:#ffb833;line-height:1;filter:drop-shadow(0 3px 5px #000a);flex:0 0 27px}
+.shx-caption{color:#a0b5cd;font-size:11px;margin:13px 3px 9px}
+.shx-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.shx-tile{position:relative;text-align:left;padding:14px 13px;min-height:125px;display:flex;align-items:flex-end;overflow:hidden;border-radius:20px;border:1px solid #314b6b;color:#e8f2ff;box-shadow:inset 0 1px #ffffff22,0 12px 20px #0007;transition:transform .15s}
+.shx-tile:active{transform:scale(.97)}
+.shx-tile:before{content:"";position:absolute;width:120px;height:120px;right:-28px;top:-40px;border-radius:50%;background:radial-gradient(circle,#91beff55,transparent 69%)}
+.shx-tile .tile-visual{position:absolute;right:11px;top:6px;width:79px;height:79px;display:grid;place-items:center;transform:rotate(-8deg);filter:drop-shadow(4px 10px 6px #0009)}
+.shx-tile .tile-visual svg{height:74px;width:74px;stroke-width:1.7;stroke-linejoin:round}
+.shx-tile .tile-copy{position:relative;z-index:2;display:flex;flex-direction:column;gap:5px;max-width:90%}
+.shx-tile .tile-copy b{font-size:16px;letter-spacing:.1px;line-height:1.1;text-shadow:0 2px 8px #000}
+.shx-tile .tile-copy small{font-size:10px;color:#ccdae9;line-height:1.3}
+.shx-tile .tile-tag{position:absolute;right:7px;top:8px;border-radius:7px;padding:4px 5px;background:#bb282c;color:white;font-size:8px;font-weight:900;z-index:3}
+.shx-tile.t-catalog{background:linear-gradient(145deg,#152e49,#0a1629 63%,#634322);border-color:#54739a}
+.shx-tile.t-cases{background:linear-gradient(145deg,#121d40,#0b1331 62%,#3e1d66);border-color:#58469a}
+.shx-tile.t-spin{background:linear-gradient(145deg,#182a42,#0b152b 67%,#223d71);border-color:#416da8}
+.shx-tile.t-farm{background:linear-gradient(145deg,#1e382f,#091d22 60%,#77521d);border-color:#87703d}
+.shx-tile.t-tasks,.shx-tile.t-promo{background:linear-gradient(145deg,#112f3e,#0a192d);min-height:98px}
+.shx-tile.t-uc,.shx-tile.t-help{background:linear-gradient(145deg,#10263e,#071424);min-height:98px}
+.shx-tile.t-tasks .tile-visual,.shx-tile.t-promo .tile-visual,.shx-tile.t-uc .tile-visual,.shx-tile.t-help .tile-visual{width:58px;height:58px}
+.shx-tile.t-tasks .tile-visual svg,.shx-tile.t-promo .tile-visual svg,.shx-tile.t-uc .tile-visual svg,.shx-tile.t-help .tile-visual svg{width:51px;height:51px}
+.shx-live{padding:14px;background:#091826;border:1px solid #2c455e;border-radius:19px;margin:14px 0 18px}
+.shx-live-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:11px;font-size:14px;font-weight:950}
+.shx-live-head small{font-size:10px;color:#9cafc4;font-weight:500}
+.shx-online{display:inline-block;width:8px;height:8px;border-radius:50%;background:#16d585;box-shadow:0 0 12px #16d585;margin-right:6px}
+.shx-live-row{display:flex;gap:9px;overflow-x:auto;scrollbar-width:none;padding-bottom:3px}
+.shx-live-card{min-width:155px;max-width:170px;flex:0 0 155px;border:1px solid #325273;background:linear-gradient(135deg,#0f233b,#101723);border-radius:14px;padding:10px}
+.shx-live-card[data-tier="GOLD"]{border-color:#ab873c;background:linear-gradient(135deg,#392a16,#161b2c)}
+.shx-live-card[data-tier="RED"],.shx-live-card[data-tier="MYTHIC"]{border-color:#ac495c;background:linear-gradient(135deg,#331728,#171529)}
+.shx-live-card[data-tier="PURPLE"],.shx-live-card[data-tier="PINK"]{border-color:#7950ad}
+.shx-live-title{font-size:10px;color:#adbed2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.shx-live-name{font-weight:900;font-size:11px;margin:7px 0;line-height:1.35;min-height:30px}
+.shx-live-rarity{font-size:10px;color:#ebc16c}
+.shx-page-title{padding:9px 2px 12px;display:flex;align-items:center;gap:12px}
+.shx-page-title h1{font-size:22px;margin:0}
+.shx-back{background:#0d2036;border:1px solid #31577a;color:#dcecff;font-size:12px}
+.shx-panel{background:linear-gradient(135deg,#122338,#0a1626);border:1px solid #304c69;border-radius:18px;padding:14px;margin:12px 0}
+.shx-panel h3{margin:0 0 10px}
+.shx-profile-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.shx-profile-actions button{padding:14px;background:linear-gradient(145deg,#162e49,#101a2a);border:1px solid #33516d;color:#d9edff;min-height:72px;text-align:left}
+.shx-farm-catalog .farm-catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.shx-farm-catalog .farm-catalog-card{background:linear-gradient(145deg,#101f33,#0a1629);border:1px solid #345478;box-shadow:0 6px 22px #0007}
+.shx-farm-catalog .farm-catalog-card[data-tier="CYAN"]{border-color:#2484a8}
+.shx-farm-catalog .farm-catalog-card[data-tier="BLUE"]{border-color:#317dcc}
+.shx-farm-catalog .farm-catalog-card[data-tier="PURPLE"]{border-color:#8b48c7}
+.shx-farm-catalog .farm-catalog-card[data-tier="PINK"]{border-color:#bd548c}
+.shx-farm-catalog .farm-catalog-card[data-tier="RED"]{border-color:#ab4941}
+.shx-farm-catalog .farm-catalog-card[data-tier="GOLD"]{border-color:#caa046}
+.shx-farm-catalog .farm-filterbar{gap:7px;scrollbar-width:none}
+.shx-farm-catalog .farm-filterbar button{background:#0b1b2e;border-color:#304c6d;color:#b1c5d9}
+.shx-farm-catalog .farm-filterbar button.active{background:linear-gradient(145deg,#eec45a,#b78426);border-color:#ffe79f;color:#1a190d}
+.farm-ui .farm-lead-level{border-color:#8c7137;background:#1b2531}
+.farm-ui .farm-lead h1{color:#fff5db}
+.farm-ui .farm-overview{gap:7px}
+.farm-ui .farm-wallet{background:linear-gradient(140deg,#172b3e,#0f1a28);border-color:#345574}
+.farm-ui .farm-wallet.uc{background:linear-gradient(145deg,#132f3b,#101c2a)}
+.farm-ui .farm-status{background:linear-gradient(150deg,#12263b,#0d1827);border-color:#416080}
+.farm-ui .farm-section{background:linear-gradient(135deg,#121f2d,#0b1825);border-color:#38536c}
+.farm-ui .farm-section.wood{background:linear-gradient(140deg,#1d2a2d,#0e1b23 62%,#3d301e);border-color:#62523a}
+.farm-ui .farm-module{background:linear-gradient(140deg,#1a3044,#14202a);border-color:#52607a}
+.farm-ui .farm-activity{background:linear-gradient(135deg,#17382f,#0c1d22);border-color:#3a826a}
+.farm-ui .farm-withdraw{background:linear-gradient(135deg,#172d3d,#0c1b29);border-color:#406c86}
+.farm-ui .farm-collectible{filter:drop-shadow(0 3px 7px #000b)}
+.farm-ui .farm-catalog-card{border-color:#426480;background:#0b1c2e}
+.farm-ui .farm-modules{grid-template-columns:repeat(3,minmax(0,1fr))}
+.farm-ui .farm-module-header{font-size:11px;display:block;text-align:center}
+.farm-ui .farm-module-icon{display:block;font-size:25px;margin-bottom:6px}
+.farm-ui .farm-module-desc{font-size:10px;min-height:62px;text-align:center}
+.farm-ui .farm-module button{font-size:9px;padding:9px 3px}
+@media(min-width:620px){.shx-farm-catalog .farm-catalog-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:365px){.shx-wallet svg{width:28px;height:28px;flex-basis:28px}.shx-wallet-count{font-size:14px}.shx-wallet-name{font-size:8px}.shx-tile{min-height:115px}.shx-tile .tile-copy b{font-size:14px}.farm-ui .farm-module{padding:7px}.farm-ui .farm-module-desc{font-size:9px}}
+
 </style>
 </head>
 <body>
@@ -3428,7 +3535,7 @@ body.keyboard-open .wrap{padding-bottom:30px}
   <main id="app"><div class="empty">Загрузка магазина…</div></main>
 </div>
 <div class="nav" id="nav">
-  <button data-tab="home">Главная</button><button data-tab="catalog">Каталог</button><button data-tab="spin">SPIN</button><button data-tab="orders">Заказы</button><button data-tab="settings">Настройки</button>
+  <button data-tab="home"><span class="nav-ico">⌂</span><span>Главная</span></button><button data-tab="catalog"><span class="nav-ico">▦</span><span>Каталог</span></button><button data-tab="spin"><span class="nav-ico">▣</span><span>Кейсы</span></button><button data-tab="farm"><span class="nav-ico">⌂</span><span>Ферма</span></button><button data-tab="profile"><span class="nav-ico">♙</span><span>Профиль</span></button>
 </div>
 <script>
 (function(){
@@ -3660,6 +3767,8 @@ async function loadWinsFeed(){
   const wins=await api('/api/wins-feed');
   const el=document.querySelector('#winsTicker .wins-track');if(!el)return;
   const fingerprint=JSON.stringify(wins.map(x=>[x.id,x.player,x.reward_name,x.reward_tier]));
+  lastWinsData=wins;
+  const liveCards=document.getElementById('homeLiveCards');if(liveCards)liveCards.innerHTML=homeWinsHtml();
   if(fingerprint===lastWinsFingerprint)return; // Не перезапускаем CSS-анимацию каждые 20 секунд.
   lastWinsFingerprint=fingerprint;
   if(!wins.length){el.innerHTML='<span class="muted">Пока нет крупных выигрышей игроков</span>';el.style.animation='none';return}
@@ -3692,27 +3801,61 @@ function sticker(title,sub,icon,cls,attrs){
  };
  return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon">'+(icons[icon]||icons.shop)+'</span><div class="sticker-copy"><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div></div>'
 }
+
+function homeTileArt(kind){
+ const paths={
+  catalog:'<path d="M12 24L39 12 64 25 38 39Z" fill="#d6a55d" stroke="#ffe1a5"/><path d="M12 24V49L38 64V39Z" fill="#644021" stroke="#c99e62"/><path d="M64 25V50L38 64V39Z" fill="#a17138" stroke="#ecc88a"/><path d="M24 17L49 31 49 57" stroke="#f7dfad" stroke-width="3" fill="none"/>',
+  cases:'<path d="M10 26L34 12 64 26 38 42Z" fill="#bd5bfd" stroke="#f5bdff"/><path d="M10 26V53L38 70V42Z" fill="#452a80" stroke="#a77bff"/><path d="M64 26V53L38 70V42Z" fill="#783bc3" stroke="#d7a8ff"/><path d="M35 16L47 27 34 41 22 28Z" fill="#f7b3ff"/><path d="M38 43V65" stroke="#fff4b9" stroke-width="4"/>',
+  spin:'<circle cx="37" cy="39" r="30" fill="#242752" stroke="#a48bff" stroke-width="5"/><circle cx="37" cy="39" r="23" fill="#33265e" stroke="#7edaff"/><path d="M37 16V62M14 39H60M21 22L54 55M54 22L21 55" stroke="#b2a2fd" stroke-width="4"/><circle cx="37" cy="39" r="6" fill="#ffe28f"/><path d="M32 5L37 14 42 5" fill="#ffcc50" stroke="#fbe39b"/>',
+  farm:'<path d="M9 36L36 15 66 36V65H9Z" fill="#79502f" stroke="#e2b57c" stroke-width="3"/><path d="M4 36L36 9 72 36 63 39 36 20 12 40Z" fill="#a15f3f" stroke="#edbf77" stroke-width="3"/><path d="M28 65V39H48V65" fill="#251c18" stroke="#d2a16b" stroke-width="3"/><path d="M28 39L48 65M48 39L28 65" stroke="#b88451" stroke-width="3"/><path d="M6 65H70" stroke="#7ac070" stroke-width="5"/>',
+  tasks:'<path d="M27 12L39 24 27 36 15 24Z" fill="#c79553" stroke="#ffe0a1" stroke-width="3"/><path d="M46 12L58 24 46 36 34 24Z" fill="#6d90ae" stroke="#d2eafb" stroke-width="3"/><path d="M20 43L32 55 44 43" fill="none" stroke="#f9d57a" stroke-width="5"/><circle cx="52" cy="53" r="8" fill="#f2c155"/>',
+  promo:'<path d="M8 25L51 11 65 28 24 62 8 48Z" fill="#41678b" stroke="#b4ddff" stroke-width="3"/><circle cx="20" cy="33" r="5" fill="#edc46c"/><path d="M39 25L31 49M31 29H31M45 45H45" stroke="#fff0b2" stroke-width="5" stroke-linecap="round"/>',
+  uc:'<path d="M15 11H56L66 23V53L56 65H15L7 53V23Z" fill="#13638d" stroke="#a8f0ff" stroke-width="4"/><path d="M19 18H52L58 26V51L52 58H19L15 51V26Z" fill="#0b3654" stroke="#65c9f7"/><text x="36" y="46" text-anchor="middle" fill="#dbfcff" font-size="20" font-weight="900">UC</text>',
+  help:'<path d="M11 15Q39 0 65 18V51Q39 67 11 51Z" fill="#155681" stroke="#9de4ff" stroke-width="3"/><path d="M24 27Q30 15 43 22Q57 29 39 40L37 45" stroke="#ebfaff" stroke-width="5" fill="none"/><circle cx="37" cy="52" r="3" fill="#e3faff"/>'
+ };
+ return '<svg viewBox="0 0 76 76" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">'+(paths[kind]||paths.catalog)+'</svg>';
+}
+function homeTile(title,sub,type,dest,section,tag){
+ return '<button class="shx-tile t-'+type+'" data-go="'+dest+'"'+(section?' data-go-section="'+section+'"':'')+'><span class="tile-visual">'+homeTileArt(type)+'</span><span class="tile-copy"><b>'+title+'</b><small>'+sub+'</small></span>'+(tag?'<span class="tile-tag">'+tag+'</span>':'')+'</button>';
+}
+let homeFarmData=null, farmJumpTarget='', lastWinsData=[];
+function homeWinsHtml(){
+ if(!lastWinsData.length)return '<div class="muted" style="font-size:12px">Пока нет редких выигрышей. Первые находки появятся здесь у всех игроков.</div>';
+ return '<div class="shx-live-row">'+lastWinsData.slice(0,10).map(x=>'<div class="shx-live-card" data-tier="'+esc(x.reward_tier)+'"><div class="shx-live-title">'+esc(x.player)+'</div><div class="shx-live-name">'+esc(x.reward_name)+'</div><div class="shx-live-rarity">'+(x.origin==='farm'?'🌾 Ферма':'✦ Кейс / SPIN')+' • '+tierLabel(x.reward_tier)+'</div></div>').join('')+'</div>';
+}
 function home(){
- return '<section class="hero"><div class="cat">PUBG MOBILE</div><h1>METRO <span class="gold">ROYALE</span></h1><div class="muted">Товары, буст, квесты и Metro-награды. Оплата покупок — через ⭐ Telegram Stars.</div></section>'+
- '<div class="token-chip"><div><div class="mini">ВАШ ЖЕТОН</div><div class="token-code">'+esc(me&&me.token?me.token:'—')+'</div></div><button class="token-copy" id="copyTokenBtn">Копировать</button></div>'+
- '<div class="sticker-grid">'+
- sticker('Каталог','Товары и услуги','shop','st-gold','data-go="catalog"')+
- sticker('HYPE SPIN','1 free / 24h','spin','st-purple','data-go="spin"')+
- sticker('Мои заказы','Статусы покупок','orders','st-blue','data-go="orders"')+
- sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+
- sticker('Metro Farm','Добыча, склад, модули','farm','st-gold','data-go="farm"')+
- sticker('Рефералы','Билеты и бонусы','referral','st-red','data-go="referral"')+
- sticker('Новости','@shreksi4PubgNEWS','news','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+
- sticker('Наш чат','@chatshreksi4','chat','st-cyan','data-tg="https://t.me/chatshreksi4"')+
- sticker('Настройки','Звук, анимация, помощь','settings','st-blue','data-go="settings"')+
- '</div><h3>Популярное</h3>'+cards(products.slice(0,4))
+ const u=me||{},f=homeFarmData||farmCachedData||{},display=String(u.username?'@'+u.username:u.first_name||'Игрок');
+ return '<div class="shx-home">'+
+ '<section class="shx-profile"><div class="shx-profile-top"><div class="shx-avatar">'+esc(display.replace(/^@/,'').charAt(0).toUpperCase()||'S')+'</div><div><div class="shx-username">'+esc(display)+'</div><div class="shx-user-sub">Жетон '+esc(u.token||'—')+'</div></div><button class="shx-profile-quick" data-go="profile" aria-label="Профиль">⚙</button></div>'+
+ '<div class="shx-wallets"><div class="shx-wallet">'+farmCoinIcon()+'<div><div class="shx-wallet-count">'+Number(f.shrek_coins||0).toLocaleString('ru-RU')+'</div><div class="shx-wallet-name">ShrekCOIN</div></div></div>'+
+ '<div class="shx-wallet">'+farmUcIcon()+'<div><div class="shx-wallet-count">'+Number(f.uc_available||0).toLocaleString('ru-RU')+'</div><div class="shx-wallet-name">UC Credits</div></div></div>'+
+ '<div class="shx-wallet"><div class="shx-star">✦</div><div><div class="shx-wallet-count">'+Number(f.shr||0).toLocaleString('ru-RU')+'</div><div class="shx-wallet-name">SHR</div></div></div></div></section>'+
+ '<div class="shx-caption">PUBG MOBILE · METRO ROYALE · ШРЕКСИЧ SHOP</div>'+
+ '<div class="shx-tiles">'+
+ homeTile('Каталог','Товары и услуги','catalog','catalog')+
+ homeTile('Кейсы','Открывай за Stars','cases','spin')+
+ homeTile('Рулетки','Попробуй удачу','spin','spin')+
+ homeTile('Ферма','Добывай ресурсы','farm','farm','','НОВИНКА')+
+ homeTile('Награды','Активность и UC','tasks','farm','activity')+
+ homeTile('Промокоды','Бонусные билеты','promo','spin')+
+ homeTile('Вывод UC','Обмен UC Credits','uc','farm','uc')+
+ homeTile('Поддержка','Помощь и вопросы','help','support')+
+ '</div>'+
+ '<section class="shx-live"><div class="shx-live-head"><span>LIVE ДРОПЫ</span><small><span class="shx-online"></span>Реальные находки игроков</small></div><div id="homeLiveCards">'+homeWinsHtml()+'</div></section>'+
+ '<div class="shx-panel"><h3>Другие разделы</h3><div class="shx-profile-actions"><button data-go="inventory">🎒 Инвентарь</button><button data-go="orders">📦 Мои заказы</button><button data-go="referral">👥 Пригласить друзей</button><button data-go="settings">⚙ Настройки</button></div></div>'+
+ '</div>';
 }
 function bindHome(){
- bindProductButtons();
- document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
- bindSocials();
- const t=document.getElementById('copyTokenBtn');if(t)t.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(me.token);alert('Жетон скопирован')}catch(_){alert(me.token)}})
+ document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{farmJumpTarget=b.dataset.goSection||'';go(b.dataset.go)}));
 }
+function profileHtml(){
+ const u=me||{},f=homeFarmData||farmCachedData||{},display=String(u.username?'@'+u.username:u.first_name||'Игрок');
+ return '<div class="shx-page-title"><button class="shx-back" data-go="home">← Главная</button><h1>Профиль</h1></div>'+
+ '<section class="shx-profile"><div class="shx-profile-top"><div class="shx-avatar">'+esc(display.replace(/^@/,'').charAt(0).toUpperCase()||'S')+'</div><div><div class="shx-username">'+esc(display)+'</div><div class="shx-user-sub">Жетон: '+esc(u.token||'—')+'</div></div></div>'+
+ '<div class="shx-wallets"><div class="shx-wallet">'+farmCoinIcon()+'<div><div class="shx-wallet-count">'+Number(f.shrek_coins||0)+'</div><div class="shx-wallet-name">ShrekCOIN</div></div></div><div class="shx-wallet">'+farmUcIcon()+'<div><div class="shx-wallet-count">'+Number(f.uc_available||0)+'</div><div class="shx-wallet-name">UC Credits</div></div></div><div class="shx-wallet"><div class="shx-star">✦</div><div><div class="shx-wallet-count">'+Number(f.shr||0)+'</div><div class="shx-wallet-name">SHR</div></div></div></div></section>'+
+ '<section class="shx-panel"><h3>Управление аккаунтом</h3><div class="shx-profile-actions"><button data-go="orders">📦 Мои заказы</button><button data-go="inventory">🎒 Инвентарь</button><button data-go="farm">🌾 Моя ферма</button><button data-go="referral">👥 Рефералы</button><button data-go="settings">⚙ Настройки</button><button data-go="support">💬 Поддержка</button></div></section>';
+}
+function bindProfile(){document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));}
 
 function orderForm(id){
  const p=products.find(x=>Number(x.id)===Number(id));if(!p)return;
@@ -4310,6 +4453,24 @@ function farmCatalogCards(d){
    farmPrice(x.coins)+'<span class="farm-chance-text">Шанс: '+pct+'% на ур. '+data.level+'</span></div>';
  }).join('') || '<div class="empty">Нет предметов этой редкости</div>';
 }
+
+async function farmCatalogPage(){
+ const d=await api('/api/farm');farmCachedData=d;
+ const filters=[['ALL','Все'],['GRAY','Серые'],['CYAN','Голубые'],['BLUE','Синие'],['PURPLE','Фиолетовые'],['PINK','Розовые'],['RED','Красные'],['GOLD','Gold']].map(([t,name])=>'<button data-farm-filter="'+t+'" class="'+(farmCatalogFilter===t?'active':'')+'">'+name+'</button>').join('');
+ return '<div class="shx-farm-catalog"><div class="shx-page-title"><button class="shx-back" id="farmCatalogBack">← Ферма</button><h1>Каталог предметов</h1></div>'+
+ '<div class="shx-panel"><div class="muted">Все '+(d.resources||[]).length+' предметов • цены за ShrekCOIN • качество и реальные шансы на уровне '+d.level+'</div></div>'+
+ '<div class="farm-filterbar">'+filters+'</div><div class="farm-catalog-grid" id="farmCatalogGrid">'+farmCatalogCards(d)+'</div>'+
+ '<div class="shx-panel"><div class="muted">Вероятность отдельного предмета = вероятность его редкости ÷ количество предметов той же редкости. Торговый бонус учитывается в ценах.</div></div></div>';
+}
+function bindFarmCatalogPage(){
+ const back=document.getElementById('farmCatalogBack');if(back)back.addEventListener('click',()=>go('farm'));
+ document.querySelectorAll('[data-farm-filter]').forEach(b=>b.addEventListener('click',()=>{
+  farmCatalogFilter=b.dataset.farmFilter;
+  document.querySelectorAll('[data-farm-filter]').forEach(x=>x.classList.toggle('active',x.dataset.farmFilter===farmCatalogFilter));
+  const grid=document.getElementById('farmCatalogGrid');if(grid)grid.innerHTML=farmCatalogCards(farmCachedData);
+ }));
+}
+
 async function farmHtml(){
  const d=await api('/api/farm');
  farmCachedData=d;
@@ -4344,7 +4505,7 @@ async function farmHtml(){
 const FARM_TIER_ORDER_JS=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD'];
 function bindFarm(){
  const cat=document.getElementById('farmCatalogToggle');
- if(cat)cat.addEventListener('click',async()=>{farmCatalogExpanded=!farmCatalogExpanded;app.innerHTML=await farmHtml();bindFarm();addHomeExit()});
+ if(cat)cat.addEventListener('click',()=>go('farm-catalog'));
  document.querySelectorAll('[data-farm-filter]').forEach(b=>b.addEventListener('click',()=>{
   farmCatalogFilter=b.dataset.farmFilter;
   document.querySelectorAll('[data-farm-filter]').forEach(k=>k.classList.toggle('active',k.dataset.farmFilter===farmCatalogFilter));
@@ -4570,18 +4731,21 @@ async function render(){
  updateNav();app.innerHTML='<div class="empty">Загрузка…</div>';
  try{
   if(ADMIN){app.innerHTML=await adminHtml();bindAdmin();return}
-  if(tab==='home'){app.innerHTML=home();bindHome()}
+  if(tab==='home'){try{homeFarmData=await api('/api/farm')}catch(_){} app.innerHTML=home();bindHome()}
   else if(tab==='catalog'){app.innerHTML='<h2>Каталог</h2>'+cards(products);bindProductButtons()}
   else if(tab==='spin'){app.innerHTML=await spinHtml();bindSpin()}
   else if(tab==='orders'){app.innerHTML=await ordersHtml()}
   else if(tab==='inventory'){app.innerHTML=await inventoryHtml();bindInventory()}
   else if(tab==='farm'){app.innerHTML=await farmHtml();bindFarm()}
+  else if(tab==='farm-catalog'){app.innerHTML=await farmCatalogPage();bindFarmCatalogPage()}
+  else if(tab==='profile'){try{homeFarmData=await api('/api/farm')}catch(_){} app.innerHTML=profileHtml();bindProfile()}
   else if(tab==='referral'){app.innerHTML=await referralHtml();bindReferral()}
   else if(tab==='support'){app.innerHTML=supportHtml();bindSupport()}
   else if(tab==='settings'){app.innerHTML=settingsHtml();bindSettings()}
   else if(tab==='case-catalog'){app.innerHTML=await caseCatalogHtml();bindCaseCatalog()}
   else if(tab==='drop-history'){app.innerHTML=await dropHistoryHtml();bindDropHistory()}
   addHomeExit()
+  if(tab==='farm'&&farmJumpTarget){const target=farmJumpTarget;farmJumpTarget='';const node=document.querySelector(target==='uc'?'.farm-withdraw':'.farm-activity');if(node)node.scrollIntoView({behavior:'smooth',block:'start'})}
  }catch(e){showFatal(e.message)}
 }
 document.querySelectorAll('#nav button').forEach(b=>b.addEventListener('click',()=>go(b.dataset.tab)));
