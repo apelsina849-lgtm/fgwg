@@ -60,6 +60,9 @@ def db():
     c.execute("CREATE TABLE IF NOT EXISTS daily_tasks(chat_id INTEGER,user_id INTEGER,day TEXT,messages INTEGER DEFAULT 0,questions INTEGER DEFAULT 0,claimed INTEGER DEFAULT 0,PRIMARY KEY(chat_id,user_id,day))")
     c.execute("CREATE TABLE IF NOT EXISTS achievements(chat_id INTEGER,user_id INTEGER,code TEXT,awarded_at INTEGER,PRIMARY KEY(chat_id,user_id,code))")
     c.execute("CREATE TABLE IF NOT EXISTS bot_options(chat_id INTEGER PRIMARY KEY,cooldown INTEGER DEFAULT 15,reward INTEGER DEFAULT 25)")
+    c.execute("CREATE TABLE IF NOT EXISTS user_preferences(user_id INTEGER PRIMARY KEY,active_chat INTEGER,privacy INTEGER DEFAULT 1,ai_memory INTEGER DEFAULT 1,play_style TEXT DEFAULT '',fav_map TEXT DEFAULT '')")
+    c.execute("CREATE TABLE IF NOT EXISTS teammates(chat_id INTEGER,user_id INTEGER PRIMARY KEY,mode TEXT,style TEXT,created_at INTEGER)")
+    c.execute("CREATE TABLE IF NOT EXISTS seasons(chat_id INTEGER PRIMARY KEY,season_start INTEGER NOT NULL)")
     c.commit()
     return c
 def api(method, payload):
