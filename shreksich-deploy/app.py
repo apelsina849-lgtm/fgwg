@@ -171,7 +171,7 @@ def pick_free_spin_reward():
 
 DEFAULT_CASE_CATALOG = [
     {
-        "id":"FREE","name":"Бесплатный кейс","description":"Базовый бесплатный Metro-кейс.",
+        "id":"FREE","name":"Бесплатная рулетка","description":"Бесплатное колесо фортуны с Metro-наградами.",
         "icon":"crate","stars_price":0,"is_free":True,"active":True,"sort_order":0,
         "tiers":[
             {"tier":"GRAY","chance":60.0},
@@ -1573,7 +1573,8 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
                 (uid,)
             )).fetchone()
             all_cases = await load_case_catalog(conn,uid,True)
-            case_catalog = [x for x in all_cases if x.get("active")]
+            roulette_cfg = next((x for x in all_cases if x["id"] == "FREE"), None)
+            case_catalog = [x for x in all_cases if x.get("active") and x["id"] != "FREE"]
             if paid_case and not any(x["id"] == paid_case["case_id"] for x in case_catalog):
                 paid_cfg = next((x for x in all_cases if x["id"] == paid_case["case_id"]), None)
                 if paid_cfg:
@@ -1606,6 +1607,7 @@ async def spin_state(x_telegram_init_data: str | None = Header(default=None)):
       "tier_chances":SPIN_TIER_CHANCES,
       "rewards":[{"name":x["name"],"tier":x["tier"],"value_stars":x["value_stars"]} for x in SPIN_REWARDS],
       "case_catalog":case_catalog,
+      "roulette":roulette_cfg,
       "paid_case_opening":dict(paid_case) if paid_case else None,
       "pending_drop":(
         {
@@ -1716,7 +1718,7 @@ async def spin_free(x_telegram_init_data: str | None = Header(default=None)):
             )).fetchone()
             if not case_row:
                 await conn.rollback()
-                raise HTTPException(409,"Бесплатный кейс сейчас отключён")
+                raise HTTPException(409,"Бесплатная рулетка сейчас отключена")
             free_cfg = parse_case_row(case_row)
             used_row = await (await conn.execute(
                 "SELECT COUNT(*) c FROM spin_history WHERE telegram_id=? AND source='free' AND created_at >= datetime('now','-24 hours')",
@@ -1767,6 +1769,8 @@ async def spin_case_open(body: CaseStartIn, x_telegram_init_data: str | None = H
     u = await current_user(x_telegram_init_data)
     uid = int(u["id"])
     case_id = body.case_id.strip().upper()
+    if case_id == "FREE":
+        raise HTTPException(400,"Бесплатная рулетка открывается только через /api/spin/free")
     async with db_write_lock:
         conn = await db()
         try:
