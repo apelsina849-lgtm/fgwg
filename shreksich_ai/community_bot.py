@@ -1,6 +1,5 @@
 """SHREKSICH AI: isolated community bot MVP. No access to shop balances."""
 import asyncio
-import base64
 import json
 import logging
 import os
@@ -20,11 +19,6 @@ SHOP_URL = os.getenv("SHREKSICH_SHOP_URL", "https://shreksich-app-y25m-productio
 AI_URL = os.getenv("SHREKSICH_AI_API_URL", "")
 AI_KEY = os.getenv("SHREKSICH_AI_API_KEY", "")
 AI_MODEL = os.getenv("SHREKSICH_AI_MODEL", "")
-VISION_MODEL = os.getenv("SHREKSICH_VISION_MODEL", "")
-TRANSCRIBE_URL = os.getenv("SHREKSICH_TRANSCRIBE_URL", "")
-VOICE_MODEL = os.getenv("SHREKSICH_VOICE_MODEL", "")
-TTS_URL = os.getenv("SHREKSICH_TTS_URL", "")
-TTS_MODEL = os.getenv("SHREKSICH_TTS_MODEL", "")
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("shreksich-ai")
 QUESTIONS = [
@@ -92,96 +86,6 @@ def api(method, payload):
         raise RuntimeError(f"Telegram {method}: HTTP {exc.code}: {details}") from exc
     if not obj.get("ok"): raise RuntimeError(str(obj))
     return obj["result"]
-def telegram_file(file_id,limit=8_000_000):
-    info=api("getFile",{"file_id":file_id})
-    path=info["file_path"]
-    if info.get("file_size",0)>limit: raise ValueError("File too large")
-    url="https://api.telegram.org/file/bot"+TOKEN+"/"+path
-    with urllib.request.urlopen(url,timeout=20) as response:
-        data=response.read(limit+1)
-    if len(data)>limit: raise ValueError("File too large")
-    return data
-
-def local_image_caption(file_id):
-    import io
-    from PIL import Image
-    from transformers import BlipProcessor, BlipForConditionalGeneration
-    import torch
-    global _BLIP_CACHE
-    if "_BLIP_CACHE" not in globals():
-        model_name=os.getenv("SHREKSICH_LOCAL_VISION_MODEL","Salesforce/blip-image-captioning-base")
-        processor=BlipProcessor.from_pretrained(model_name)
-        model=BlipForConditionalGeneration.from_pretrained(model_name).to("cpu").eval()
-        _BLIP_CACHE=(processor,model)
-    processor,model=_BLIP_CACHE
-    photo=Image.open(io.BytesIO(telegram_file(file_id,limit=8_000_000))).convert("RGB")
-    photo.thumbnail((768,768))
-    inputs=processor(images=photo,return_tensors="pt")
-    with torch.inference_mode():
-        result=model.generate(**inputs,max_new_tokens=65,num_beams=3)
-    return processor.decode(result[0],skip_special_tokens=True).strip()
-
-def vision_query(file_id,caption=""):
-    if AI_URL and AI_KEY and VISION_MODEL:
-        image=telegram_file(file_id,limit=8_000_000)
-        encoded=base64.b64encode(image).decode("ascii")
-        question=caption.strip()[:500] or "Что изображено на фото?"
-        prompt=("Отвечай по-русски. Анализируй только видимые детали. Если это PUBG Mobile Metro Royale, "
-                "опиши снаряжение и риски, но не выдумывай статистику или стоимость предметов. Вопрос: "+question)
-        body={"model":VISION_MODEL,"messages":[{"role":"user","content":[
-            {"type":"text","text":prompt},
-            {"type":"image_url","image_url":{"url":"data:image/jpeg;base64,"+encoded}}
-        ]}],"max_tokens":650}
-        request=urllib.request.Request(AI_URL,data=json.dumps(body).encode(),headers={"Authorization":"Bearer "+AI_KEY,"Content-Type":"application/json"})
-        with urllib.request.urlopen(request,timeout=45) as response:
-            result=json.load(response)["choices"][0]["message"]["content"]
-        if isinstance(result,list):
-            result=" ".join(x.get("text","") for x in result if isinstance(x,dict))
-        return str(result).strip()[:3500]
-    description=local_image_caption(file_id)
-    return ("📸 Локальный анализ фото (базовое распознавание)\\n\\n"
-            "Обнаружено: "+description+"\\n\\n"
-            "Это предварительное описание изображения, а не точное распознавание игровых предметов. "
-            "Для детального разбора PUBG, цен и характеристик нужна полноценная Vision-модель. "
-            +("\\nВаш вопрос: "+caption[:300] if caption else ""))
-
-def local_transcribe(file_id):
-    import tempfile
-    from faster_whisper import WhisperModel
-    audio=telegram_file(file_id,limit=12_000_000)
-    with tempfile.NamedTemporaryFile(suffix=".ogg") as source:
-        source.write(audio)
-        source.flush()
-        model=WhisperModel("tiny",device="cpu",compute_type="int8",download_root=os.getenv("SHREKSICH_WHISPER_CACHE","/data/whisper_models"))
-        segments,_=model.transcribe(source.name,language="ru",beam_size=1,vad_filter=True)
-        return " ".join(segment.text.strip() for segment in segments).strip()[:1500]
-
-def transcribe_voice(file_id):
-    if not (TRANSCRIBE_URL and AI_KEY):
-        return local_transcribe(file_id)
-    audio=telegram_file(file_id,limit=12_000_000)
-    boundary="----shreksichvoice"
-    payload=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n"+(VOICE_MODEL or "whisper-1")+"\r\n--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.ogg\"\r\nContent-Type: audio/ogg\r\n\r\n").encode()+audio+("\r\n--"+boundary+"--\r\n").encode()
-    request=urllib.request.Request(TRANSCRIBE_URL,data=payload,headers={"Authorization":"Bearer "+AI_KEY,"Content-Type":"multipart/form-data; boundary="+boundary})
-    with urllib.request.urlopen(request,timeout=35) as response:
-        result=json.load(response)
-    return result.get("text","")[:1500]
-
-def tts_audio(text):
-    if not (TTS_URL and AI_KEY and TTS_MODEL): return None
-    body={"model":TTS_MODEL,"input":text[:700],"voice":"alloy","response_format":"opus"}
-    req=urllib.request.Request(TTS_URL,data=json.dumps(body).encode(),headers={"Authorization":"Bearer "+AI_KEY,"Content-Type":"application/json"})
-    with urllib.request.urlopen(req,timeout=35) as response:
-        audio=response.read(2_000_000)
-    return audio if audio else None
-
-def multipart_voice(chat_id,audio):
-    boundary="----shreksichupload"
-    fields=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n"+str(chat_id)+"\r\n--"+boundary+"\r\nContent-Disposition: form-data; name=\"voice\"; filename=\"reply.ogg\"\r\nContent-Type: audio/ogg\r\n\r\n").encode()+audio+("\r\n--"+boundary+"--\r\n").encode()
-    req=urllib.request.Request("https://api.telegram.org/bot"+TOKEN+"/sendVoice",data=fields,headers={"Content-Type":"multipart/form-data; boundary="+boundary})
-    with urllib.request.urlopen(req,timeout=25) as response:
-        return json.load(response)
-
 async def call(method, **kwargs):
     return await asyncio.to_thread(api, method, kwargs)
 async def send(chat, text, **kwargs):
@@ -217,7 +121,7 @@ def admin_menu(row):
         [{"text":"🎮 Провести викторину","callback_data":"admin:quiz"},{"text":"🎪 Событие","callback_data":"admin:event"}],
         [{"text":"⏳ Частота ответов","callback_data":"admin:cooldown"},{"text":"🎁 Награда XP","callback_data":"admin:reward"}],
         [{"text":"🛡 Антискам","callback_data":"admin:scam"},{"text":"🚫 Антифлуд","callback_data":"admin:flood"}],
-        [{"text":"📸 Фото ИИ","callback_data":"admin:images"},{"text":"🎙 Голос","callback_data":"admin:voice"},{"text":"⚔️ Дуэли","callback_data":"admin:duels"}],
+        [{"text":"⚔️ Дуэли","callback_data":"admin:duels"}],
         [{"text":"📊 Статистика","callback_data":"admin:stats"},{"text":"🧠 Очистить память","callback_data":"admin:memory_confirm"}],
         [{"text":"🔄 Обновить","callback_data":"admin:refresh"}],
     ])
@@ -380,8 +284,6 @@ async def handle_callback(query):
             answer=challenge_text(group,uid)
         elif action=="guides":
             answer=pubg_guide("база знаний")
-        elif action=="media":
-            answer="📸 Пришли скриншот рейда или голосовое сообщение в этот личный чат. Если подключён совместимый ИИ, Шрек сможет обработать его."
         elif action=="home":
             answer="🐸 SHREKSICH AI — твой личный помощник. Задавай вопросы обычным текстом."
         elif group is None:
@@ -767,7 +669,7 @@ def private_menu(uid):
         [{"text":"🎖 Боевой пропуск","callback_data":"me:pass"},{"text":"🎁 Награды сезона","callback_data":"me:pass_claim"}],
         [{"text":"🎯 Испытания","callback_data":"me:challenges"},{"text":"📊 Мои рейды","callback_data":"me:raids"}],
         [{"text":"🧩 Загадка","callback_data":"me:riddle"},{"text":"⚔️ Дуэль","callback_data":"me:duel"}],
-        [{"text":"📚 База знаний","callback_data":"me:guides"},{"text":"🎙 Голос и фото","callback_data":"me:media"}],
+        [{"text":"📚 База знаний","callback_data":"me:guides"}],
         [{"text":"🔒 Приватность и память","callback_data":"me:privacy"},{"text":"🛒 Магазин","url":SHOP_URL}],
     ])
 
@@ -915,52 +817,6 @@ async def handle(msg):
     cid,uid=chat.get("id"),user.get("id")
     if not cid or not uid or user.get("is_bot"): return
     text=(msg.get("text") or msg.get("caption") or "").strip()
-    if chat.get("type")=="private" and msg.get("photo"):
-        group=user_group(uid)
-        if not group:
-            await send(uid,"Сначала напиши Шреку в группе, чтобы привязать профиль.")
-            return
-        if not ai_features(group)[1]:
-            await send(uid,"📸 Анализ скриншотов отключён администратором.")
-            return
-        await send(uid,"📸 Анализирую скриншот...")
-        try:
-            answer=await asyncio.to_thread(vision_query,msg["photo"][-1]["file_id"],text)
-            record_usage(group,uid,"vision",bool(VISION_MODEL))
-            await send(uid,answer,reply_markup=private_menu(uid))
-        except Exception:
-            LOG.exception("Vision analysis failed")
-            record_usage(group,uid,"vision",False)
-            await send(uid,"⚠️ Не удалось обработать изображение. Попробуй позже.")
-        return
-    if chat.get("type")=="private" and msg.get("voice"):
-        group=user_group(uid)
-        if not group:
-            await send(uid,"Сначала напиши Шреку в группе, чтобы привязать профиль.")
-            return
-        if not ai_features(group)[0]:
-            await send(uid,"🎙 Голосовые функции отключены администратором.")
-            return
-        if msg["voice"].get("duration",0)>60:
-            await send(uid,"🎙 Отправь голосовое сообщение не длиннее 60 секунд.")
-            return
-        await send(uid,"🎙 Распознаю голосовое сообщение...")
-        try:
-            transcript=await asyncio.to_thread(transcribe_voice,msg["voice"]["file_id"])
-            if not transcript:
-                await send(uid,"🎙 Распознавание голоса пока не подключено. Напиши вопрос текстом.")
-                return
-            record_usage(group,uid,"voice",True)
-            await private_answer(uid,transcript,group)
-            if TTS_URL and TTS_MODEL:
-                answer=await ask_ai(transcript)
-                audio=await asyncio.to_thread(tts_audio,answer)
-                if audio: await asyncio.to_thread(multipart_voice,uid,audio)
-        except Exception:
-            LOG.exception("Voice processing failed")
-            record_usage(group,uid,"voice",False)
-            await send(uid,"⚠️ Не удалось обработать голосовое сообщение.")
-        return
     if not text: return
     now=time.time()
     if chat.get("type") in ("group","supergroup"):
