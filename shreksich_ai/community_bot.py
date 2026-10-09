@@ -67,6 +67,12 @@ def db():
     c.execute("CREATE TABLE IF NOT EXISTS moderation(chat_id INTEGER PRIMARY KEY,anti_scam INTEGER DEFAULT 1,anti_flood INTEGER DEFAULT 1)")
     c.execute("CREATE TABLE IF NOT EXISTS events_schedule(chat_id INTEGER PRIMARY KEY,title TEXT,starts_at INTEGER,created_by INTEGER)")
     c.execute("CREATE TABLE IF NOT EXISTS event_signups(chat_id INTEGER,user_id INTEGER,PRIMARY KEY(chat_id,user_id))")
+    c.execute("CREATE TABLE IF NOT EXISTS battle_rewards(chat_id INTEGER,user_id INTEGER,season INTEGER,level INTEGER,PRIMARY KEY(chat_id,user_id,season,level))")
+    c.execute("CREATE TABLE IF NOT EXISTS challenges(chat_id INTEGER,user_id INTEGER,day TEXT,kind TEXT,completed INTEGER DEFAULT 0,PRIMARY KEY(chat_id,user_id,day,kind))")
+    c.execute("CREATE TABLE IF NOT EXISTS duels(id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id INTEGER,challenger INTEGER,opponent INTEGER,question INTEGER,answer INTEGER,created_at INTEGER,finished INTEGER DEFAULT 0)")
+    c.execute("CREATE TABLE IF NOT EXISTS usage_stats(chat_id INTEGER,user_id INTEGER,kind TEXT,ts INTEGER,success INTEGER DEFAULT 1)")
+    c.execute("CREATE TABLE IF NOT EXISTS ai_options(chat_id INTEGER PRIMARY KEY,voice_enabled INTEGER DEFAULT 1,images_enabled INTEGER DEFAULT 1,duels_enabled INTEGER DEFAULT 1)")
+    c.execute("CREATE TABLE IF NOT EXISTS raid_history(chat_id INTEGER,user_id INTEGER,ts INTEGER,investment INTEGER,loot INTEGER,escaped INTEGER)")
     c.commit()
     return c
 def api(method, payload):
