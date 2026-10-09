@@ -34,6 +34,7 @@ def db():
     c.execute("CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, chat_id INTEGER, user_id INTEGER, kind TEXT, detail TEXT, ts INTEGER)")
     c.execute("CREATE TABLE IF NOT EXISTS quiz(chat_id INTEGER PRIMARY KEY, question INTEGER, expires INTEGER, winner INTEGER)")
     c.execute("CREATE TABLE IF NOT EXISTS settings(chat_id INTEGER PRIMARY KEY, owner_id INTEGER NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, interval_minutes INTEGER NOT NULL DEFAULT 30, next_quiz INTEGER NOT NULL DEFAULT 0)")
+    c.execute("CREATE TABLE IF NOT EXISTS scores(chat_id INTEGER,user_id INTEGER,name TEXT,wins INTEGER DEFAULT 0,PRIMARY KEY(chat_id,user_id))")
     c.commit()
     return c
 def api(method, payload):
@@ -85,6 +86,10 @@ async def periodic_quizzes():
                 await quiz_start(cid)
             except Exception:
                 LOG.exception("Scheduled quiz failed in chat %s",cid)
+def leaderboard(cid):
+    with db() as conn:
+        rows=conn.execute("SELECT name,wins FROM scores WHERE chat_id=? ORDER BY wins DESC LIMIT 10",(cid,)).fetchall()
+    return "🏆 РЕЙТИНГ\n\n"+("\n".join(f"{i}. {name} — {wins}" for i,(name,wins) in enumerate(rows,1)) if rows else "Победителей пока нет.")
 def keyboard(rows):
     return {"inline_keyboard": rows}
 def menu():
