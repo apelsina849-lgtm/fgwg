@@ -180,6 +180,35 @@ async def handle_callback(query):
     if not cid or not mid or not uid:
         await call("answerCallbackQuery",callback_query_id=qid)
         return
+    if data.startswith("me:") and (msg.get("chat") or {}).get("type")=="private":
+        group=user_group(uid)
+        action=data.split(":",1)[1]
+        if action=="privacy":
+            await call("answerCallbackQuery",callback_query_id=qid)
+            await edit(cid,mid,privacy_text(uid),keyboard([[{"text":"🧠 Включить/выключить память","callback_data":"me:memory"},{"text":"🗑 Удалить мою память","callback_data":"me:forget"}],[{"text":"⬅️ Назад","callback_data":"me:home"}]]))
+            return
+        if action=="memory":
+            with db() as conn:
+                conn.execute("INSERT OR IGNORE INTO user_preferences(user_id) VALUES(?)",(uid,))
+                conn.execute("UPDATE user_preferences SET ai_memory=1-ai_memory WHERE user_id=?",(uid,))
+            action="privacy"
+        if action=="forget":
+            with db() as conn:
+                conn.execute("DELETE FROM memory WHERE user_id=?",(uid,))
+            action="privacy"
+        if action=="home":
+            answer="🐸 SHREKSICH AI — твой личный помощник. Задавай вопросы обычным текстом."
+        elif group is None:
+            answer="Сначала напиши Шреку в группе, чтобы привязать свой профиль."
+        elif action=="team":
+            answer="🎮 Поиск команды: напиши мне «ищу команду соло», «ищу команду дуо» или «ищу команду сквад»."
+        elif action=="privacy":
+            answer=privacy_text(uid)
+        else:
+            answer=await shrek_intent_reply(group,uid,{"profile":"мой профиль","daily":"мои задания","top":"покажи рейтинг","achievements":"мои достижения","claim":"забрать награду"}.get(action,"мой профиль"))
+        await call("answerCallbackQuery",callback_query_id=qid)
+        await edit(cid,mid,answer or "Не удалось получить данные.",private_menu(uid))
+        return
     if data.startswith("admin:") and (msg.get("chat") or {}).get("type")=="private":
         row=owner_chat(uid)
         if not row:
