@@ -3627,6 +3627,20 @@ input,textarea,select{background:#0a1625;border-color:#2c455e}
 @media(max-width:350px){.roul-options{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.roul-stage.roul-turning .roul-pointer{animation:none}}
 
+
+/* The gold center of the wheel is the accessible spin button */
+.roul-hub.roul-hub-action{inset:33%;border:5px solid #ffe5a0;padding:6px 3px;color:#51330c;cursor:pointer;touch-action:manipulation;-webkit-appearance:none;appearance:none;transition:transform .16s,box-shadow .16s,filter .16s;box-shadow:0 3px 15px #000a,0 0 0 2px #f5ce6599,0 0 22px #ffd25a7a}
+.roul-hub-action:not(:disabled){animation:roul-hub-pulse 2.3s ease-in-out infinite}
+.roul-hub-action:not(:disabled):active{transform:scale(.91);animation:none}
+.roul-hub-action:focus-visible{outline:3px solid #80caff;outline-offset:4px}
+.roul-hub-action:disabled{opacity:1;cursor:default;animation:none;filter:saturate(.74)}
+.roul-hub-action.roul-hub-working{box-shadow:0 3px 15px #000b,0 0 0 3px #ffc854,0 0 22px #ffd25a98;filter:none}
+.roul-hub-action .roul-hub-title{display:block;font-size:clamp(9px,2.6vw,11px);line-height:1.1;font-weight:1000;letter-spacing:.2px}
+.roul-hub-action .roul-hub-main{font-size:clamp(12px,3.8vw,16px);font-weight:1000;line-height:1.15;letter-spacing:-.4px;margin:4px 0 2px}
+.roul-hub-action .roul-hub-sub{font-size:clamp(7px,2vw,9px);font-weight:950;letter-spacing:.4px;line-height:1.1}
+@keyframes roul-hub-pulse{0%,100%{box-shadow:0 3px 15px #000a,0 0 0 2px #f5ce6599,0 0 17px #ffd25a65}50%{box-shadow:0 4px 17px #000a,0 0 0 4px #ffe191a6,0 0 28px #ffd25ab5}}
+@media(prefers-reduced-motion:reduce){.roul-hub-action:not(:disabled){animation:none}}
+
 </style>
 </head>
 <body>
@@ -4252,18 +4266,20 @@ async function rouletteHtml(){
  const wheel=makeRouletteWheel(cfg);rouletteSlices=wheel.slices;
  const free=Number(spinState.free_remaining||0),ticket=Number(spinState.bonus_tickets||0);
  const ready=enabled&&!pending&&!paid&&(free+ticket)>0;
+ const hubMain=pending?'ПРИЗ':paid?'КЕЙС':!enabled?'ЗАКРЫТО':ready?'КРУТИТЬ':'ОЖИДАНИЕ';
+ const hubSub=pending?'ЗАБЕРИ':paid?'ЗАБЕРИ':!enabled?'НЕДОСТУПНО':free>0?'БЕСПЛАТНО':ticket>0?'ЗА БИЛЕТ':'НЕТ СПИНОВ';
  const note=pending?'Приз уже выпал: сначала сохраните или продайте его.':paid?'Сначала заберите оплаченный кейс во вкладке «Кейсы».':!enabled?'Рулетка отключена администратором.':free>0?'Вращение бесплатное. Результат выбирает сервер.':ticket>0?'Будет использован один бонусный билет.':'Следующая бесплатная прокрутка через '+formatReset(spinState.next_reset_seconds);
  const history=(spinState.history||[]).filter(x=>x.source==='free'||x.source==='ticket').slice(0,5).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div><div class="mini">'+tierLabel(x.reward_tier)+' · '+formatDropDate(x.created_at)+'</div></div>').join('');
  const rouletteSkipDefault=localStorage.getItem('shx_roulette_skip_v1')==='1';
  const rouletteSoundEnabled=soundsEnabled();
  return '<div class="roul-page"><section class="hero roul-hero"><div class="cat">МЕТРО · КОЛЕСО ФОРТУНЫ</div><h1>Бесплатная <span class="gold">рулетка</span></h1><div class="muted">Настоящее круглое колесо, случайные призы и честные шансы.</div></section>'+
- '<section class="roul-box"><div class="roul-stage"><div class="roul-wheel" id="roulWheel" style="background:'+wheel.bg+';transform:rotate('+(rouletteLastAngle%360)+'deg)">'+wheel.labels+'</div><div class="roul-hub">ШРЕКСИЧ<small>METRO SPIN</small></div><div class="roul-pointer"></div></div>'+
+ '<section class="roul-box"><div class="roul-stage"><div class="roul-wheel" id="roulWheel" style="background:'+wheel.bg+';transform:rotate('+(rouletteLastAngle%360)+'deg)">'+wheel.labels+'</div><button type="button" class="roul-hub roul-hub-action" id="roulSpin" aria-label="Крутить колесо фортуны" '+(ready?'':'disabled')+'><span class="roul-hub-title">ШРЕКСИЧ</span><strong class="roul-hub-main" id="roulHubMain">'+hubMain+'</strong><small class="roul-hub-sub" id="roulHubSub">'+hubSub+'</small></button><div class="roul-pointer"></div></div>'+
  '<div class="roul-legend">'+wheel.legend+'</div>'+
  '<div class="roul-stats"><div class="roul-stat"><small>БЕСПЛАТНО</small><b>'+free+' / '+Number(spinState.max_free_spins||0)+'</b></div><div class="roul-stat"><small>БИЛЕТЫ</small><b>🎟 '+ticket+'</b></div><div class="roul-stat"><small>SHR</small><b>'+Number(spinState.shr||0)+'</b></div></div>'+
- '<button id="roulSpin" class="roul-go" '+(ready?'':'disabled')+'>'+(pending?'ЗАБЕРИТЕ ПРИЗ':free>0?'🎡 КРУТИТЬ БЕСПЛАТНО':ticket>0?'🎟 КРУТИТЬ ЗА БИЛЕТ':'ВРАЩЕНИЙ НЕТ')+'</button>'+ 
+
  '<div class="roul-options"><label class="roul-option"><input type="checkbox" id="roulSkipPref" '+(rouletteSkipDefault?'checked':'')+'><span>⏩ Пропускать анимацию</span></label><label class="roul-option"><input type="checkbox" id="roulMusicPref" '+(rouletteSoundEnabled?'checked':'')+'><span>🔊 Мелодия и щелчки</span></label></div>'+ 
  '<button type="button" class="roul-skip-now hide" id="roulSkipNow">⏭ Пропустить прокрутку</button><div class="roul-progress hide" id="roulProgress"><i id="roulProgressBar"></i></div><div class="roul-spin-status" id="roulStatus" role="status" aria-live="polite"></div>'+
- '<div class="spin-lock-note" id="spinLockNote">Можно пропустить анимацию — приз уже определён сервером.</div><div class="roul-hint">'+note+'</div><div class="roul-result" id="roulResult"></div></section>'+
+ '<div class="spin-lock-note" id="spinLockNote">Можно пропустить анимацию — приз уже определён сервером.</div><div class="roul-hint">Нажмите на золотой круг в центре колеса, чтобы начать.<div style="margin-top:4px">'+note+'</div></div><div class="roul-result" id="roulResult"></div></section>'+
  '<button id="roulCases" class="roul-route">📦 Перейти к платным кейсам</button>'+
  '<div class="shx-panel"><h3>🎟 Промокод на прокрутки</h3><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<div class="shx-panel"><h3>Последние выигрыши рулетки</h3>'+(history||'<div class="empty">Здесь появятся ваши награды.</div>')+'</div></div>';
@@ -4273,6 +4289,11 @@ function rouletteAngleFor(tier){
  if(!matches.length)return rouletteLastAngle%360;
  const pick=matches[Math.floor(Math.random()*matches.length)];
  return ((360-(pick.start+pick.end)/2)%360+360)%360;
+}
+function setRouletteHubLabel(main,sub){
+ const title=document.getElementById('roulHubMain'),subtitle=document.getElementById('roulHubSub');
+ if(title)title.textContent=main;
+ if(subtitle)subtitle.textContent=sub;
 }
 function bindRoulette(){
  const play=document.getElementById('roulSpin');if(play&&!play.disabled)play.addEventListener('click',rollRoulette);
@@ -4303,7 +4324,7 @@ async function rollRoulette(){
  if(soundsEnabled()){unlockAudio();beginAudioHold()}
  const skipByDefault=!!skipPref?.checked;
  rouletteSpinBusy=true;rouletteSkipRequested=false;
- btn.disabled=true;btn.textContent='ГОТОВИМ РУЛЕТКУ…';
+ btn.disabled=true;btn.classList.add('roul-hub-working');setRouletteHubLabel('ЖДЁМ…','ПРИЗ');
  if(skipPref)skipPref.disabled=true;
  if(musicPref)musicPref.disabled=true;
  if(promo)promo.disabled=true;
@@ -4321,7 +4342,7 @@ async function rollRoulette(){
    if(skipNow)skipNow.classList.remove('hide');
    if(progress)progress.classList.remove('hide');
    if(stage)stage.classList.add('roul-turning');
-   btn.textContent='🎡 КОЛЕСО ВРАЩАЕТСЯ…';
+   setRouletteHubLabel('КРУТИМ…','УДАЧИ!');
    rouletteMusicStart(ROULETTE_STANDARD_MS);
    await animateRouletteWheel(wheel,start,end,ROULETTE_STANDARD_MS,bar,status);
    rouletteMusicStop();
@@ -4338,7 +4359,7 @@ async function rollRoulette(){
   if(status)status.textContent='🎁 Награда получена!';
   sfxDrop(d.reward.tier);
   revealReward(result,d);
-  btn.textContent='🎁 ПРИЗ ВЫПАЛ';
+  setRouletteHubLabel('ПРИЗ!','ЗАБЕРИ');
   loadWinsFeed();
   if(['RED','GOLD','LEGENDARY','MYTHIC'].includes(d.reward.tier))showDropFx(d.reward);
  }catch(e){
@@ -4352,6 +4373,7 @@ async function rollRoulette(){
   rouletteSpinBusy=false;
   rouletteSkipRequested=false;
   if(stage)stage.classList.remove('roul-turning');
+  if(btn)btn.classList.remove('roul-hub-working');
   if(skipNow){skipNow.classList.add('hide');skipNow.disabled=false;skipNow.textContent='⏭ Пропустить прокрутку'}
   if(skipPref)skipPref.disabled=false;
   if(musicPref)musicPref.disabled=false;
