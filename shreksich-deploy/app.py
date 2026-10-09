@@ -5260,6 +5260,8 @@ async function checkPromo(id,base){
  }catch(e){info.innerHTML='<span class="warn">'+esc(e.message)+'</span>'}
 }
 async function createOrder(id){
+ const consent=document.getElementById('buyerPartnerConsent');
+ if(consent&&!consent.checked){alert('Перед оформлением заказа ознакомьтесь с рисками и подтвердите согласие');return}
  const btn=document.getElementById('createOrderBtn');if(btn.disabled)return;btn.disabled=true;btn.textContent='Создаём заказ…';
  try{
   const o=await api('/api/orders',{method:'POST',body:JSON.stringify({product_id:id,uid:document.getElementById('uid').value,nickname:document.getElementById('nick').value,comment:document.getElementById('comment').value,promo_code:document.getElementById('promo').value})});
