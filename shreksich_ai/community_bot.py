@@ -243,6 +243,13 @@ async def ask_ai(question):
         if "метро" in q or "metro" in q or "pubg" in q:
             return "🎮 В Metro Royale полезно заранее планировать маршрут эвакуации, следить за снаряжением и не рисковать ценным лутом без необходимости."
         return offline_answer(question)
+async def reply_to_question(chat_id,message_id,question):
+    try:
+        answer=await ask_ai(question)
+        await send(chat_id,answer,reply_parameters={"message_id":message_id,"allow_sending_without_reply":True})
+    except Exception:
+        LOG.exception("Could not answer group question")
+
 async def handle(msg):
     chat = msg.get("chat",{})
     user = msg.get("from",{})
@@ -287,9 +294,12 @@ async def handle(msg):
     if chat.get("type") in ("group","supergroup") and not text.startswith("/"):
         reply=msg.get("reply_to_message") or {}
         botname=(reply.get("from") or {}).get("username","").lower()
-        if botname=="shrekchataibot" or "@shrekchataibot" in text.lower():
-            question=re.sub(r"@shrekchataibot","",text,flags=re.I).strip()
-            await send(cid,await ask_ai(question),reply_parameters={"message_id":msg["message_id"],"allow_sending_without_reply":True})
+        mentioned="@shrekchataibot" in text.lower()
+        question_words=("кто","что","где","когда","почему","зачем","как","сколько","какой","какая","какие","можно","нужно","стоит","подскажите","помогите","объясни","расскажи")
+        normalized=re.sub(r"@shrekchataibot","",text,flags=re.I).strip()
+        is_question="?" in normalized or normalized.lower().startswith(question_words)
+        if normalized and (botname=="shrekchataibot" or mentioned or is_question):
+            asyncio.create_task(reply_to_question(cid,msg["message_id"],normalized))
         return
     if cmd in ("/start","/help","/menu"):
         await send(cid,home_text(),reply_markup=menu())
