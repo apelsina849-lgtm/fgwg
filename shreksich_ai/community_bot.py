@@ -45,6 +45,78 @@ async def call(method, **kwargs):
     return await asyncio.to_thread(api, method, kwargs)
 async def send(chat, text, **kwargs):
     return await call("sendMessage", chat_id=chat, text=text[:4000], **kwargs)
+def keyboard(rows):
+    return {"inline_keyboard": rows}
+def menu():
+    return keyboard([
+        [{"text":"🎮 Викторина","callback_data":"quiz:new"},{"text":"🤖 ИИ-помощник","callback_data":"page:ai"}],
+        [{"text":"🛒 Магазин","url":SHOP_URL}],
+        [{"text":"📖 Помощь","callback_data":"page:help"}],
+    ])
+def back():
+    return keyboard([[{"text":"⬅️ Главное меню","callback_data":"page:home"}]])
+def home_text():
+    return "🐸 ШРЕКСИЧ • ПОМОЩНИК\\n\\nВыбирай раздел кнопками ниже.\\n\\n🎮 Викторины по PUBG Metro Royale\\n🤖 Ответы на вопросы через /ai\\n🛒 Официальный магазин\\n\\nТрейды и выплаты через этого бота недоступны."
+async def edit(chat, message_id, text, markup=None):
+    return await call("editMessageText", chat_id=chat, message_id=message_id, text=text, reply_markup=markup or back())
+async def quiz_start(cid, message_id=None):
+    now=int(time.time())
+    with db() as conn:
+        row=conn.execute("SELECT question,expires,winner FROM quiz WHERE chat_id=?",(cid,)).fetchone()
+        if row and row[1]>now and row[2] is None:
+            index=row[0]
+        else:
+            index=random.randrange(len(QUESTIONS))
+            conn.execute("INSERT OR REPLACE INTO quiz VALUES(?,?,?,NULL)",(cid,index,now+120))
+    question,answers,_=QUESTIONS[index]
+    text="🎮 ВИКТОРИНА • 2 МИНУТЫ\\n\\n"+question+"\\n\\nВыбери правильный ответ:"
+    buttons=keyboard([[{"text":f"{i+1}. {answer}","callback_data":f"quiz:answer:{index}:{i}"}] for i,answer in enumerate(answers)]+[[{"text":"⬅️ Главное меню","callback_data":"page:home"}]])
+    if message_id:
+        await edit(cid,message_id,text,buttons)
+    else:
+        await send(cid,text,reply_markup=buttons)
+async def handle_callback(query):
+    qid=query["id"]
+    data=query.get("data","")
+    msg=query.get("message") or {}
+    cid=(msg.get("chat") or {}).get("id")
+    mid=msg.get("message_id")
+    uid=(query.get("from") or {}).get("id")
+    if not cid or not mid or not uid:
+        await call("answerCallbackQuery",callback_query_id=qid)
+        return
+    notice=""
+    try:
+        if data=="page:home":
+            await edit(cid,mid,home_text(),menu())
+        elif data=="page:help":
+            await edit(cid,mid,"📖 ПОМОЩЬ\\n\\n🎮 Викторина — отвечай кнопками\\n🤖 /ai твой вопрос — спросить ИИ\\n🛒 Магазин — перейти к покупкам\\n\\nВыбери раздел ниже.",keyboard([[{"text":"🎮 Викторина","callback_data":"quiz:new"}],[{"text":"⬅️ Главное меню","callback_data":"page:home"}]]))
+        elif data=="page:ai":
+            await edit(cid,mid,"🤖 ИИ-ПОМОЩНИК\\n\\nНапиши в чат команду:\\n/ai твой вопрос\\n\\nИИ доступен после подключения провайдера.",back())
+        elif data=="quiz:new":
+            await quiz_start(cid,mid)
+        elif data.startswith("quiz:answer:"):
+            _,_,question_id,answer_id=data.split(":")
+            now=int(time.time())
+            with db() as conn:
+                row=conn.execute("SELECT question,expires,winner FROM quiz WHERE chat_id=?",(cid,)).fetchone()
+                if not row or row[1]<now or row[0]!=int(question_id):
+                    notice="⏳ Этот вопрос уже неактуален."
+                elif row[2] is not None:
+                    notice="🏆 На этот вопрос уже ответили."
+                elif int(answer_id)!=QUESTIONS[row[0]][2]:
+                    notice="❌ Неверно. Попробуй ещё!"
+                else:
+                    conn.execute("UPDATE quiz SET winner=? WHERE chat_id=? AND winner IS NULL",(uid,cid))
+                    notice="🏆 Верно! Ты победил!"
+                    await edit(cid,mid,"🏆 ВИКТОРИНА ЗАВЕРШЕНА\\n\\nПравильный ответ: "+QUESTIONS[row[0]][1][int(answer_id)]+"\\n\\n🎉 Победитель определён!",keyboard([[{"text":"🎮 Новая викторина","callback_data":"quiz:new"}],[{"text":"⬅️ Главное меню","callback_data":"page:home"}]]))
+        else:
+            notice="Неизвестная кнопка."
+    except Exception:
+        LOG.exception("Callback failed")
+        notice="Не удалось обновить сообщение. Попробуй ещё раз."
+    finally:
+        await call("answerCallbackQuery",callback_query_id=qid,text=notice[:180],show_alert=False)
 def log(chat, user, kind, detail):
     with db() as c:
         c.execute("INSERT INTO events(chat_id,user_id,kind,detail,ts) VALUES(?,?,?,?,?)",(chat,user,kind,detail[:500],int(time.time())))
@@ -79,23 +151,15 @@ async def handle(msg):
             await send(cid,"⚠️ Возможная мошенническая схема. Не передавайте пароли и коды. Используйте только официальный магазин.",reply_parameters={"message_id":msg["message_id"],"allow_sending_without_reply":True})
             return
     cmd=text.split()[0].split("@")[0].lower()
-    if cmd in ("/start","/help"):
-        await send(cid,"🐸 ШРЕКСИЧ • ПОМОЩНИК\n\n🤖 /ai вопрос — спросить помощника\n🎮 /quiz — начать викторину\n✅ /answer 1 — выбрать ответ\n🛒 /shop — открыть магазин\n🛡 /guardstats — отчёт для модераторов\n\nℹ️ Бот не проводит сделки и не выдаёт денежные награды.")
+    if cmd in ("/start","/help","/menu"):
+        await send(cid,home_text(),reply_markup=menu())
     elif cmd=="/shop": await send(cid,SHOP_URL)
     elif cmd=="/ai":
         question=text.partition(" ")[2].strip()
         if not question: await send(cid,"Напиши /ai и свой вопрос.")
         else: await send(cid,await ask_ai(question))
     elif cmd=="/quiz":
-        with db() as c:
-            old=c.execute("SELECT expires FROM quiz WHERE chat_id=?",(cid,)).fetchone()
-            if old and old[0]>int(now):
-                await send(cid,"Викторина уже идёт! Используй /answer 1, 2 или 3.")
-                return
-            index=random.randrange(len(QUESTIONS))
-            c.execute("INSERT OR REPLACE INTO quiz VALUES(?,?,?,NULL)",(cid,index,int(now)+120))
-        q,answers,_=QUESTIONS[index]
-        await send(cid,"🎮 ВИКТОРИНА • 2 минуты\n\n"+q+"\n"+"\n".join(f"{i+1}. {a}" for i,a in enumerate(answers))+"\n\n✍️ Для ответа отправь /answer 1, /answer 2 или /answer 3.\n🏅 Игра без денежных наград.")
+        await quiz_start(cid)
     elif cmd=="/answer":
         choice=text.partition(" ")[2].strip()
         with db() as c:
@@ -118,10 +182,10 @@ async def main():
     offset=0
     while True:
         try:
-            updates=await call("getUpdates",offset=offset,timeout=15,allowed_updates=["message"])
+            updates=await call("getUpdates",offset=offset,timeout=15,allowed_updates=["message","callback_query"])
             for update in updates:
                 offset=update["update_id"]+1
-                try: await handle(update.get("message",{}))
+                try:\n                    if "callback_query" in update: await handle_callback(update["callback_query"])\n                    else: await handle(update.get("message",{}))
                 except Exception: LOG.exception("Update failed")
         except Exception:
             LOG.exception("Polling error")
