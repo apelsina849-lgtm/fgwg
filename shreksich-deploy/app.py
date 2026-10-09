@@ -1976,6 +1976,13 @@ async def admin_seller_decision(seller_id:int,body:AdminSellerDecisionIn,
             await conn.commit()
         finally:
             await conn.close()
+    try:
+        if body.status=="approved":
+            await tg("sendMessage",{"chat_id":seller_id,"text":"✅ Ваша заявка продавца в Шрексиче одобрена! Откройте Mini App → Продавцам, чтобы увидеть кабинет и добавить товары."})
+        elif body.status=="blocked":
+            await tg("sendMessage",{"chat_id":seller_id,"text":"⛔ Ваш доступ продавца в Шрексиче заблокирован. Обратитесь к администрации."})
+    except Exception:
+        pass
     return {"ok":True}
 
 @app.patch("/api/admin/seller-listings/{listing_id}")
@@ -5081,6 +5088,7 @@ async function sellerHtml(){
  let html=calculatorTop+'<div class="shx-panel"><div class="row" style="align-items:center;justify-content:space-between"><h3>Ваш статус</h3><span class="seller-status-pill '+esc(profile.status)+'">'+status+'</span></div>'+
  '<div class="name">'+esc(profile.display_name)+'</div><div class="mini">Новые заказы: продавцу 70% · магазину 20% · резерву 10% от оплаченных Stars. По старым заказам действуют сохранённые доли.</div></div>';
  if(profile.status!=='approved')return html;
+ html+='<div class="seller-help">✅ Вы зарегистрированы как продавец. Повторная заявка не требуется — добавляйте товары ниже.</div>';
  const orders=d.orders||[],settled=orders.filter(x=>x.settled),completed=orders.filter(x=>x.status==='Выполнен'&&!x.settled);
  const paidSum=settled.reduce((a,x)=>a+Number(x.seller_share_stars||0),0);
  const toSettle=completed.reduce((a,x)=>a+Number(x.seller_share_stars||0),0);
@@ -6543,7 +6551,7 @@ function adminSellers(){
  '<div class="mini">Telegram: '+(x.username?'@'+esc(x.username):'username не указан')+' · ID: '+x.telegram_id+'</div>'+ 
  '<div class="mini">⭐ Рейтинг: '+(x.avg_rating?Number(x.avg_rating).toFixed(2)+'/5':'Нет оценок')+' · Отзывов: '+Number(x.review_count||0)+' · Выговоров: '+Number(x.warning_count||0)+'</div>'+ 
  '<div class="seller-market-actions">'+(x.status==='pending'?'<button class="buy" data-seller-approve="'+x.telegram_id+'">✓ Одобрить заявку</button>':'<button class="secondary" data-seller-history="'+x.telegram_id+'">📋 Данные и отзывы</button><button class="secondary" data-seller-warning="'+x.telegram_id+'">⚠️ Выдать выговор</button>')+
- '<a style="display:inline-flex;align-items:center;padding:10px;color:#9de8ff" href="https://t.me/'+(x.username?encodeURIComponent(x.username):'')+'" target="_blank" rel="noopener noreferrer">'+(x.username?'💬 Личный чат':'💬 Чат недоступен')+'</a>'+
+ '<a style="display:inline-flex;align-items:center;padding:10px;color:#9de8ff" href="'+(x.username?'https://t.me/'+encodeURIComponent(x.username):'tg://user?id='+Number(x.telegram_id))+'" target="_blank" rel="noopener noreferrer">💬 Написать продавцу</a>'+
  (x.status==='blocked'?'':'<button class="danger" data-seller-block="'+x.telegram_id+'">Заблокировать</button>')+'</div><div id="sellerHistory'+x.telegram_id+'"></div></div>').join('')||
  '<div class="empty">Заявок пока нет</div>');
  html+='<h3 style="margin:18px 0 9px">Модерация товаров</h3>'+
