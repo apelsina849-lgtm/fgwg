@@ -227,7 +227,7 @@ def parse_case_row(row) -> dict:
     tiers = json.loads(row["tiers_json"] or "[]")
     contents = json.loads(row["contents_json"] or "[]")
     return {
-        "id":row["id"],"name":row["name"],"description":row["description"],"icon":row["icon"],
+        "id":row["id"],"name":("Бесплатная рулетка" if row["id"]=="FREE" and row["name"]=="Бесплатный кейс" else row["name"]),"description":row["description"],"icon":row["icon"],
         "stars_price":int(row["stars_price"] or 0),"is_free":bool(row["is_free"]),
         "active":bool(row["active"]),"sort_order":int(row["sort_order"] or 0),
         "price_label":"БЕСПЛАТНО" if bool(row["is_free"]) else f"{int(row['stars_price'] or 0)} ⭐",
@@ -4033,8 +4033,8 @@ function caseIcon(kind){
 }
 function historySourceLabel(src){
  const s=String(src||'');
- if(s==='ticket')return '🎟 Бонусный билет';
- if(s==='free')return '🕐 Бесплатный SPIN';
+ if(s==='ticket')return '🎟 Билет рулетки';
+ if(s==='free')return '🎡 Бесплатная рулетка';
  if(s==='donation_ticket')return '🎟️ Donation Ticket';
  if(s==='case_stars')return '⭐ Telegram Stars';
  if(s==='case_free')return '🎁 Бесплатный кейс';
@@ -4080,8 +4080,8 @@ function caseIconMarkup(icon){
 }
 function spinSourceLabel(source){
  const s=String(source||'');
- if(s==='ticket')return '🎟 Бонусный билет';
- if(s==='free')return '🕐 Бесплатный SPIN';
+ if(s==='ticket')return '🎟 Билет рулетки';
+ if(s==='free')return '🎡 Бесплатная рулетка';
  if(s==='donation_ticket'||s.startsWith('donation_ticket:'))return '<span class="blue-ticket">🎫 Donation Ticket</span>';
  if(s==='case_stars'||s.startsWith('case_stars:'))return '⭐ Stars-кейс';
  if(s==='case_free'||s.startsWith('case_free:'))return '🎁 Бесплатный кейс';
@@ -4189,7 +4189,10 @@ function bindRoulette(){
  const cases=document.getElementById('roulCases');if(cases)cases.addEventListener('click',()=>go('spin'));
  const promo=document.getElementById('spinPromoBtn');if(promo)promo.addEventListener('click',applySpinPromo);
  const p=spinState?.pending_drop;
- if(p?.reward){
+ if(p?.reward&&String(p.source||'').startsWith('case:')){
+  const result=document.getElementById('roulResult');
+  if(result)result.innerHTML='<div class="muted">У вас остался незабранный предмет из кейса. Вернитесь в «Кейсы», чтобы сохранить или продать его.</div>';
+ }else if(p?.reward){
   const wheel=document.getElementById('roulWheel'),result=document.getElementById('roulResult');
   rouletteLastAngle=rouletteAngleFor(p.reward.tier);
   if(wheel)wheel.style.transform='rotate('+rouletteLastAngle+'deg)';
@@ -4203,6 +4206,9 @@ async function rollRoulette(){
  setSpinNavigationLocked(true);
  let playing=false;
  try{
+  const promo=document.getElementById('spinPromoBtn'),paidCases=document.getElementById('roulCases');
+  if(promo)promo.disabled=true;
+  if(paidCases)paidCases.disabled=true;
   const d=await api('/api/spin/free',{method:'POST'});
   if(!d?.reward?.tier)throw Error('Сервер не вернул приз');
   lastSpinReward=d.reward;
@@ -4236,7 +4242,7 @@ async function rollRoulette(){
  }catch(e){
   if(!e.silent)alert(e.message);
   try{app.innerHTML=await rouletteHtml();bindRoulette();addHomeExit()}catch(_){}
- }finally{if(playing)stopSpinSound();setSpinNavigationLocked(false)}
+ }finally{if(playing)stopSpinSound();setSpinNavigationLocked(false);const promo=document.getElementById('spinPromoBtn'),paidCases=document.getElementById('roulCases');if(promo)promo.disabled=false;if(paidCases)paidCases.disabled=false}
 }
 
 async function spinHtml(){
@@ -4246,27 +4252,26 @@ async function spinHtml(){
  const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div><div class="history-time">📅 '+formatDropDate(x.created_at)+'</div></div>').join('');
  const claims=(spinState.upgrade_rewards||[]).map(x=>'<button class="claim" data-claim="'+x.points+'" '+(Number(spinState.shr)>=Number(x.points)?'':'disabled')+'>'+esc(x.name)+' • '+x.points+' SHR</button>').join('');
  const total=Number(spinState.remaining_spins||0),pending=spinState.pending_drop||null,cfg=selectedCase();
- const baseFree=!cfg||cfg.id==='FREE',adminFree=!!(cfg&&!baseFree&&cfg.is_free),donation=Number(cfg&&cfg.donation_tickets||0);
+ const adminFree=!!(cfg&&cfg.is_free),donation=Number(cfg&&cfg.donation_tickets||0);
  const paidForSelected=!!(paidReady&&cfg&&paidReady.case_id===cfg.id);
  let buttonText='КРУТИТЬ',canOpen=!pending&&!!cfg;
  if(pending){buttonText='СНАЧАЛА РАЗБЕРИТЕ ДРОП';canOpen=false}
  else if(paidForSelected){buttonText='ОТКРЫТЬ ОПЛАЧЕННЫЙ КЕЙС'}
- else if(baseFree){buttonText=spinState.free_remaining>0?'БЕСПЛАТНЫЙ SPIN':spinState.bonus_tickets>0?'SPIN ЗА БОНУСНЫЙ БИЛЕТ':'ЛИМИТ ИСЧЕРПАН';canOpen=total>0}
+ else if(!cfg){buttonText='КЕЙСЫ ВРЕМЕННО НЕДОСТУПНЫ';canOpen=false}
  else if(adminFree){buttonText='ОТКРЫТЬ БЕСПЛАТНО'}
  else if(donation>0){buttonText='ОТКРЫТЬ ЗА DONATION TICKET'}
  else if(Number(cfg.stars_price||0)>0){buttonText='ОТКРЫТЬ ЗА '+Number(cfg.stars_price)+' ⭐'}
  else{buttonText='КЕЙС НЕДОСТУПЕН';canOpen=false}
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  let modeNote='';
- if(baseFree)modeNote=spinState.free_remaining>0?'Бесплатное вращение доступно':spinState.bonus_tickets>0?'Будет использован обычный бонусный билет':'Следующий бесплатный SPIN через '+formatReset(spinState.next_reset_seconds);
- else if(paidForSelected)modeNote='Оплата уже подтверждена. Нажмите кнопку, чтобы прокрутить кейс.';
+ if(paidForSelected)modeNote='Оплата уже подтверждена. Нажмите кнопку, чтобы прокрутить кейс.';
  else if(adminFree)modeNote='Этот кейс отмечен бесплатным в админ-панели.';
  else if(donation>0)modeNote='Будет использован синий Donation Ticket. Stars не спишутся.';
  else modeNote='Стоимость открытия: '+Number(cfg&&cfg.stars_price||0)+' Telegram Stars.';
  return '<section class="hero"><div class="cat">МЕТРО-КЕЙСЫ</div><h1>Платные <span class="gold">кейсы</span></h1><div class="muted">Кейсы открываются за Telegram Stars или синие Donation Tickets. Бесплатная круглая рулетка находится в отдельном разделе.</div></section>'+
  spinCasePickerHtml()+
  '<div class="spin-stats"><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION TICKETS</div><div class="price blue-ticket">🎫 '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(canOpen?'':'disabled')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
+ '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(canOpen?'':'disabled')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь завершения открытия кейса</div>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
  '<div class="muted" style="margin-top:10px">'+modeNote+'</div></div>'+
  '<div class="card"><div class="cat">ПРОМОКОД НА ПРОКРУТКИ</div><div class="muted">Промокод может выдать обычные SPIN-билеты или отдельные синие Donation Tickets для донат-кейсов.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
@@ -4412,7 +4417,7 @@ async function claimPaidCase(openingId){
 }
 async function requestSpinResult(){
  const cfg=selectedCase();
- if(!cfg||cfg.id==='FREE')return await api('/api/spin/free',{method:'POST'});
+ if(!cfg||cfg.id==='FREE')throw new Error('Для бесплатной прокрутки откройте раздел «Рулетки»');
  const d=await api('/api/spin/case/open',{method:'POST',body:JSON.stringify({case_id:cfg.id})});
  if(d.mode!=='invoice')return d;
  if(!(tg&&tg.openInvoice)){
