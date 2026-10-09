@@ -33,6 +33,7 @@ def db():
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, chat_id INTEGER, user_id INTEGER, kind TEXT, detail TEXT, ts INTEGER)")
     c.execute("CREATE TABLE IF NOT EXISTS quiz(chat_id INTEGER PRIMARY KEY, question INTEGER, expires INTEGER, winner INTEGER)")
+    c.execute("CREATE TABLE IF NOT EXISTS settings(chat_id INTEGER PRIMARY KEY, owner_id INTEGER NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, interval_minutes INTEGER NOT NULL DEFAULT 30, next_quiz INTEGER NOT NULL DEFAULT 0)")
     c.commit()
     return c
 def api(method, payload):
@@ -50,6 +51,40 @@ async def call(method, **kwargs):
     return await asyncio.to_thread(api, method, kwargs)
 async def send(chat, text, **kwargs):
     return await call("sendMessage", chat_id=chat, text=text[:4000], **kwargs)
+def owner_chat(uid):
+    with db() as conn:
+        return conn.execute("SELECT chat_id,enabled,interval_minutes,next_quiz FROM settings WHERE owner_id=? ORDER BY chat_id LIMIT 1",(uid,)).fetchone()
+def group_owner(cid,uid):
+    try:
+        member=api("getChatMember",{"chat_id":cid,"user_id":uid})
+        return member.get("status")=="creator"
+    except Exception:
+        LOG.exception("Cannot verify group creator")
+        return False
+def admin_menu(row):
+    cid,enabled,interval,next_quiz=row
+    return keyboard([
+        [{"text":"🎮 Запустить викторину","callback_data":"admin:quiz"}],
+        [{"text":("⏸ Остановить" if enabled else "▶️ Включить")+" автовикторины","callback_data":"admin:toggle"}],
+        [{"text":"⏱ 15 мин","callback_data":"admin:interval:15"},{"text":"⏱ 30 мин","callback_data":"admin:interval:30"},{"text":"⏱ 60 мин","callback_data":"admin:interval:60"}],
+        [{"text":"🔄 Обновить","callback_data":"admin:refresh"}],
+    ])
+def admin_text(row):
+    cid,enabled,interval,next_quiz=row
+    return f"🐸 SHREKSICH AI • УПРАВЛЕНИЕ\\n\\nЧат: {cid}\\nАвтовикторины: {'включены' if enabled else 'выключены'}\\nИнтервал: {interval} мин\\n\\nНастройки доступны только владельцу привязанного чата."
+async def periodic_quizzes():
+    while True:
+        await asyncio.sleep(30)
+        now=int(time.time())
+        with db() as conn:
+            rows=conn.execute("SELECT chat_id,interval_minutes FROM settings WHERE enabled=1 AND next_quiz<=?",(now,)).fetchall()
+            for cid,minutes in rows:
+                conn.execute("UPDATE settings SET next_quiz=? WHERE chat_id=?",(now+minutes*60,cid))
+        for cid,_ in rows:
+            try:
+                await quiz_start(cid)
+            except Exception:
+                LOG.exception("Scheduled quiz failed in chat %s",cid)
 def keyboard(rows):
     return {"inline_keyboard": rows}
 def menu():
@@ -89,6 +124,27 @@ async def handle_callback(query):
     uid=(query.get("from") or {}).get("id")
     if not cid or not mid or not uid:
         await call("answerCallbackQuery",callback_query_id=qid)
+        return
+    if data.startswith("admin:") and (msg.get("chat") or {}).get("type")=="private":
+        row=owner_chat(uid)
+        if not row:
+            await call("answerCallbackQuery",callback_query_id=qid,text="Нет доступа к настройкам",show_alert=True)
+            return
+        if data=="admin:quiz":
+            await quiz_start(row[0])
+        elif data=="admin:toggle":
+            with db() as conn:
+                conn.execute("UPDATE settings SET enabled=1-enabled,next_quiz=? WHERE chat_id=?",(int(time.time())+row[2]*60,row[0]))
+        elif data.startswith("admin:interval:"):
+            minutes=int(data.rsplit(":",1)[1])
+            if minutes in (15,30,60):
+                with db() as conn:
+                    conn.execute("UPDATE settings SET interval_minutes=?,next_quiz=? WHERE chat_id=?",(minutes,int(time.time())+minutes*60,row[0]))
+        row=owner_chat(uid)
+        try: await edit(cid,mid,admin_text(row),admin_menu(row))
+        except Exception: LOG.exception("Admin menu edit failed")
+        try: await call("answerCallbackQuery",callback_query_id=qid)
+        except Exception: pass
         return
     notice=""
     try:
@@ -202,6 +258,27 @@ async def handle(msg):
             await send(cid,"⚠️ Возможная мошенническая схема. Не передавайте пароли и коды. Используйте только официальный магазин.",reply_parameters={"message_id":msg["message_id"],"allow_sending_without_reply":True})
             return
     cmd=text.split()[0].split("@")[0].lower()
+    if chat.get("type")=="private":
+        row=owner_chat(uid)
+        if row:
+            await send(cid,admin_text(row),reply_markup=admin_menu(row))
+        else:
+            await send(cid,"🔒 Настройки доступны только владельцу чата.\\n\\nЧтобы привязать чат, его создатель должен отправить /setup в самом чате.")
+        return
+    if chat.get("type") not in ("group","supergroup"):
+        return
+    if cmd=="/setup":
+        if not await asyncio.to_thread(group_owner,cid,uid):
+            await send(cid,"🔒 Привязать чат может только его создатель.")
+            return
+        with db() as conn:
+            conn.execute("INSERT OR REPLACE INTO settings(chat_id,owner_id,enabled,interval_minutes,next_quiz) VALUES(?,?,1,30,?)",(cid,uid,int(time.time())+1800))
+        await send(cid,"✅ SHREKSICH AI подключён к чату. Автовикторины — каждые 30 минут.\\n🔒 Управление доступно создателю чата в личных сообщениях @Shrekchataibot.")
+        return
+    with db() as conn:
+        bound=conn.execute("SELECT 1 FROM settings WHERE chat_id=?",(cid,)).fetchone()
+    if not bound:
+        return
     if chat.get("type") in ("group","supergroup") and not text.startswith("/"):
         reply=msg.get("reply_to_message") or {}
         botname=(reply.get("from") or {}).get("username","").lower()
@@ -239,6 +316,7 @@ async def main():
     me=await call("getMe")
     LOG.info("Started bot @%s",me.get("username"))
     offset=0
+    asyncio.create_task(periodic_quizzes())
     while True:
         try:
             updates=await call("getUpdates",offset=offset,timeout=15,allowed_updates=["message","callback_query"])
