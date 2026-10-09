@@ -3416,6 +3416,9 @@ body.keyboard-open .wrap{padding-bottom:30px}
 @media(max-width:520px){.farm-ui .farm-modules{grid-template-columns:1fr}.farm-ui .farm-module-desc{min-height:0}.farm-ui .farm-overview{grid-template-columns:repeat(3,minmax(0,1fr))}.farm-ui .farm-wallet{padding:9px 6px}.farm-ui .farm-wallet-value{font-size:17px;gap:3px}.farm-ui .farm-wallet .farm-wallet-label{font-size:9px}.farm-ui .farm-wallet-value svg{height:26px;width:26px;flex-basis:26px}}
 @media(max-width:370px){.farm-ui .farm-item .farm-item-icon{width:60px;flex-basis:60px}.farm-ui .farm-item .farm-collectible{transform:scale(.78);transform-origin:top left}.farm-ui .farm-wallet-value{font-size:15px}.farm-ui .farm-uc-targets{grid-template-columns:1fr}}
 
+
+.farm-collectible-icon{display:grid;place-items:center;width:86px;height:80px}
+.farm-collectible .farm-object-svg{width:83px;height:83px;display:block;filter:drop-shadow(2px 5px 2px #0007) drop-shadow(-1px -1px 1px #ffffff55)}
 </style>
 </head>
 <body>
@@ -4172,8 +4175,93 @@ function farmUcIcon(){
  '<text x="50" y="73" fill="#e8faff" font-family="Arial,sans-serif" font-size="9" font-weight="900" letter-spacing=".5" text-anchor="middle">CREDITS</text></svg>';
 }
 function farmPrice(value){return '<span class="farm-currency-inline">'+farmCoinIcon()+' '+Number(value).toLocaleString('ru-RU')+'</span>'}
+function farmVectorAsset(item){
+ // Все ресурсы имеют собственные изометрические объёмные SVG-стикеры, без emoji-картинок.
+ const id=item.id||'';
+ const c={GRAY:'#baa981',CYAN:'#78cad1',BLUE:'#79a5e9',PURPLE:'#c88af4',PINK:'#e78cbf',RED:'#f28764',GOLD:'#f8cf5d'}[item.tier]||'#b7c6bb';
+ const metallic=item.tier==='GOLD'||id.startsWith('gold_')||id==='heart_of_gold';
+ const edge=metallic?'#9b6115':'#3c3b36';
+ const light=metallic?'#ffe49a':'#edeee5';
+ const base=metallic?'#da9c27':c;
+ const label=(id.includes('password')?'PASS':id.includes('metro')?'2036':id.includes('gold')?'GOLD':id==='cpu'?'CPU':id==='diesel'?'DIESEL':id==='signal_generator'?'RF':id==='tech_part'?'GEAR':id==='playing_cards'?'ACE':'MR');
+ let shape='';
+ if(['postcard','playing_cards','letter','password_white','password_red','password_yellow','password_green','password_black'].includes(id)){
+  shape='<path d="M18 16L65 13 75 62 28 67Z" fill="'+edge+'" opacity=".85"/>'+
+  '<path d="M13 11L61 8 71 57 23 62Z" fill="'+light+'" stroke="'+base+'" stroke-width="3"/>'+
+  '<path d="M21 21L59 17 61 25 24 29Z" fill="'+c+'" opacity=".65"/>'+
+  '<path d="M25 45L60 41M27 51L54 47" stroke="#755d4c" stroke-width="2" opacity=".6"/>'+
+  '<path d="M41 32L53 29 57 38 45 41Z" fill="'+base+'" stroke="'+edge+'" stroke-width="1"/>';
+  if(id==='playing_cards')shape+='<text x="39" y="44" font-size="21" fill="#bd2020">♠</text>';
+  else if(id.includes('password'))shape+='<text x="32" y="40" font-size="8" font-weight="900" fill="#5b3429">PASS</text>';
+ }else if(['travel_guide','magazine','metro_2036'].includes(id)){
+  shape='<path d="M21 11L66 6 73 65 27 72 20 63Z" fill="#ded3ab" stroke="#604833" stroke-width="3"/>'+
+  '<path d="M16 8L60 3 69 59 24 65Z" fill="'+base+'" stroke="'+edge+'" stroke-width="3"/>'+
+  '<path d="M19 13L25 64M35 28L59 26M37 35L60 33" stroke="'+light+'" stroke-width="2" opacity=".65"/>'+
+  '<text x="35" y="51" font-size="9" font-weight="900" fill="#352d21">'+label+'</text>';
+ }else if(['can','motor_oil','gas_bottle','diesel','lubricating_oil','water_purifier'].includes(id)){
+  shape='<path d="M28 19Q44 11 62 19V67Q44 79 28 67Z" fill="'+edge+'" stroke="#20292c" stroke-width="2"/>'+
+  '<path d="M24 17Q44 7 66 17V61Q45 75 24 61Z" fill="'+base+'" stroke="'+edge+'" stroke-width="3"/>'+
+  '<ellipse cx="45" cy="17" rx="21" ry="8" fill="'+light+'" stroke="'+edge+'" stroke-width="3"/>'+
+  '<path d="M31 23V57" stroke="'+light+'" stroke-width="6" opacity=".46"/>'+
+  '<rect x="32" y="34" width="26" height="17" rx="3" fill="#183447" opacity=".86"/>'+
+  '<text x="45" y="45" text-anchor="middle" font-size="8" font-weight="900" fill="#e8f8ff">'+(id==='diesel'?'D':id==='water_purifier'?'H2O':'OIL')+'</text>';
+ }else if(['compass','pocket_watch','military_watch','gold_watch'].includes(id)){
+  shape='<path d="M43 8V19" stroke="'+base+'" stroke-width="8" stroke-linecap="round"/>'+
+  '<circle cx="45" cy="47" r="29" fill="'+edge+'" stroke="#433022" stroke-width="3"/>'+
+  '<circle cx="43" cy="43" r="27" fill="'+base+'" stroke="'+light+'" stroke-width="4"/>'+
+  '<circle cx="43" cy="43" r="20" fill="#fff6da" stroke="'+edge+'" stroke-width="2"/>'+
+  '<path d="M43 24V29M61 43H56M43 61V56M26 43H31M43 43L34 31M43 43L57 39" stroke="#76582d" stroke-width="3" stroke-linecap="round"/>'+
+  '<circle cx="43" cy="43" r="4" fill="#4f3021"/>';
+ }else if(['canteen','gold_kettle'].includes(id)){
+  shape='<path d="M31 13Q45 3 57 13L62 25V65Q45 75 23 65L29 25Z" fill="'+base+'" stroke="'+edge+'" stroke-width="4"/>'+
+  '<ellipse cx="44" cy="16" rx="15" ry="5" fill="'+light+'" stroke="'+edge+'" stroke-width="2"/>'+
+  '<path d="M60 31Q82 22 78 43Q76 53 62 53" fill="none" stroke="'+edge+'" stroke-width="7"/>'+
+  '<path d="M27 35L12 31 24 44" fill="'+base+'" stroke="'+edge+'" stroke-width="3"/>'+
+  '<path d="M35 26V61" stroke="'+light+'" stroke-width="6" opacity=".45"/>';
+ }else if(['heart_necklace','heart_of_gold'].includes(id)){
+  shape='<path d="M20 18Q44 70 70 18" fill="none" stroke="'+base+'" stroke-width="7" stroke-linecap="round"/>'+
+  '<path d="M20 18Q44 70 70 18" fill="none" stroke="'+light+'" stroke-width="2" stroke-dasharray="3 5"/>'+
+  '<path d="M45 48Q16 27 24 61L45 77 66 61Q74 27 45 48Z" fill="'+base+'" stroke="'+edge+'" stroke-width="4"/>'+
+  '<path d="M32 53L44 67" stroke="'+light+'" stroke-width="5" opacity=".52"/>';
+ }else if(['purse','car_key','dog_tag'].includes(id)){
+  shape='<path d="M19 26L58 19 72 61 31 72Z" fill="'+edge+'" stroke="#192027" stroke-width="2"/>'+
+  '<path d="M16 19L56 13 68 56 28 64Z" fill="'+base+'" stroke="'+edge+'" stroke-width="3"/>'+
+  '<circle cx="29" cy="26" r="4" fill="'+light+'"/>'+
+  '<path d="M30 27L52 51" stroke="'+light+'" stroke-width="4" opacity=".5"/>'+
+  '<text x="36" y="46" font-size="10" font-weight="900" fill="#35404a">'+(id==='dog_tag'?'ID':id==='car_key'?'KEY':'MR')+'</text>';
+ }else if(['cpu','tech_part'].includes(id)){
+  shape='<path d="M24 19L59 10 74 53 39 68Z" fill="#18242b" stroke="'+edge+'" stroke-width="5"/>'+
+  '<path d="M17 15L54 7 68 48 32 58Z" fill="'+base+'" stroke="'+edge+'" stroke-width="4"/>'+
+  '<path d="M23 4L31 14M34 1L41 11M48 2L50 9M19 33L10 35M21 44L12 49M59 59L63 70" stroke="'+light+'" stroke-width="4"/>'+
+  '<rect x="29" y="22" width="27" height="24" rx="4" fill="#243c50" stroke="'+light+'" stroke-width="2"/>'+
+  '<text x="43" y="37" font-size="9" font-weight="900" text-anchor="middle" fill="#bfeaff">'+label+'</text>';
+ }else if(['tablet','detector','signal_generator','video_tape'].includes(id)){
+  shape='<path d="M17 14L59 5 76 65 33 76Z" fill="'+edge+'" stroke="#1b252b" stroke-width="4"/>'+
+  '<path d="M12 9L56 1 71 61 27 70Z" fill="'+base+'" stroke="'+edge+'" stroke-width="3"/>'+
+  '<path d="M21 18L51 11 61 52 31 59Z" fill="#1c3b4b" stroke="#b8eeff" stroke-width="2"/>'+
+  '<path d="M29 43L38 31 44 38 52 22" stroke="#83f3f5" stroke-width="2" fill="none"/>'+
+  '<text x="40" y="29" font-size="10" text-anchor="middle" font-weight="900" fill="#a3eeff">'+label+'</text>';
+ }else if(id==='precision_blueprint'){
+  shape='<path d="M14 15L70 9 77 62 21 70Z" fill="#e5d7b5" stroke="'+edge+'" stroke-width="4"/>'+
+  '<path d="M20 21L64 16 69 57 26 63Z" fill="#e2d2ae" stroke="#876a4b" stroke-width="1"/>'+
+  '<path d="M29 24L35 55M44 22L51 53M25 38L66 32M27 49L68 43" stroke="#6e8c9c" stroke-width="1.5"/>'+
+  '<circle cx="45" cy="37" r="9" fill="none" stroke="#50778c" stroke-width="2"/>';
+ }else if(id==='gold_bar'){
+  shape='<path d="M12 45L53 18 79 37 37 65Z" fill="#e7b22d" stroke="#80511c" stroke-width="4"/>'+
+  '<path d="M12 45L37 65 37 76 12 55Z" fill="#9e681d"/>'+
+  '<path d="M37 65L79 37 79 50 37 76Z" fill="#be8226"/>'+
+  '<path d="M30 42L53 26 67 37 43 53Z" fill="#ffe27b"/>'+
+  '<text x="42" y="44" font-size="10" font-weight="900" fill="#935a15" text-anchor="middle">GOLD</text>';
+ }else{
+  shape='<path d="M12 43L50 16 77 38 39 65Z" fill="'+base+'" stroke="'+edge+'" stroke-width="4"/>'+
+  '<path d="M12 43V53L39 74V65Z" fill="'+edge+'"/>'+
+  '<path d="M39 65L77 38V52L39 74Z" fill="'+base+'"/>';
+ }
+ return '<svg class="farm-object-svg" viewBox="0 0 90 90" aria-hidden="true">'+
+ '<ellipse cx="45" cy="81" rx="31" ry="7" fill="#000" opacity=".25"/>'+shape+'</svg>';
+}
 function farmItemSticker(item){
- return '<div class="farm-collectible" data-tier="'+esc(item.tier)+'" aria-label="'+esc(item.name)+'"><span class="farm-collectible-shine"></span><span class="farm-collectible-icon">'+esc(item.icon)+'</span></div>'
+ return '<div class="farm-collectible" data-tier="'+esc(item.tier)+'" aria-label="'+esc(item.name)+'"><span class="farm-collectible-shine"></span><span class="farm-collectible-icon">'+farmVectorAsset(item)+'</span></div>'
 }
 function farmScene(d){
  return '<div class="farm-landscape stage-'+d.stage+'"><svg viewBox="0 0 790 344" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Деревенская ферма, амбар, поле и деревянный забор">'+
