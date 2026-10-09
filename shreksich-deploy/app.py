@@ -3620,7 +3620,7 @@ const headers={'Content-Type':'application/json','X-Telegram-Init-Data':initData
 let products=[],me=null,spinState=null,lastSpinReward=null,tab=new URLSearchParams(location.search).get('tab')||(ADMIN?'admin':'home');
 let adminSection='overview',adminData=null;
 let spinNavigationLocked=false;
-let selectedCaseId=localStorage.getItem('shx_selected_case')||'FREE';
+let selectedCaseId=localStorage.getItem('shx_selected_case')||'CASE29';
 
 let audioCtx=null,spinSoundTimer=null,spinSoundStarted=0,spinSoundStep=0,spinSoundTotalMs=30000,spinSoundActive=false,spinAudioHold=null;
 function soundsEnabled(){
@@ -3876,7 +3876,7 @@ function home(){
  '<div class="shx-tiles">'+
  homeTile('Каталог','Товары и услуги','catalog','catalog')+
  homeTile('Кейсы','Открывай за Stars','cases','spin')+
- homeTile('Рулетки','Попробуй удачу','spin','spin')+
+ homeTile('Рулетки','Крути колесо','spin','roulette')+
  homeTile('Ферма','Добывай ресурсы','farm','farm','','НОВИНКА')+
  homeTile('Награды','Активность и UC','tasks','farm','activity')+
  homeTile('Промокоды','Бонусные билеты','promo','spin')+
@@ -4048,7 +4048,7 @@ function spinSourceLabel(source){
 function selectedCase(){
  const cases=(spinState&&spinState.case_catalog)||[];
  let cfg=cases.find(x=>x.id===selectedCaseId);
- if(!cfg){cfg=cases.find(x=>x.id==='FREE')||cases[0]||null;selectedCaseId=cfg?cfg.id:'FREE'}
+ if(!cfg){cfg=cases[0]||null;selectedCaseId=cfg?cfg.id:''}
  return cfg
 }
 function caseVisualTier(cfg){
@@ -4072,7 +4072,7 @@ function spinCasePickerHtml(){
 function bindSpinCasePicker(){
  document.querySelectorAll('[data-spin-case]').forEach(b=>b.addEventListener('click',async()=>{
   if(spinNavigationLocked||spinState?.pending_drop)return;
-  selectedCaseId=b.dataset.spinCase||'FREE';
+  selectedCaseId=b.dataset.spinCase||'CASE29';
   localStorage.setItem('shx_selected_case',selectedCaseId);
   app.innerHTML=await spinHtml();bindSpin();addHomeExit()
  }))
@@ -4114,9 +4114,9 @@ async function spinHtml(){
  else if(adminFree)modeNote='Этот кейс отмечен бесплатным в админ-панели.';
  else if(donation>0)modeNote='Будет использован синий Donation Ticket. Stars не спишутся.';
  else modeNote='Стоимость открытия: '+Number(cfg&&cfg.stars_price||0)+' Telegram Stars.';
- return '<section class="hero"><div class="cat">HYPE MODE</div><h1>HYPE <span class="gold">SPIN</span></h1><div class="muted">'+Number(spinState.max_free_spins||1)+' бесплатное(ых) вращение(я) за 24 часа. Донат-кейсы — Stars или синие Donation Tickets.</div></section>'+
+ return '<section class="hero"><div class="cat">МЕТРО-КЕЙСЫ</div><h1>Платные <span class="gold">кейсы</span></h1><div class="muted">Кейсы открываются за Telegram Stars или синие Donation Tickets. Бесплатная круглая рулетка находится в отдельном разделе.</div></section>'+
  spinCasePickerHtml()+
- '<div class="spin-stats"><div class="spin-stat"><div class="mini">FREE</div><div class="price">'+spinState.free_remaining+' / '+Number(spinState.max_free_spins||1)+'</div></div><div class="spin-stat"><div class="mini">БИЛЕТЫ</div><div class="price">🎟 '+spinState.bonus_tickets+'</div></div><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION</div><div class="price blue-ticket">🎫 '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
+ '<div class="spin-stats"><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION TICKETS</div><div class="price blue-ticket">🎫 '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
  '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(canOpen?'':'disabled')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь полной остановки рулетки</div>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
  '<div class="muted" style="margin-top:10px">'+modeNote+'</div></div>'+
@@ -4151,7 +4151,7 @@ async function applySpinPromo(){
   }else{
    info.innerHTML='<span class="ok">+'+d.tickets_added+' SPIN-билет(а). Теперь у вас 🎟 '+d.bonus_tickets+'</span>'
   }
-  setTimeout(async()=>{app.innerHTML=await spinHtml();bindSpin();addHomeExit()},650)
+  setTimeout(async()=>{if(tab==='roulette'){app.innerHTML=await rouletteHtml();bindRoulette()}else{app.innerHTML=await spinHtml();bindSpin()}addHomeExit()},650)
  }catch(e){info.innerHTML='<span class="warn">'+esc(e.message)+'</span>';b.disabled=false;b.textContent='Активировать'}
 }
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
@@ -4247,7 +4247,9 @@ async function resolveDrop(itemId,action,btn){
   else{
    sfxSell();
    alert('Продано. Баланс: '+d.shr+' SHR');
-   app.innerHTML=await spinHtml();bindSpin();addHomeExit();loadWinsFeed()
+   if(tab==='roulette'){app.innerHTML=await rouletteHtml();bindRoulette();addHomeExit()}
+   else{app.innerHTML=await spinHtml();bindSpin();addHomeExit()}
+   loadWinsFeed()
   }
  }catch(e){if(btn)btn.disabled=false;alert(e.message)}
 }
@@ -4776,6 +4778,7 @@ async function render(){
   if(tab==='home'){try{homeFarmData=await api('/api/farm')}catch(_){} app.innerHTML=home();bindHome()}
   else if(tab==='catalog'){app.innerHTML='<h2>Каталог</h2>'+cards(products);bindProductButtons()}
   else if(tab==='spin'){app.innerHTML=await spinHtml();bindSpin()}
+  else if(tab==='roulette'){app.innerHTML=await rouletteHtml();bindRoulette()}
   else if(tab==='orders'){app.innerHTML=await ordersHtml()}
   else if(tab==='inventory'){app.innerHTML=await inventoryHtml();bindInventory()}
   else if(tab==='farm'){app.innerHTML=await farmHtml();bindFarm()}
