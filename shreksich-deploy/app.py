@@ -389,12 +389,12 @@ FARM_RESOURCE_BY_ID = {x["id"]:x for x in FARM_RESOURCES}
 # Улучшения фермы за ShrekCOINS. Эти монеты нельзя обменять на Stars/UC.
 FARM_COIN_MAX_LEVEL = 5
 FARM_COIN_MODULES = {
-    "drill": {"column":"drill_level", "name":"Буровая станция", "icon":"⚙️", "base":55,
-              "description":"Время добычи сокращается на 9% за уровень."},
-    "warehouse": {"column":"warehouse_level", "name":"Дополнительный склад", "icon":"📦", "base":85,
-                  "description":"Вместимость склада увеличивается на 24 за уровень."},
-    "trader": {"column":"trader_level", "name":"Торговый терминал", "icon":"💹", "base":120,
-               "description":"Цена продажи ресурсов повышается на 15% за уровень."},
+    "drill": {"column":"drill_level", "name":"Фермерские инструменты", "icon":"🪓", "base":55,
+              "description":"Качественные инструменты ускоряют сбор ресурсов на 9% за уровень."},
+    "warehouse": {"column":"warehouse_level", "name":"Вместительный амбар", "icon":"🧺", "base":85,
+                  "description":"Каждый уровень добавляет 24 места для добычи."},
+    "trader": {"column":"trader_level", "name":"Торговая лавка", "icon":"⚖️", "base":120,
+               "description":"Цена продажи добычи повышается на 15% за уровень."},
 }
 
 def farm_coin_upgrade_cost(module: str, level: int) -> int:
@@ -441,15 +441,12 @@ def farm_stage(level: int) -> int:
 
 def farm_tier_weights(level: int) -> dict[str,float]:
     p = (max(1,min(FARM_MAX_LEVEL,int(level))) - 1) / max(1,FARM_MAX_LEVEL - 1)
-    weights = {
-        "GRAY":72 - 30*p,
-        "CYAN":22 + 4*p,
-        "BLUE":5 + 8*p,
-        "PURPLE":1 + 9*p,
-        "PINK":0 + 5*p,
-        "RED":0 + 3*p,
-        "GOLD":0 + 1*p,
-    }
+    # Редкие ресурсы действительно редкие. Веса меняются с уровнем, сумма всегда 100%.
+    # lvl 1: 78 / 16 / 5 / 1 / 0 / 0 / 0
+    # lvl 20: 65 / 20 / 9 / 4 / 1.2 / 0.5 / 0.3
+    starting = {"GRAY":78, "CYAN":16, "BLUE":5, "PURPLE":1, "PINK":0, "RED":0, "GOLD":0}
+    ending = {"GRAY":65, "CYAN":20, "BLUE":9, "PURPLE":4, "PINK":1.2, "RED":0.5, "GOLD":0.3}
+    weights = {tier:starting[tier] + (ending[tier] - starting[tier])*p for tier in FARM_TIER_ORDER}
     total = sum(weights.values()) or 1
     return {k:round(v*100/total,3) for k,v in weights.items()}
 
@@ -2095,7 +2092,14 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
         "coin_upgrades":farm_coin_modules(state),
         "tier_weights":farm_tier_weights(level),
         "inventory":inventory,
-        "resources":FARM_RESOURCES,
+        "resources":[{**item,"coins":farm_sale_price(item,trader_level)} for item in FARM_RESOURCES],
+        "uc_targets":[
+            {"uc":amount,
+             "required_credits":amount,
+             "need_more":max(0,amount-max(0,int(state["uc_credits"] or 0)-int(state["uc_reserved"] or 0))),
+             "days_at_daily_rate":(max(0,amount-max(0,int(state["uc_credits"] or 0)-int(state["uc_reserved"] or 0)))+FARM_DAILY_UC_CREDITS-1)//FARM_DAILY_UC_CREDITS}
+            for amount in (120,325,660,1800)
+        ],
         "activity_streak":int(state["activity_streak"] or 0),
         "activity_total":int(state["activity_total"] or 0),
         "activity_ready":activity_ready,
