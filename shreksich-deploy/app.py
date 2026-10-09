@@ -4578,8 +4578,27 @@ async function rollRoulette(){
  }
 }
 
+
+function caseFarmFeature(d){
+ const stage=Math.max(1,Math.min(5,Number(d?.stage||1)));
+ const resources=Array.isArray(d?.resources)?d.resources:[];
+ const showcase=['gold_bar','gold_watch','pocket_watch'].map(id=>resources.find(r=>r.id===id)).filter(Boolean);
+ for(const r of resources){if(showcase.length>=3)break;if(!showcase.some(x=>x.id===r.id))showcase.push(r)}
+ return '<section class="case-farm-feature"><div class="case-farm-scene">'+farmScene({stage})+'<div class="case-farm-sky" aria-hidden="true">🌾</div></div>'+
+ '<div class="case-farm-feature-content"><div class="farm-eyebrow">METRO FARM · ТВОЯ ФЕРМА</div>'+
+ '<div class="case-farm-feature-title">🌿 Ферма ресурсов</div>'+
+ '<div class="case-farm-feature-desc">Собирай находки, улучшай амбар и инструменты, продавай добычу за ShrekCOIN. Получай UC Credits за активность и бонусные билеты в кейсы.</div>'+
+ '<div class="case-farm-icons">'+showcase.map(farmItemSticker).join('')+'</div>'+
+ '<div class="case-farm-feature-stats"><span>🌾 Уровень '+Number(d?.level||1)+'</span>'+
+ '<span>🪙 '+Number(d?.shrek_coins||0).toLocaleString('ru-RU')+' ShrekCOIN</span>'+
+ '<span>🎟 '+Number(d?.uc_available||0)+' UC Credits</span></div>'+
+ '<button type="button" id="spinFarmBtn" class="case-farm-enter">🌾 Открыть ферму →</button></div></section>';
+}
+
 async function spinHtml(){
  spinState=await api('/api/spin/state');
+ let caseFarmData=farmCachedData;
+ try{caseFarmData=await api('/api/farm');farmCachedData=caseFarmData}catch(_){}
  const paidReady=spinState.paid_case_opening||null;
  if(paidReady){selectedCaseId=paidReady.case_id;localStorage.setItem('shx_selected_case',selectedCaseId)}
  const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div></div>').join('');
@@ -4608,11 +4627,12 @@ async function spinHtml(){
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
  '<div class="muted" style="margin-top:10px">'+modeNote+'</div></div>'+
  '<div class="card"><div class="cat">ПРОМОКОД НА ПРОКРУТКИ</div><div class="muted">Промокод может выдать обычные SPIN-билеты или отдельные синие Donation Tickets для донат-кейсов.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
- '<h3>SHR MARKET</h3><div class="card"><div class="muted">SHR можно получить за продажу выпавших предметов и обменять на гарантированные награды.</div>'+claims+'</div><h3>Последние 5 выпадений</h3>'+(history||'<div class="empty">История пока пустая.</div>')
+ caseFarmFeature(caseFarmData)+'<h3>Последние 5 выпадений</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
  bindSpinCasePicker();
  const allItems=document.getElementById('spinAllItems');if(allItems)allItems.addEventListener('click',()=>go('case-catalog'));
+ const farmBtn=document.getElementById('spinFarmBtn');if(farmBtn)farmBtn.addEventListener('click',()=>go('farm'));
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
@@ -5013,7 +5033,10 @@ async function farmHtml(){
  ).join('');
  const withdrawals=(d.withdrawals||[]).map(w=>'<div class="order"><div class="name">'+w.uc_amount+' UC • '+esc(w.status)+'</div><div class="mini">PUBG UID: '+esc(w.pubg_uid)+'</div></div>').join('');
  const modules=(d.coin_upgrades||[]).map(m=>'<div class="farm-module"><div class="farm-module-header"><span class="farm-module-icon">'+esc(m.icon)+'</span>'+esc(m.name)+'</div><div class="farm-module-desc">'+esc(m.description)+'</div><div class="mini">Уровень '+m.level+' / '+m.max_level+'</div><div class="farm-module-progress"><span style="width:'+(100*m.level/m.max_level)+'%"></span></div><button class="secondary" data-farm-module="'+esc(m.id)+'" '+(m.level>=m.max_level||d.shrek_coins<m.cost?'disabled':'')+'>'+(m.level>=m.max_level?'МАКС. УРОВЕНЬ':'УЛУЧШИТЬ • '+m.cost+' монет')+'</button></div>').join('');
- const targets=(d.uc_targets||[]).map(t=>'<div class="farm-uc-target '+(t.need_more<=0?'farm-uc-complete':'')+'"><b>'+t.uc+' UC</b><span>Нужно '+t.required_credits+' UC Credits<br>'+(t.need_more<=0?'Доступно для заявки':('Осталось '+t.need_more+' • ≈'+t.days_at_daily_rate+' дн. при ежедневном бонусе'))+'</span></div>').join('');
+ const targets=(d.uc_targets||[]).map(t=>'<div class="farm-uc-target '+(t.need_more<=0?'farm-uc-complete':'')+'"><b>'+t.uc+' UC</b><span>Требуется '+t.required_credits+' UC Credits<br>'+(t.need_more<=0?'Можно подать заявку':('Не хватает '+t.need_more+' Credits · ≈'+t.days_at_daily_rate+' дн. при ежедневном бонусе'))+'</span></div>').join('');
+ const ucMin=(d.uc_targets||[]).reduce((m,t)=>Math.min(m,Number(t.required_credits||t.uc)),Infinity);
+ const minCredits=Number.isFinite(ucMin)?ucMin:120;
+ const ucOptions=(d.uc_targets||[]).map(t=>'<option value="'+Number(t.uc)+'">'+Number(t.uc)+' UC — '+Number(t.required_credits)+' Credits</option>').join('')||'<option value="120">120 UC — 120 Credits</option>';
  const filters=[['ALL','Все'],['GRAY','Серые'],['CYAN','Голубые'],['BLUE','Синие'],['PURPLE','Фиолетовые'],['PINK','Розовые'],['RED','Красные'],['GOLD','Золотые']].map(([t,name])=>'<button data-farm-filter="'+t+'" class="'+(farmCatalogFilter===t?'active':'')+'">'+name+'</button>').join('');
  const catalog=farmCatalogExpanded?'<div id="farmCatalogDetails"><div class="farm-filterbar">'+filters+'</div><div class="farm-catalog-grid" id="farmCatalogGrid">'+farmCatalogCards(d)+'</div><div class="farm-aux" style="margin-top:12px">Шанс для каждого отдельного предмета рассчитан по вероятности качества, разделённой на число предметов данного качества. Улучшения торговой лавки учтены в ценах.</div></div>':'';
  const next=d.available_cycles>0?'Добыча готова':(d.stored>=d.capacity?'Склад заполнен':'Следующая добыча через '+formatReset(d.next_cycle_seconds));
@@ -5030,10 +5053,24 @@ async function farmHtml(){
  '<div class="farm-section"><div class="farm-section-head"><h3>📚 Справочник ресурсов</h3><button class="farm-catalog-btn" id="farmCatalogToggle">'+(farmCatalogExpanded?'Скрыть':'Все предметы →')+'</button></div><div class="farm-aux">Все '+(d.resources||[]).length+' ресурсов, качество, цены продажи и реальные шансы для твоего уровня фермы.</div><div class="farm-tier-chances">'+chances+'</div>'+catalog+'</div>'+
  '<div class="farm-section"><div class="farm-section-head"><h3>📦 Склад добычи</h3><button class="secondary" id="farmSellAll" '+((d.inventory||[]).length?'':'disabled')+'>Продать всё</button></div><div class="farm-inventory">'+(items||'<div class="empty">Склад пуст. Дождись готовой добычи и нажми «Собрать».</div>')+'</div></div>'+
  '<div class="farm-activity"><div class="farm-section-head"><h3>🌱 Награды за активность</h3><span class="farm-rarity-label">Серия: '+d.activity_streak+' дн.</span></div><div class="farm-aux">Собери хотя бы один ресурс, затем забери +'+d.daily_uc_credits+' UC Credits. Награда доступна раз в 20 часов. Каждый 7-й день серии — билет CASE29, каждый 30-й — билет CASE79.</div><button class="buy" id="farmActivity" style="margin-top:12px;width:100%" '+(d.activity_ready?'':'disabled')+'>'+(d.activity_ready?'ЗАБРАТЬ ЕЖЕДНЕВНУЮ НАГРАДУ':'СОБЕРИ ДОБЫЧУ ИЛИ ДОЖДИСЬ НАГРАДЫ')+'</button></div>'+
- '<div class="farm-withdraw"><div class="farm-section-head"><h3>'+farmUcIcon()+' Вывод UC</h3></div><div class="farm-aux">UC Credits — бонусы за активность, не ShrekCOINS и не Telegram Stars. Один UC Credit учитывается как один UC для заявки. Для получения награды нужен указанный баланс и PUBG UID. Выдачу подтверждает администратор.</div><div class="farm-uc-targets">'+targets+'</div><div class="farm-aux">Текущий баланс: '+d.uc_available+' UC Credits'+(d.uc_reserved>0?' • в ожидании: '+d.uc_reserved:'')+'. Расчёт дней предполагает ежедневное получение '+d.daily_uc_credits+' Credits без пропусков и дополнительных бонусов.</div><div class="row" style="margin-top:11px"><input id="farmPubgUid" placeholder="PUBG UID" inputmode="numeric"><select id="farmUcAmount"><option value="120">120 UC</option><option value="325">325 UC</option><option value="660">660 UC</option><option value="1800">1800 UC</option></select></div><button class="buy" id="farmWithdraw" style="width:100%;margin-top:10px" '+(Number(d.uc_available)<120?'disabled':'')+'>ОФОРМИТЬ ЗАЯВКУ НА UC</button></div>'+
+ '<div class="farm-withdraw"><div class="farm-section-head"><h3>'+farmUcIcon()+' Вывод UC</h3></div><div class="farm-uc-need"><strong>Минимум для вывода: '+minCredits+' UC Credits → '+minCredits+' UC</strong><div style="margin-top:5px">Твой баланс: <strong>'+Number(d.uc_available)+' Credits</strong>. Нужны UC Credits в количестве, соответствующем выбранной награде. Ни ShrekCOIN, ни SHR, ни Stars для этой заявки не используются.</div></div><div class="farm-aux">UC Credits начисляются за активность. Для вывода укажи свой PUBG UID; после заявки выдачу подтверждает администратор.</div><div class="farm-uc-targets">'+targets+'</div><div class="farm-aux">Текущий баланс: '+d.uc_available+' UC Credits'+(d.uc_reserved>0?' • в ожидании: '+d.uc_reserved:'')+'. Расчёт дней предполагает ежедневное получение '+d.daily_uc_credits+' Credits без пропусков и дополнительных бонусов.</div><div class="row" style="margin-top:11px"><input id="farmPubgUid" placeholder="PUBG UID" inputmode="numeric"><select id="farmUcAmount">'+ucOptions+'</select></div><div class="farm-uc-need" id="farmUcSelectedNeed">Для вывода выбранной суммы необходимо минимум '+minCredits+' UC Credits.</div><button class="buy" id="farmWithdraw" style="width:100%;margin-top:10px" '+(Number(d.uc_available)<minCredits?'disabled':'')+'>ОФОРМИТЬ ЗАЯВКУ НА UC</button></div>'+
  '<div class="farm-section"><h3>Последние заявки</h3>'+(withdrawals||'<div class="farm-aux" style="margin-top:8px">Заявок на вывод UC пока нет.</div>')+'</div>'+
  '</div>';
 }
+
+function refreshFarmUcNeed(){
+ const amount=Number(document.getElementById('farmUcAmount')?.value||120);
+ const farm=farmCachedData||{},targets=farm.uc_targets||[];
+ const selected=targets.find(x=>Number(x.uc)===amount);
+ const required=Number(selected?.required_credits||amount);
+ const available=Number(farm.uc_available||0);
+ const missing=Math.max(0,required-available);
+ const label=document.getElementById('farmUcSelectedNeed'),button=document.getElementById('farmWithdraw');
+ if(label)label.innerHTML='<strong>Для вывода '+amount+' UC нужно '+required+' UC Credits.</strong>'+
+  '<div style="margin-top:5px">У тебя '+available+' Credits. '+(missing?'Не хватает '+missing+' UC Credits.':'Достаточно для заявки — укажи свой PUBG UID.')+'</div>';
+ if(button)button.disabled=missing>0;
+}
+
 const FARM_TIER_ORDER_JS=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD'];
 function bindFarm(){
  const cat=document.getElementById('farmCatalogToggle');
@@ -5044,9 +5081,9 @@ function bindFarm(){
   const grid=document.getElementById('farmCatalogGrid');if(grid)grid.innerHTML=farmCatalogCards(farmCachedData);
  }));
  const ucSelect=document.getElementById('farmUcAmount');
+ if(ucSelect)refreshFarmUcNeed();
  if(ucSelect)ucSelect.addEventListener('change',()=>{
-  const bt=document.getElementById('farmWithdraw');
-  if(bt&&farmCachedData)bt.disabled=Number(ucSelect.value)>Number(farmCachedData.uc_available||0);
+  refreshFarmUcNeed();
  });
  document.querySelectorAll('[data-farm-module]').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;try{const d=await api('/api/farm/coin-upgrade',{method:'POST',body:JSON.stringify({module:b.dataset.farmModule})});alert('Модуль улучшен до '+d.level+' уровня • -'+d.spent+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);b.disabled=false}}));
  const collect=document.getElementById('farmCollect');if(collect&&!collect.disabled)collect.addEventListener('click',async()=>{collect.disabled=true;try{const d=await api('/api/farm/collect',{method:'POST'});alert('Ферма добыла '+d.count+' предмет(ов)');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);collect.disabled=false}});
