@@ -1245,6 +1245,17 @@ async def process_update(update: dict):
                         and pq.get("currency") == "XTR"
                         and int(pq.get("total_amount",0)) == int(row["stars_amount"])
                     )
+                    if ok and int(row["seller_id"] or 0):
+                        current_seller = await (await conn.execute(
+                            "SELECT status FROM shop_sellers WHERE telegram_id=?",
+                            (int(row["seller_id"]),)
+                        )).fetchone()
+                        ok = bool(
+                            current_seller and current_seller["status"]=="approved"
+                            and int(row["seller_reserved_until"] or 0)>int(time.time())
+                        )
+                        if not ok:
+                            error_message = "Бронь товара продавца истекла или магазин недоступен. Создайте новый заказ."
                     if ok and row["promo_code"]:
                         promo = await (await conn.execute(
                             "SELECT * FROM promos WHERE code=? AND active=1 AND COALESCE(discount_percent,0)>0 "
@@ -1326,9 +1337,16 @@ async def process_update(update: dict):
                     if row["telegram_charge_id"]:
                         await conn.rollback()
                         return
+                    seller_order = int(row["seller_id"] or 0)>0
+                    reserved_payment = row["status"]=="Ожидает оплаты" and (
+                        not seller_order or int(row["seller_reserved_until"] or 0)>int(time.time())
+                    )
+                    # A delayed Telegram charge must never silently allocate sold-out stock.
+                    payment_status = "Оплачен" if reserved_payment else "Проверка оплаты"
                     await conn.execute(
-                        "UPDATE orders SET status='Оплачен',payment_method='Telegram Stars',telegram_charge_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                        (charge_id,oid)
+                        "UPDATE orders SET status=?,payment_method='Telegram Stars',"
+                        "telegram_charge_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                        (payment_status,charge_id,oid)
                     )
                     if row["promo_code"]:
                         promo = await (await conn.execute(
@@ -1359,6 +1377,15 @@ async def process_update(update: dict):
                     await conn.commit()
                 finally:
                     await conn.close()
+            if seller_order:
+                try:
+                    await tg("sendMessage",{"chat_id":OWNER_ID,
+                        "text":f"🛒 Оплата заказа #{oid}: {payment_status}. Продавец: {row['seller_id']}. Проверьте Owner Panel."})
+                    if reserved_payment:
+                        await tg("sendMessage",{"chat_id":int(row["seller_id"]),
+                            "text":f"📦 Новый оплаченный заказ #{oid}: {row['product_name']}. Откройте раздел продавца в магазине."})
+                except Exception:
+                    pass
         except Exception as e:
             print("payment processing error:", repr(e), flush=True)
         return
@@ -2003,6 +2030,8 @@ async def stars(order_id: int, x_telegram_init_data: str | None = Header(default
     await conn.close()
     if not row: raise HTTPException(404,"Заказ не найден")
     if row["status"] != "Ожидает оплаты": raise HTTPException(409,"Заказ уже обработан")
+    if int(row["seller_id"] or 0)>0 and int(row["seller_reserved_until"] or 0)<=int(time.time()):
+        raise HTTPException(409,"Бронь товара продавца истекла. Оформите заказ заново.")
     if int(row["stars_amount"]) <= 0: raise HTTPException(400,"Оплата Stars для этого товара недоступна")
     if row["promo_code"]:
         conn = await db()
@@ -3254,14 +3283,32 @@ async def admin_orders(x_telegram_init_data: str | None = Header(default=None)):
 @app.patch("/api/admin/orders/{order_id}")
 async def admin_status(order_id:int, body:StatusIn, x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
-    allowed={"Ожидает оплаты","Ожидает проверки оплаты","Оплачен","Принят","В работе","Ожидает клиента","Выполнен","Отменён","Возврат"}
+    allowed={"Ожидает оплаты","Ожидает проверки оплаты","Проверка оплаты","Оплачен","Принят","В работе","Ожидает клиента","Проверка выдачи","Выполнен","Отменён","Возврат"}
     if body.status not in allowed: raise HTTPException(400,"Некорректный статус")
     async with db_write_lock:
         conn=await db()
         try:
+            await conn.execute("BEGIN IMMEDIATE")
             row=await (await conn.execute("SELECT * FROM orders WHERE id=?",(order_id,))).fetchone()
             if not row:
+                await conn.rollback()
                 raise HTTPException(404,"Заказ не найден")
+            if int(row["seller_id"] or 0)>0:
+                if body.status=="Выполнен" and (
+                    not row["telegram_charge_id"] or row["status"]!="Проверка выдачи"
+                    or not row["seller_delivery_note"]
+                ):
+                    await conn.rollback()
+                    raise HTTPException(409,"Для завершения сначала требуется подтверждение выдачи продавцом")
+                settled=await (await conn.execute(
+                    "SELECT id FROM seller_settlement_log WHERE order_id=?",(order_id,)
+                )).fetchone()
+                if settled and body.status!="Выполнен":
+                    await conn.rollback()
+                    raise HTTPException(409,"По заказу уже зарегистрирован расчёт с продавцом")
+                if row["status"]=="Ожидает оплаты" and body.status in ("Отменён","Возврат"):
+                    await conn.execute("UPDATE products SET seller_stock=seller_stock+1 WHERE id=? AND seller_id>0",
+                                       (int(row["product_id"]),))
             await conn.execute("UPDATE orders SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(body.status,order_id))
             await conn.commit()
         finally:
