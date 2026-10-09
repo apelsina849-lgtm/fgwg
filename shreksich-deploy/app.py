@@ -3611,6 +3611,22 @@ input,textarea,select{background:#0a1625;border-color:#2c455e}
 .roul-result:not(:empty){background:#0d2035;border:1px solid #376088;border-radius:15px;padding:15px}
 .roul-route{width:100%;margin:10px 0;color:#c4e4ff;background:#102840;border:1px solid #34577b}
 
+
+/* Roulette v2: smooth inertia, progress, a real skip button and music settings */
+.roul-stage.roul-turning:before{box-shadow:0 0 0 4px #76511d,0 16px 35px #000c,0 0 38px #ffd15c8b}
+.roul-stage.roul-turning .roul-pointer{animation:roul-needle .18s ease-in-out infinite alternate}
+@keyframes roul-needle{from{transform:translateX(-50%) rotate(-4deg)}to{transform:translateX(-50%) rotate(4deg)}}
+.roul-options{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+.roul-option{min-width:0;display:flex;gap:9px;align-items:center;justify-content:flex-start;text-align:left;background:#10243a;border:1px solid #385779;border-radius:13px;padding:10px;font-weight:750;color:#d5eaff;font-size:11px;line-height:1.3;cursor:pointer}
+.roul-option input{flex:0 0 auto;width:18px;height:18px;accent-color:#f5c656;margin:0}
+.roul-skip-now{width:100%;display:block;margin-top:12px;min-height:46px;background:linear-gradient(140deg,#27476b,#172b45);border:1px solid #6d99bf;color:#d7efff;font-size:13px;box-shadow:0 8px 19px #0005}
+.roul-skip-now:disabled{opacity:.6}
+.roul-progress{height:7px;background:#172e49;border-radius:12px;border:1px solid #2d4c71;overflow:hidden;margin:12px 0 7px}
+.roul-progress i{display:block;width:0;height:100%;background:linear-gradient(90deg,#d99b32,#ffe9a5);border-radius:12px;transition:width .10s linear}
+.roul-spin-status{font-size:11px;color:#d8b66c;font-weight:850;min-height:18px;margin-top:8px;text-align:center}
+@media(max-width:350px){.roul-options{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.roul-stage.roul-turning .roul-pointer{animation:none}}
+
 </style>
 </head>
 <body>
@@ -4160,6 +4176,76 @@ function makeRouletteWheel(cfg){
  }
  return {slices,bg:'conic-gradient(from 0deg,'+stops.join(',')+')',labels:labels.join(''),legend:legend.join('')};
 }
+
+/* Roulette spin uses server-side results. Rotation, melody, skipping are only presentation. */
+const ROULETTE_STANDARD_MS=11500;
+let rouletteSpinBusy=false,rouletteSkipRequested=false,rouletteMusicTimer=null;
+function rouletteEase(progress){
+ const p=Math.min(1,Math.max(0,progress)),acc=.12,cruise=.46,brake=1-cruise;
+ const total=acc/2+(cruise-acc)+brake/3;
+ if(p<=acc)return (p*p/(2*acc))/total;
+ if(p<=cruise)return (acc/2+(p-acc))/total;
+ const u=(p-cruise)/brake;
+ return (acc/2+cruise-acc+brake*(u-u*u+u*u*u/3))/total;
+}
+function rouletteMusicStop(){
+ if(rouletteMusicTimer!==null){clearTimeout(rouletteMusicTimer);rouletteMusicTimer=null}
+}
+function rouletteMusicStart(totalMs){
+ rouletteMusicStop();
+ if(!soundsEnabled())return;
+ const melody=[392,493.88,587.33,659.25,587.33,493.88,440,523.25,659.25,783.99,698.46,523.25,440,392,493.88,587.33];
+ const bass=[196,174.61,220,164.81];
+ const started=performance.now();
+ let noteIndex=0;
+ function melodyLoop(){
+  if(!rouletteSpinBusy||rouletteSkipRequested||!soundsEnabled()){rouletteMusicTimer=null;return}
+  const progress=Math.min(1,(performance.now()-started)/totalMs);
+  const freq=melody[noteIndex%melody.length];
+  const vol=progress>.72?Math.max(.009,.029*(1-progress)):.029;
+  tone(freq,.16+progress*.16,vol,'triangle');
+  if(noteIndex%2===0)tone(freq/2,.24,.016,'sine',.024);
+  if(noteIndex%4===0)tone(bass[Math.floor(noteIndex/4)%bass.length],.35,.018,'sine',.02);
+  if(noteIndex%8===7)tone(freq*1.5,.12,.011,'sine',.07);
+  noteIndex++;
+  if(progress<.99)rouletteMusicTimer=setTimeout(melodyLoop,Math.round(215+progress*235));
+  else rouletteMusicTimer=null;
+ }
+ melodyLoop();
+}
+function rouletteSectorTick(){
+ if(!soundsEnabled())return;
+ tone(930,.025,.014,'triangle');
+ tone(510,.036,.008,'sine',.012);
+}
+function animateRouletteWheel(wheel,start,end,duration,progressBar,statusText){
+ return new Promise(resolve=>{
+  const startAt=performance.now();
+  let lastSector=-1,lastTick=0;
+  function frame(now){
+   if(rouletteSkipRequested){
+    wheel.style.transform='rotate('+end+'deg)';
+    if(progressBar)progressBar.style.width='100%';
+    resolve('skipped');return;
+   }
+   const p=Math.max(0,Math.min(1,(now-startAt)/duration));
+   const angle=start+(end-start)*rouletteEase(p);
+   wheel.style.transform='rotate('+angle+'deg)';
+   if(progressBar)progressBar.style.width=Math.round(p*100)+'%';
+   if(statusText)statusText.textContent=p<.12?'⚡ Разгон колеса…':p<.55?'🎵 Колесо вращается…':p<.9?'✨ Плавно замедляется…':'🎯 Почти остановилось…';
+   const atPointer=(360-((angle%360)+360)%360)%360;
+   const index=rouletteSlices.findIndex(x=>atPointer>=x.start && atPointer<x.end);
+   if(index!==lastSector){
+    if(lastSector>=0&&now-lastTick>78){rouletteSectorTick();lastTick=now}
+    lastSector=index;
+   }
+   if(p>=1){resolve('complete');return}
+   requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+ });
+}
+
 async function rouletteHtml(){
  spinState=await api('/api/spin/state');
  const cfg=spinState.roulette,enabled=!!(cfg&&cfg.active),pending=spinState.pending_drop,paid=spinState.paid_case_opening;
@@ -4168,12 +4254,16 @@ async function rouletteHtml(){
  const ready=enabled&&!pending&&!paid&&(free+ticket)>0;
  const note=pending?'Приз уже выпал: сначала сохраните или продайте его.':paid?'Сначала заберите оплаченный кейс во вкладке «Кейсы».':!enabled?'Рулетка отключена администратором.':free>0?'Вращение бесплатное. Результат выбирает сервер.':ticket>0?'Будет использован один бонусный билет.':'Следующая бесплатная прокрутка через '+formatReset(spinState.next_reset_seconds);
  const history=(spinState.history||[]).filter(x=>x.source==='free'||x.source==='ticket').slice(0,5).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div><div class="mini">'+tierLabel(x.reward_tier)+' · '+formatDropDate(x.created_at)+'</div></div>').join('');
+ const rouletteSkipDefault=localStorage.getItem('shx_roulette_skip_v1')==='1';
+ const rouletteSoundEnabled=soundsEnabled();
  return '<div class="roul-page"><section class="hero roul-hero"><div class="cat">МЕТРО · КОЛЕСО ФОРТУНЫ</div><h1>Бесплатная <span class="gold">рулетка</span></h1><div class="muted">Настоящее круглое колесо, случайные призы и честные шансы.</div></section>'+
  '<section class="roul-box"><div class="roul-stage"><div class="roul-wheel" id="roulWheel" style="background:'+wheel.bg+';transform:rotate('+(rouletteLastAngle%360)+'deg)">'+wheel.labels+'</div><div class="roul-hub">ШРЕКСИЧ<small>METRO SPIN</small></div><div class="roul-pointer"></div></div>'+
  '<div class="roul-legend">'+wheel.legend+'</div>'+
  '<div class="roul-stats"><div class="roul-stat"><small>БЕСПЛАТНО</small><b>'+free+' / '+Number(spinState.max_free_spins||0)+'</b></div><div class="roul-stat"><small>БИЛЕТЫ</small><b>🎟 '+ticket+'</b></div><div class="roul-stat"><small>SHR</small><b>'+Number(spinState.shr||0)+'</b></div></div>'+
- '<button id="roulSpin" class="roul-go" '+(ready?'':'disabled')+'>'+(pending?'ЗАБЕРИТЕ ПРИЗ':free>0?'🎡 КРУТИТЬ БЕСПЛАТНО':ticket>0?'🎟 КРУТИТЬ ЗА БИЛЕТ':'ВРАЩЕНИЙ НЕТ')+'</button>'+
- '<div class="spin-lock-note" id="spinLockNote">Колесо вращается — дождитесь награды.</div><div class="roul-hint">'+note+'</div><div class="roul-result" id="roulResult"></div></section>'+
+ '<button id="roulSpin" class="roul-go" '+(ready?'':'disabled')+'>'+(pending?'ЗАБЕРИТЕ ПРИЗ':free>0?'🎡 КРУТИТЬ БЕСПЛАТНО':ticket>0?'🎟 КРУТИТЬ ЗА БИЛЕТ':'ВРАЩЕНИЙ НЕТ')+'</button>'+ 
+ '<div class="roul-options"><label class="roul-option"><input type="checkbox" id="roulSkipPref" '+(rouletteSkipDefault?'checked':'')+'><span>⏩ Пропускать анимацию</span></label><label class="roul-option"><input type="checkbox" id="roulMusicPref" '+(rouletteSoundEnabled?'checked':'')+'><span>🔊 Мелодия и щелчки</span></label></div>'+ 
+ '<button type="button" class="roul-skip-now hide" id="roulSkipNow">⏭ Пропустить прокрутку</button><div class="roul-progress hide" id="roulProgress"><i id="roulProgressBar"></i></div><div class="roul-spin-status" id="roulStatus" role="status" aria-live="polite"></div>'+
+ '<div class="spin-lock-note" id="spinLockNote">Можно пропустить анимацию — приз уже определён сервером.</div><div class="roul-hint">'+note+'</div><div class="roul-result" id="roulResult"></div></section>'+
  '<button id="roulCases" class="roul-route">📦 Перейти к платным кейсам</button>'+
  '<div class="shx-panel"><h3>🎟 Промокод на прокрутки</h3><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<div class="shx-panel"><h3>Последние выигрыши рулетки</h3>'+(history||'<div class="empty">Здесь появятся ваши награды.</div>')+'</div></div>';
@@ -4188,6 +4278,9 @@ function bindRoulette(){
  const play=document.getElementById('roulSpin');if(play&&!play.disabled)play.addEventListener('click',rollRoulette);
  const cases=document.getElementById('roulCases');if(cases)cases.addEventListener('click',()=>go('spin'));
  const promo=document.getElementById('spinPromoBtn');if(promo)promo.addEventListener('click',applySpinPromo);
+ const skipPref=document.getElementById('roulSkipPref');if(skipPref)skipPref.addEventListener('change',()=>localStorage.setItem('shx_roulette_skip_v1',skipPref.checked?'1':'0'));
+ const musicPref=document.getElementById('roulMusicPref');if(musicPref)musicPref.addEventListener('change',()=>setSoundEnabled(musicPref.checked));
+ const skipNow=document.getElementById('roulSkipNow');if(skipNow)skipNow.addEventListener('click',()=>{if(!rouletteSpinBusy||rouletteSkipRequested)return;rouletteSkipRequested=true;skipNow.disabled=true;skipNow.textContent='Завершаем прокрутку…';rouletteMusicStop()});
  const p=spinState?.pending_drop;
  if(p?.reward&&String(p.source||'').startsWith('case:')){
   const result=document.getElementById('roulResult');
@@ -4201,48 +4294,71 @@ function bindRoulette(){
 }
 async function rollRoulette(){
  const btn=document.getElementById('roulSpin'),wheel=document.getElementById('roulWheel'),result=document.getElementById('roulResult');
- if(!btn||btn.disabled||!wheel||!result||spinNavigationLocked)return;
- btn.disabled=true;btn.textContent='ОПРЕДЕЛЯЕМ ПРИЗ…';
+ if(!btn||btn.disabled||!wheel||!result||spinNavigationLocked||rouletteSpinBusy)return;
+ const stage=document.querySelector('.roul-stage'),status=document.getElementById('roulStatus');
+ const skipNow=document.getElementById('roulSkipNow'),progress=document.getElementById('roulProgress'),bar=document.getElementById('roulProgressBar');
+ const skipPref=document.getElementById('roulSkipPref'),musicPref=document.getElementById('roulMusicPref');
+ const promo=document.getElementById('spinPromoBtn'),paidCases=document.getElementById('roulCases');
+ // Unlock audio on the actual button click: Telegram iOS restricts audio started after async requests.
+ if(soundsEnabled()){unlockAudio();beginAudioHold()}
+ const skipByDefault=!!skipPref?.checked;
+ rouletteSpinBusy=true;rouletteSkipRequested=false;
+ btn.disabled=true;btn.textContent='ГОТОВИМ РУЛЕТКУ…';
+ if(skipPref)skipPref.disabled=true;
+ if(musicPref)musicPref.disabled=true;
+ if(promo)promo.disabled=true;
+ if(paidCases)paidCases.disabled=true;
  setSpinNavigationLocked(true);
- let playing=false;
+ if(status)status.textContent='🎲 Определяем приз на сервере…';
  try{
-  const promo=document.getElementById('spinPromoBtn'),paidCases=document.getElementById('roulCases');
-  if(promo)promo.disabled=true;
-  if(paidCases)paidCases.disabled=true;
+  // The reward is committed by the server before any animation; skipping does not reroll it.
   const d=await api('/api/spin/free',{method:'POST'});
   if(!d?.reward?.tier)throw Error('Сервер не вернул приз');
   lastSpinReward=d.reward;
-  const start=rouletteLastAngle%360,angle=rouletteAngleFor(d.reward.tier);
-  const correction=((angle-start)%360+360)%360;
-  const end=start+360*9+correction;
-  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
-  if(!skip){
-   await ensureAudioReady();
-   startSpinSound(8500);playing=true;
-   if(wheel.animate){
-    const anim=wheel.animate([{transform:'rotate('+start+'deg)'},{transform:'rotate('+end+'deg)'}],{duration:8500,easing:'cubic-bezier(.12,.66,.08,1)',fill:'forwards'});
-    await anim.finished.catch(()=>{});
-    wheel.style.transform='rotate('+angle+'deg)';
-    anim.cancel();
-   }else{
-    wheel.style.transition='transform 8.5s cubic-bezier(.12,.66,.08,1)';
-    void wheel.offsetWidth;
-    wheel.style.transform='rotate('+end+'deg)';
-    await sleep(8550);
-    wheel.style.transition='';
-    wheel.style.transform='rotate('+angle+'deg)';
-   }
-   stopSpinSound();playing=false;
-  }else wheel.style.transform='rotate('+angle+'deg)';
+  const start=((rouletteLastAngle%360)+360)%360,angle=rouletteAngleFor(d.reward.tier);
+  const correction=((angle-start)%360+360)%360,end=start+360*9+correction;
+  if(!skipByDefault){
+   if(skipNow)skipNow.classList.remove('hide');
+   if(progress)progress.classList.remove('hide');
+   if(stage)stage.classList.add('roul-turning');
+   btn.textContent='🎡 КОЛЕСО ВРАЩАЕТСЯ…';
+   rouletteMusicStart(ROULETTE_STANDARD_MS);
+   await animateRouletteWheel(wheel,start,end,ROULETTE_STANDARD_MS,bar,status);
+   rouletteMusicStop();
+   if(!rouletteSkipRequested)sfxStop();
+  }else{
+   wheel.style.transform='rotate('+angle+'deg)';
+   if(status)status.textContent='⏩ Анимация пропущена';
+  }
+  wheel.style.transform='rotate('+angle+'deg)';
   rouletteLastAngle=angle;
-  sfxDrop(d.reward.tier);revealReward(result,d);
+  if(stage)stage.classList.remove('roul-turning');
+  if(skipNow)skipNow.classList.add('hide');
+  if(progress)progress.classList.add('hide');
+  if(status)status.textContent='🎁 Награда получена!';
+  sfxDrop(d.reward.tier);
+  revealReward(result,d);
   btn.textContent='🎁 ПРИЗ ВЫПАЛ';
   loadWinsFeed();
   if(['RED','GOLD','LEGENDARY','MYTHIC'].includes(d.reward.tier))showDropFx(d.reward);
  }catch(e){
   if(!e.silent)alert(e.message);
+  // If the API succeeded but the animation failed, the server-side pending reward
+  // is recovered by rouletteHtml() rather than rolling a second prize.
   try{app.innerHTML=await rouletteHtml();bindRoulette();addHomeExit()}catch(_){}
- }finally{if(playing)stopSpinSound();setSpinNavigationLocked(false);const promo=document.getElementById('spinPromoBtn'),paidCases=document.getElementById('roulCases');if(promo)promo.disabled=false;if(paidCases)paidCases.disabled=false}
+ }finally{
+  rouletteMusicStop();
+  endAudioHold();
+  rouletteSpinBusy=false;
+  rouletteSkipRequested=false;
+  if(stage)stage.classList.remove('roul-turning');
+  if(skipNow){skipNow.classList.add('hide');skipNow.disabled=false;skipNow.textContent='⏭ Пропустить прокрутку'}
+  if(skipPref)skipPref.disabled=false;
+  if(musicPref)musicPref.disabled=false;
+  if(promo)promo.disabled=false;
+  if(paidCases)paidCases.disabled=false;
+  setSpinNavigationLocked(false);
+ }
 }
 
 async function spinHtml(){
