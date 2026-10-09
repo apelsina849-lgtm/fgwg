@@ -59,6 +59,7 @@ def db():
     c.execute("CREATE TABLE IF NOT EXISTS preferences(chat_id INTEGER PRIMARY KEY,persona TEXT DEFAULT 'friendly',ai_enabled INTEGER DEFAULT 1,level_enabled INTEGER DEFAULT 1)")
     c.execute("CREATE TABLE IF NOT EXISTS daily_tasks(chat_id INTEGER,user_id INTEGER,day TEXT,messages INTEGER DEFAULT 0,questions INTEGER DEFAULT 0,claimed INTEGER DEFAULT 0,PRIMARY KEY(chat_id,user_id,day))")
     c.execute("CREATE TABLE IF NOT EXISTS achievements(chat_id INTEGER,user_id INTEGER,code TEXT,awarded_at INTEGER,PRIMARY KEY(chat_id,user_id,code))")
+    c.execute("CREATE TABLE IF NOT EXISTS bot_options(chat_id INTEGER PRIMARY KEY,cooldown INTEGER DEFAULT 15,reward INTEGER DEFAULT 25)")
     c.commit()
     return c
 def api(method, payload):
