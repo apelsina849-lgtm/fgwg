@@ -440,8 +440,8 @@ def offline_answer(question):
         return "🛒 Официальный магазин Шрексич: "+SHOP_URL+"\nАктуальные товары, наличие и цены смотри в каталоге."
     if any(x in q for x in ("заказ", "достав", "оплат", "покупк")):
         return "📦 Проверь информацию о заказе в официальном магазине. Я не вижу твои покупки и не могу подтвердить оплату или доставку."
-    if any(x in q for x in ("metro", "метро", "pubg", "пабг", "эвакуац", "лут")):
-        return "🎮 В Metro Royale важно заранее планировать путь к эвакуации, следить за снаряжением и не рисковать ценным лутом без необходимости. Уточни вопрос — например, про выходы или экипировку."
+    if any(x in q for x in ("metro", "метро", "pubg", "пабг", "эвакуац", "лут", "оруж", "прицел", "арен", "классик", "карта", "эренгел", "мирамар", "чувствительност", "гироскоп")):
+        return "🎮 Могу помочь с PUBG Mobile: классика, Arena, Metro Royale, оружие, карты, тактика, управление и настройки. Уточни, что именно интересует."
     if any(x in q for x in ("викторин", "игр", "вопрос", "quiz")):
         return "🎮 Нажми «Викторина» в меню или отправь /quiz. Ответы выбираются кнопками, денежные награды не начисляются."
     if any(x in q for x in ("мошен", "обман", "скам", "безопас", "пароль", "код")):
@@ -454,7 +454,7 @@ async def ask_ai(question):
     if not question:
         return "Напиши вопрос после /ai."
     def query():
-        system=("Ты Шрексич AI, дружелюбный помощник сообщества PUBG Mobile Metro Royale. "
+        system=("Ты Шрексич AI, дружелюбный помощник сообщества PUBG Mobile, включая Metro Royale, классический режим, Arena, оружие, карты, тактики и настройки. "
                 "Отвечай по-русски, по делу, до 700 символов. "
                 "Не придумывай сведения о заказах, балансе, ценах и наличии товаров. "
                 "Никогда не проси пароль, код входа или данные карты.")
@@ -479,8 +479,8 @@ async def ask_ai(question):
         q=question.lower()
         if "магазин" in q or "купить" in q:
             return "🛒 Официальный магазин: "+SHOP_URL
-        if "метро" in q or "metro" in q or "pubg" in q:
-            return "🎮 В Metro Royale полезно заранее планировать маршрут эвакуации, следить за снаряжением и не рисковать ценным лутом без необходимости."
+        if any(x in q for x in ("метро", "metro", "pubg", "пабг", "арена", "оруж", "классик", "карта", "прицел")):
+            return "🎮 По PUBG Mobile помогу с классикой, Arena, Metro Royale, картами, оружием, тактикой и настройками. Задай конкретный вопрос."
         return offline_answer(question)
 def rank_name(xp):
     if xp>=2000: return "Легенда Метро"
@@ -732,7 +732,7 @@ async def private_answer(uid,question,cid):
     if not enabled:
         await send(uid,"ИИ временно отключён администратором.")
         return
-    style={"friendly":"Ты Шрек, дружелюбный игровой помощник.","expert":"Ты Шрек, эксперт по PUBG Mobile Metro Royale. Не выдумывай цены и патчи.","serious":"Ты Шрек, точный и спокойный помощник."}.get(persona,"Ты Шрек, игровой помощник.")
+    style={"friendly":"Ты Шрек, дружелюбный игровой помощник.","expert":"Ты Шрек, эксперт по PUBG Mobile, включая Metro Royale, классический режим, Arena, оружие, карты, тактики и настройки. Не выдумывай цены и патчи.","serious":"Ты Шрек, точный и спокойный помощник."}.get(persona,"Ты Шрек, игровой помощник.")
     with db() as conn:
         pref=conn.execute("SELECT ai_memory FROM user_preferences WHERE user_id=?",(uid,)).fetchone()
     use_memory=not pref or bool(pref[0])
@@ -845,7 +845,7 @@ async def handle(msg):
         if text in ("/admin","/settings") and row:
             await send(cid,admin_text(row),reply_markup=admin_menu(row))
         elif text in ("/start","/menu","/help"):
-            await send(cid,"🐸 SHREKSICH AI — личный помощник по PUBG Metro Royale. Пиши вопрос прямо здесь. Ответ увидишь только ты.",reply_markup=private_menu(uid))
+            await send(cid,"🐸 SHREKSICH AI — личный помощник по PUBG Mobile. Пиши вопрос прямо здесь. Ответ увидишь только ты.",reply_markup=private_menu(uid))
         else:
             await private_answer(uid,text,user_group(uid))
         return
