@@ -646,7 +646,7 @@ def challenge_text(cid,uid):
     day=time.strftime("%Y-%m-%d",time.gmtime())
     with db() as conn:
         rows={k:v for k,v in conn.execute("SELECT kind,completed FROM challenges WHERE chat_id=? AND user_id=? AND day=?",(cid,uid,day))}
-    return "🎯 ИСПЫТАНИЯ ДНЯ (UTC)\\n🧩 Загадка: "+("готово" if rows.get("riddle") else "доступна")+"\\n⚔️ Дуэль знаний: "+("готово" if rows.get("duel") else "доступна")+"\\nНапиши «дай загадку» или «вызвать на дуэль»."
+    return "🎯 ИСПЫТАНИЯ ДНЯ (UTC)\n🧩 Загадка: "+("готово" if rows.get("riddle") else "доступна")+"\n⚔️ Дуэль знаний: "+("готово" if rows.get("duel") else "доступна")+"\nНапиши «дай загадку» или «вызвать на дуэль»."
 
 def reward_challenge(cid,uid,kind,amount):
     day=time.strftime("%Y-%m-%d",time.gmtime())
@@ -666,7 +666,7 @@ def challenge_question(uid):
 
 async def start_riddle(uid,cid):
     index,question,answers=challenge_question(uid)
-    await send(uid,"🧩 ЗАГАДКА ДНЯ\\n"+question,reply_markup=keyboard([[{"text":f"{i+1}. {answer}","callback_data":f"riddle:{cid}:{index}:{i}"}] for i,answer in enumerate(answers)]))
+    await send(uid,"🧩 ЗАГАДКА ДНЯ\n"+question,reply_markup=keyboard([[{"text":f"{i+1}. {answer}","callback_data":f"riddle:{cid}:{index}:{i}"}] for i,answer in enumerate(answers)]))
 
 async def start_duel(uid,cid):
     if not ai_features(cid)[2]:
@@ -684,8 +684,8 @@ async def start_duel(uid,cid):
         duel_id=result.lastrowid
     question,answers,_=QUESTIONS[question_index]
     markup=keyboard([[{"text":answer,"callback_data":f"duel:{duel_id}:{i}"}] for i,answer in enumerate(answers)])
-    await send(uid,"⚔️ ДУЭЛЬ ЗНАНИЙ\\n"+question+"\\nПервый верный ответ побеждает!",reply_markup=markup)
-    try: await send(opponent,"⚔️ Тебя вызвали на дуэль знаний!\\n"+question,reply_markup=markup)
+    await send(uid,"⚔️ ДУЭЛЬ ЗНАНИЙ\n"+question+"\nПервый верный ответ побеждает!",reply_markup=markup)
+    try: await send(opponent,"⚔️ Тебя вызвали на дуэль знаний!\n"+question,reply_markup=markup)
     except Exception:
         await send(uid,"Напарник ещё не открыл личный чат с ботом. Приглашение доставлено только тебе.")
 
@@ -693,7 +693,7 @@ def raid_summary(cid,uid):
     with db() as conn:
         row=conn.execute("SELECT COUNT(*),COALESCE(SUM(loot-investment),0),COALESCE(SUM(escaped),0),COALESCE(SUM(investment),0),COALESCE(SUM(loot),0) FROM raid_history WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()
     n,profit,escapes,cost,loot=row
-    return f"📊 ТВОИ РЕЙДЫ\\nВсего: {n}\\nУспешных эвакуаций: {escapes}\\nПроцент эвакуаций: {round(100*escapes/n) if n else 0}%\\nВложения: {cost:,}\\nДобыча: {loot:,}\\nУсловная прибыль: {profit:+,}\\n\\nЧтобы записать рейд, напиши «рейд 10000 18000 да» (вложения, добыча, эвакуация). Значения вводи в одной игровой валюте."
+    return f"📊 ТВОИ РЕЙДЫ\nВсего: {n}\nУспешных эвакуаций: {escapes}\nПроцент эвакуаций: {round(100*escapes/n) if n else 0}%\nВложения: {cost:,}\nДобыча: {loot:,}\nУсловная прибыль: {profit:+,}\n\nЧтобы записать рейд, напиши «рейд 10000 18000 да» (вложения, добыча, эвакуация). Значения вводи в одной игровой валюте."
 
 def save_raid(cid,uid,question):
     parts=question.lower().split()
