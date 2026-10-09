@@ -732,6 +732,8 @@ async def init_db():
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_shop_sellers_status ON shop_sellers(status);
+    CREATE TABLE IF NOT EXISTS seller_warnings(id INTEGER PRIMARY KEY AUTOINCREMENT,seller_id INTEGER NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE IF NOT EXISTS seller_reviews(id INTEGER PRIMARY KEY AUTOINCREMENT,seller_id INTEGER NOT NULL,buyer_id INTEGER NOT NULL,rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),comment TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(seller_id,buyer_id));
     """)
     product_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(products)")).fetchall()}
     for col,ddl in {
@@ -1893,7 +1895,7 @@ async def admin_sellers(x_telegram_init_data: str | None = Header(default=None))
     conn=await db()
     try:
         sellers=await (await conn.execute(
-            "SELECT s.*,u.token FROM shop_sellers s LEFT JOIN users u "
+            "SELECT s.*,u.token,u.username,(SELECT COUNT(*) FROM seller_warnings w WHERE w.seller_id=s.telegram_id) warning_count,(SELECT ROUND(AVG(r.rating),2) FROM seller_reviews r WHERE r.seller_id=s.telegram_id) avg_rating,(SELECT COUNT(*) FROM seller_reviews r WHERE r.seller_id=s.telegram_id) review_count FROM shop_sellers s LEFT JOIN users u "
             "ON u.telegram_id=s.telegram_id ORDER BY s.created_at DESC"
         )).fetchall()
         listings=await (await conn.execute(
@@ -1914,12 +1916,54 @@ async def admin_sellers(x_telegram_init_data: str | None = Header(default=None))
     return {"sellers":[dict(x) for x in sellers],"listings":[dict(x) for x in listings],
             "orders":[dict(x) for x in jobs]}
 
+
+class SellerWarningIn(BaseModel):
+    reason: str = Field(min_length=5,max_length=600)
+
+@app.post("/api/admin/sellers/{seller_id}/warnings")
+async def admin_issue_seller_warning(seller_id:int,body:SellerWarningIn,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            seller=await (await conn.execute("SELECT status FROM shop_sellers WHERE telegram_id=?",(seller_id,))).fetchone()
+            if not seller or seller["status"]!="approved":
+                raise HTTPException(409,"Выговор доступен только действующему продавцу")
+            await conn.execute("INSERT INTO seller_warnings(seller_id,reason) VALUES(?,?)",(seller_id,body.reason.strip()))
+            await conn.commit()
+        finally:
+            await conn.close()
+    try:
+        await tg("sendMessage",{"chat_id":seller_id,"text":"⚠️ Вам выдан выговор в Шрексиче. Причина: "+body.reason.strip()})
+    except Exception:
+        pass
+    return {"ok":True}
+
+@app.get("/api/admin/sellers/{seller_id}/history")
+async def admin_seller_history(seller_id:int,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        warnings=await (await conn.execute("SELECT id,reason,created_at FROM seller_warnings WHERE seller_id=? ORDER BY id DESC",(seller_id,))).fetchall()
+        reviews=await (await conn.execute("SELECT rating,comment,created_at FROM seller_reviews WHERE seller_id=? ORDER BY id DESC LIMIT 100",(seller_id,))).fetchall()
+        return {"warnings":[dict(x) for x in warnings],"reviews":[dict(x) for x in reviews]}
+    finally:
+        await conn.close()
+
 @app.patch("/api/admin/sellers/{seller_id}")
 async def admin_seller_decision(seller_id:int,body:AdminSellerDecisionIn,
                                 x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
     if body.status not in ("approved","blocked"):
         raise HTTPException(400,"Некорректный статус")
+    if body.status=="approved":
+        conn=await db()
+        try:
+            existing=await (await conn.execute("SELECT status FROM shop_sellers WHERE telegram_id=?",(seller_id,))).fetchone()
+            if not existing or existing["status"]!="pending":
+                raise HTTPException(409,"Одобрить можно только новую заявку")
+        finally:
+            await conn.close()
     async with db_write_lock:
         conn=await db()
         try:
@@ -6496,8 +6540,11 @@ function adminSellers(){
  '<div class="mini">'+esc(x.token||'')+' · '+esc(x.contact)+'</div>'+
  '<div class="mini">'+esc(x.experience||'')+'</div>'+
  '<div class="mini" style="margin-top:9px">Новые заказы: 70% продавцу · 20% магазину · 10% резерву</div>'+
- '<div class="seller-market-actions"><button class="buy" data-seller-approve="'+x.telegram_id+'">Одобрить / сохранить</button>'+
- '<button class="danger" data-seller-block="'+x.telegram_id+'">Заблокировать</button></div></div>').join('')||
+ '<div class="mini">Telegram: '+(x.username?'@'+esc(x.username):'username не указан')+' · ID: '+x.telegram_id+'</div>'+ 
+ '<div class="mini">⭐ Рейтинг: '+(x.avg_rating?Number(x.avg_rating).toFixed(2)+'/5':'Нет оценок')+' · Отзывов: '+Number(x.review_count||0)+' · Выговоров: '+Number(x.warning_count||0)+'</div>'+ 
+ '<div class="seller-market-actions">'+(x.status==='pending'?'<button class="buy" data-seller-approve="'+x.telegram_id+'">✓ Одобрить заявку</button>':'<button class="secondary" data-seller-history="'+x.telegram_id+'">📋 Данные и отзывы</button><button class="secondary" data-seller-warning="'+x.telegram_id+'">⚠️ Выдать выговор</button>')+
+ '<a style="display:inline-flex;align-items:center;padding:10px;color:#9de8ff" href="https://t.me/'+(x.username?encodeURIComponent(x.username):'')+'" target="_blank" rel="noopener noreferrer">'+(x.username?'💬 Личный чат':'💬 Чат недоступен')+'</a>'+
+ (x.status==='blocked'?'':'<button class="danger" data-seller-block="'+x.telegram_id+'">Заблокировать</button>')+'</div><div id="sellerHistory'+x.telegram_id+'"></div></div>').join('')||
  '<div class="empty">Заявок пока нет</div>');
  html+='<h3 style="margin:18px 0 9px">Модерация товаров</h3>'+
  (listings.map(x=>'<div class="seller-admin-box"><div class="row"><span class="seller-status-pill '+esc(x.seller_status)+'">'+esc(x.seller_status)+'</span>'+
@@ -6545,6 +6592,8 @@ function bindAdmin(){
  const adminSellerChange=async(sellerId,status)=>{
   try{await api('/api/admin/sellers/'+sellerId,{method:'PATCH',body:JSON.stringify({status,commission_pct:30})});await refreshAdmin()}catch(e){alert(e.message)}
  };
+ document.querySelectorAll('[data-seller-history]').forEach(b=>b.addEventListener('click',async()=>{try{const d=await api('/api/admin/sellers/'+b.dataset.sellerHistory+'/history');const el=document.getElementById('sellerHistory'+b.dataset.sellerHistory);if(el)el.innerHTML='<h4>Выговоры</h4>'+(d.warnings.map(x=>'<div class="mini">⚠️ '+esc(x.reason)+' · '+esc(x.created_at)+'</div>').join('')||'<div class="mini">Нет выговоров</div>')+'<h4>Отзывы покупателей</h4>'+(d.reviews.map(x=>'<div class="mini">⭐ '+Number(x.rating)+'/5 · '+esc(x.comment)+' · '+esc(x.created_at)+'</div>').join('')||'<div class="mini">Пока нет отзывов</div>')}catch(e){alert(e.message)}}));
+ document.querySelectorAll('[data-seller-warning]').forEach(b=>b.addEventListener('click',async()=>{const reason=prompt('Укажите причину выговора (не менее 5 символов)');if(reason===null)return;if(reason.trim().length<5){alert('Причина должна содержать не менее 5 символов');return}try{await api('/api/admin/sellers/'+b.dataset.sellerWarning+'/warnings',{method:'POST',body:JSON.stringify({reason:reason.trim()})});await refreshAdmin()}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-seller-approve]').forEach(b=>b.addEventListener('click',()=>adminSellerChange(b.dataset.sellerApprove,'approved')));
  document.querySelectorAll('[data-seller-block]').forEach(b=>b.addEventListener('click',()=>{if(confirm('Отключить продавца от новых заказов?'))adminSellerChange(b.dataset.sellerBlock,'blocked')}));
  const listingChange=async(id,status)=>{
