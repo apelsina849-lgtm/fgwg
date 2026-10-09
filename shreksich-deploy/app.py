@@ -2141,7 +2141,12 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
         item = FARM_RESOURCE_BY_ID.get(r["resource_id"])
         if item:
             inventory.append({**item,"coins":farm_sale_price(item,trader_level),"qty":int(r["qty"] or 0),"total_coins":int(r["qty"] or 0)*farm_sale_price(item,trader_level)})
-    activity_ready = bool(int(state["last_collect_at"] or 0) > int(state["last_activity_at"] or 0) and now-int(state["last_activity_at"] or 0)>=20*3600)
+    # UI must not show a claimable daily reward if the funded pool cannot pay it.
+    activity_ready = bool(
+        int(state["last_collect_at"] or 0) > int(state["last_activity_at"] or 0)
+        and now-int(state["last_activity_at"] or 0)>=20*3600
+        and int(fund["available_credits"] or 0)>=FARM_DAILY_UC_CREDITS
+    )
     mine_progress,mine_ready,mine_rate,mine_next = farm_uc_progress(state,now)
     fund_available = int(fund["available_credits"] or 0) if fund else 0
     return {
@@ -2371,8 +2376,17 @@ async def farm_upgrade(x_telegram_init_data: str | None = Header(default=None)):
             if int(spin["upgrade_points"] or 0) < cost:
                 await conn.rollback()
                 raise HTTPException(409,f"Нужно {cost} SHR")
+            # Snapshot the old-level UC accrual before enabling the higher rate.
+            # Otherwise an upgrade would retroactively award elapsed hours at the
+            # new, faster level; that could consume more UC than budgeted.
+            uc_now = int(time.time())
+            prior_progress,_,_,_ = farm_uc_progress(state,uc_now)
             await conn.execute("UPDATE spin_state SET upgrade_points=upgrade_points-? WHERE telegram_id=?",(cost,uid))
-            await conn.execute("UPDATE farm_state SET level=level+1,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(uid,))
+            await conn.execute(
+                "UPDATE farm_state SET level=level+1,uc_mine_progress=?,"
+                "uc_mine_last_at=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",
+                (prior_progress,uc_now,uid)
+            )
             await conn.execute("INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",(uid,"upgrade",json.dumps({"from":level,"to":level+1,"shr":cost})))
             await conn.commit()
         finally:
@@ -2886,12 +2900,18 @@ async def admin_uc_fund(x_telegram_init_data: str | None = Header(default=None))
         logs = await (await conn.execute(
             "SELECT id,credited_amount,note,created_at FROM uc_mining_fund_log ORDER BY id DESC LIMIT 15"
         )).fetchall()
+        uc_liability = await (await conn.execute(
+            "SELECT COALESCE(SUM(uc_credits),0) outstanding,"
+            "COALESCE(SUM(uc_reserved),0) reserved FROM farm_state"
+        )).fetchone()
     finally:
         await conn.close()
     return {"available":int(pool["available_credits"] or 0),
             "funded":int(pool["funded_credits"] or 0),
             "issued":int(pool["issued_credits"] or 0),
             "gross_stars":int(orders["total"] or 0)+int(cases["total"] or 0),
+            "existing_liability":int(uc_liability["outstanding"] or 0),
+            "reserved_liability":int(uc_liability["reserved"] or 0),
             "history":[dict(r) for r in logs]}
 
 @app.post("/api/admin/uc-fund")
@@ -5559,7 +5579,9 @@ function adminUcFunding(){
  '<div class="metrics">'+metric('ДОСТУПНО',Number(d.available||0)+' UC')+
  metric('ВЫДЕЛЕНО',Number(d.funded||0)+' UC')+
  metric('ВЫДАНО',Number(d.issued||0)+' UC')+
- metric('ОПЛАТЫ ⭐ (ВАЛОВЫЕ)',Number(d.gross_stars||0)+' ⭐')+'</div>'+
+ metric('ОПЛАТЫ ⭐ (ВАЛОВЫЕ)',Number(d.gross_stars||0)+' ⭐')+
+ metric('UC НА БАЛАНСАХ',Number(d.existing_liability||0)+' UC')+
+ metric('UC В ЗАЯВКАХ',Number(d.reserved_liability||0)+' UC')+'</div>'+
  '<div class="card" style="margin-top:12px;border-color:#3f8099"><h3>Пополнение из подтверждённой прибыли</h3>'+
  '<div class="muted" style="line-height:1.6;margin-bottom:12px">Stars здесь показаны как валовая выручка. До пополнения вычти комиссии, возвраты, себестоимость выданного лута и покупки UC. Выделяй только UC Credits, которые уже покрыты реальной чистой прибылью. Пока фонд пуст, новые UC не выдаются.</div>'+
  '<input id="ucFundAmount" type="number" min="1" max="100000" placeholder="Количество UC Credits">'+
