@@ -521,6 +521,33 @@ def record_usage(cid,uid,kind,success=True):
     with db() as conn:
         conn.execute("INSERT INTO usage_stats(chat_id,user_id,kind,ts,success) VALUES(?,?,?,?,?)",(cid,uid,kind,int(time.time()),int(success)))
 
+RIDDLES=[
+    ("Что становится больше, когда из него что-то убирают?",["Яма","Рюкзак","Камень"],0),
+    ("Что можно увидеть с закрытыми глазами?",["Сон","Прицел","Карту"],0),
+    ("Что принадлежит тебе, но другие используют чаще?",["Имя","Броня","Оружие"],0),
+]
+def challenge_text(cid,uid):
+    day=time.strftime("%Y-%m-%d",time.gmtime())
+    with db() as conn:
+        rows={k:v for k,v in conn.execute("SELECT kind,completed FROM challenges WHERE chat_id=? AND user_id=? AND day=?",(cid,uid,day))}
+    return "🎯 ИСПЫТАНИЯ ДНЯ (UTC)\\n🧩 Загадка: "+("готово" if rows.get("riddle") else "доступна")+"\\n⚔️ Дуэль знаний: "+("готово" if rows.get("duel") else "доступна")+"\\nНапиши «дай загадку» или «вызвать на дуэль»."
+
+def reward_challenge(cid,uid,kind,amount):
+    day=time.strftime("%Y-%m-%d",time.gmtime())
+    with db() as conn:
+        result=conn.execute("INSERT OR IGNORE INTO challenges(chat_id,user_id,day,kind,completed) VALUES(?,?,?,?,1)",(cid,uid,day,kind))
+        if not result.rowcount: return False
+        conn.execute("INSERT OR IGNORE INTO profiles(chat_id,user_id,name,xp,last_xp) VALUES(?,?,?,0,0)",(cid,uid,"Игрок"))
+        conn.execute("UPDATE profiles SET xp=xp+? WHERE chat_id=? AND user_id=?",(amount,cid,uid))
+        season=int(time.time())//(30*86400)
+        conn.execute("INSERT INTO seasonal_xp(chat_id,user_id,season,xp) VALUES(?,?,?,?) ON CONFLICT(chat_id,user_id,season) DO UPDATE SET xp=xp+excluded.xp",(cid,uid,season,amount))
+    return True
+
+def challenge_question(uid):
+    index=(int(time.time())//86400+uid)%len(RIDDLES)
+    question,answers,_=RIDDLES[index]
+    return index,question,answers
+
 def user_group(uid):
     with db() as conn:
         row=conn.execute("SELECT active_chat FROM user_preferences WHERE user_id=?",(uid,)).fetchone()
