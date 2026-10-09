@@ -25,7 +25,7 @@ QUESTIONS = [
     ("Что важнее при эвакуации с ценным лутом?", ["Игнорировать карту", "Планировать безопасный маршрут", "Выбрасывать всё"], 1),
     ("Где безопаснее подтверждать обмены предметами Шрексича?", ["В личке незнакомца", "Через официальный интерфейс проекта", "По скриншоту"], 1),
 ]
-SCAM = re.compile(r"(?:telegram\\.gift|t\\.me/[^\\s]+\\?start=|бесплатн.{0,20}(?:uc|зв[её]зд)|пришли.{0,20}(?:пароль|код входа)|переведи.{0,30}(?:на карту|на кошел[её]к))", re.I)
+SCAM = re.compile(r"(?:telegram\.gift|t\.me/[^\s]+\\?start=|бесплатн.{0,20}(?:uc|зв[её]зд)|пришли.{0,20}(?:пароль|код входа)|переведи.{0,30}(?:на карту|на кошел[её]к))", re.I)
 FLOOD = {}
 def db():
     c = sqlite3.connect(DB_PATH)
@@ -81,7 +81,7 @@ async def handle(msg):
             return
     cmd=text.split()[0].split("@")[0].lower()
     if cmd in ("/start","/help"):
-        await send(cid,"🐸 SHREKSICH AI\\n/ai вопрос — ИИ-помощник\\n/quiz — викторина без денежных наград\\n/answer 1, 2 или 3 — ответ\\n/trade предмет — объявление о поиске обмена\\n/trades — последние объявления\\n/shop — официальный магазин\\n/guardstats — статистика модерации (админ)\\nОбмены и выплаты пока НЕ совершаются этим ботом.")
+        await send(cid,"🐸 ШРЕКСИЧ • ПОМОЩНИК\n\n🤖 /ai вопрос — спросить помощника\n🎮 /quiz — начать викторину\n✅ /answer 1 — выбрать ответ\n🤝 /trade описание — предложить обмен\n📋 /trades — объявления игроков\n🛒 /shop — открыть магазин\n🛡 /guardstats — отчёт для модераторов\n\n⚠️ Объявления об обмене не гарантируют безопасность сделки. Бот не переводит предметы и не выдаёт награды.")
     elif cmd=="/shop": await send(cid,SHOP_URL)
     elif cmd=="/ai":
         question=text.partition(" ")[2].strip()
@@ -96,7 +96,7 @@ async def handle(msg):
             index=random.randrange(len(QUESTIONS))
             c.execute("INSERT OR REPLACE INTO quiz VALUES(?,?,?,NULL)",(cid,index,int(now)+120))
         q,answers,_=QUESTIONS[index]
-        await send(cid,"🎮 Викторина (120 секунд, без наград)\\n"+q+"\\n"+"\\n".join(f"{i+1}. {a}" for i,a in enumerate(answers))+"\\nОтвет: /answer 1")
+        await send(cid,"🎮 ВИКТОРИНА • 2 минуты\n\n"+q+"\n"+"\n".join(f"{i+1}. {a}" for i,a in enumerate(answers))+"\n\n✍️ Для ответа отправь /answer 1, /answer 2 или /answer 3.\n🏅 Игра без денежных наград.")
     elif cmd=="/answer":
         choice=text.partition(" ")[2].strip()
         with db() as c:
@@ -123,10 +123,10 @@ async def handle(msg):
         await send(cid,"✅ Объявление добавлено. Внимание: это поиск партнёра, не защищённая сделка. Не передавай предметы до подтверждения через официальный интерфейс.")
     elif cmd=="/trades":
         with db() as c: rows=c.execute("SELECT id,offer FROM trades WHERE chat_id=? AND created>? ORDER BY id DESC LIMIT 5",(cid,int(now)-86400)).fetchall()
-        await send(cid,"Последние объявления:\\n"+"\\n".join(f"#{i}: {s}" for i,s in rows) if rows else "Объявлений за сутки нет.")
+        await send(cid,"🤝 ОБЪЯВЛЕНИЯ ОБ ОБМЕНЕ\n\n"+"\n".join(f"#{i}: {s}" for i,s in rows) if rows else "Объявлений за сутки нет.")
     elif cmd=="/guardstats" and uid in ADMIN_IDS:
         with db() as c: rows=c.execute("SELECT kind,COUNT(*) FROM events WHERE chat_id=? AND ts>? GROUP BY kind",(cid,int(now)-86400)).fetchall()
-        await send(cid,"События за 24 часа:\\n"+(" | ".join(f"{k}: {n}" for k,n in rows) or "Нет событий"))
+        await send(cid,"События за 24 часа:\n"+(" | ".join(f"{k}: {n}" for k,n in rows) or "Нет событий"))
 async def main():
     db().close()
     me=await call("getMe")
