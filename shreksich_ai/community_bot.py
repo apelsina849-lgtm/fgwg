@@ -378,6 +378,48 @@ def options(cid):
         row=conn.execute("SELECT cooldown,reward FROM bot_options WHERE chat_id=?",(cid,)).fetchone()
     return row or (15,25)
 
+def user_group(uid):
+    with db() as conn:
+        row=conn.execute("SELECT active_chat FROM user_preferences WHERE user_id=?",(uid,)).fetchone()
+        if row and row[0]: return row[0]
+        row=conn.execute("SELECT chat_id FROM profiles WHERE user_id=? ORDER BY last_xp DESC LIMIT 1",(uid,)).fetchone()
+        if not row: return None
+        conn.execute("INSERT INTO user_preferences(user_id,active_chat) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET active_chat=excluded.active_chat",(uid,row[0]))
+        return row[0]
+
+def private_menu(uid):
+    return keyboard([
+        [{"text":"⭐ Мой XP","callback_data":"me:profile"},{"text":"🎯 Задания","callback_data":"me:daily"}],
+        [{"text":"🏆 Рейтинг","callback_data":"me:top"},{"text":"🏅 Достижения","callback_data":"me:achievements"}],
+        [{"text":"🎁 Забрать XP","callback_data":"me:claim"},{"text":"🎮 Найти команду","callback_data":"me:team"}],
+        [{"text":"🔒 Приватность и память","callback_data":"me:privacy"},{"text":"🛒 Магазин","url":SHOP_URL}],
+    ])
+
+def privacy_text(uid):
+    with db() as conn:
+        row=conn.execute("SELECT ai_memory FROM user_preferences WHERE user_id=?",(uid,)).fetchone()
+    return "🔒 Личные настройки\\nПамять диалогов: "+("включена" if not row or row[0] else "выключена")+"\\nНикому не показываем ваши персональные ответы в группе."
+
+async def private_answer(uid,question,cid):
+    if cid is None:
+        await send(uid,"Сначала напиши Шреку в группе сообщества, чтобы привязать свой профиль.")
+        return
+    direct=await shrek_intent_reply(cid,uid,question)
+    if direct is not None:
+        await send(uid,direct,reply_markup=private_menu(uid))
+        return
+    persona,enabled,_=group_pref(cid)
+    if not enabled:
+        await send(uid,"ИИ временно отключён администратором.")
+        return
+    style={"friendly":"Ты Шрек, дружелюбный игровой помощник.","expert":"Ты Шрек, эксперт по PUBG Mobile Metro Royale. Не выдумывай цены и патчи.","serious":"Ты Шрек, точный и спокойный помощник."}.get(persona,"Ты Шрек, игровой помощник.")
+    with db() as conn:
+        pref=conn.execute("SELECT ai_memory FROM user_preferences WHERE user_id=?",(uid,)).fetchone()
+    use_memory=not pref or bool(pref[0])
+    answer=await ask_ai(style+"\\n"+(memory_context(cid,uid,question) if use_memory else question))
+    await send(uid,answer,reply_markup=private_menu(uid))
+    if use_memory: remember(cid,uid,question,answer)
+
 def shrek_intent(question):
     q=question.lower().strip(" .!?")
     if any(w in q for w in ("забрать награду","получить награду","забрать xp","забрать опыт","получить xp")): return "claim"
