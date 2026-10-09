@@ -103,10 +103,11 @@ def admin_menu(row):
 def admin_text(row):
     cid,enabled,interval,_=row
     persona,ai_on,xp_on=group_pref(cid)
+    cooldown,reward=options(cid)
     return (f"🐸 SHREKSICH AI 2.0 • ПАНЕЛЬ ВЛАДЕЛЬЦА\n\nЧат: {cid}\n"
             f"ИИ: {'включён' if ai_on else 'выключен'}\nХарактер: {persona}\n"
             f"XP: {'включён' if xp_on else 'выключен'}\n"
-            f"Автовикторины: {'включены' if enabled else 'выключены'} (каждые {interval} мин)")
+            f"Автовикторины: {'включены' if enabled else 'выключены'} (каждые {interval} мин)"+chr(10)+f"Ответы ИИ: не чаще раза в {cooldown} сек"+chr(10)+f"Награда за викторину: {reward} XP")
 def admin_stats(cid):
     with db() as conn:
         players=conn.execute("SELECT COUNT(*) FROM profiles WHERE chat_id=?",(cid,)).fetchone()[0]
