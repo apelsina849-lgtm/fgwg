@@ -142,6 +142,17 @@ async def periodic_quizzes():
                 await quiz_start(cid)
             except Exception:
                 LOG.exception("Scheduled quiz failed in chat %s",cid)
+        with db() as conn:
+            events=conn.execute("SELECT chat_id,title FROM events_schedule WHERE starts_at>0 AND starts_at<=?",(now,)).fetchall()
+            for cid,title in events:
+                conn.execute("UPDATE events_schedule SET starts_at=0 WHERE chat_id=?",(cid,))
+        for cid,title in events:
+            try:
+                with db() as conn:
+                    count=conn.execute("SELECT COUNT(*) FROM event_signups WHERE chat_id=?",(cid,)).fetchone()[0]
+                await send(cid,f"🎪 {title} начинается! Зарегистрировались: {count}. Удачной игры!")
+            except Exception:
+                LOG.exception("Event announcement failed")
 def leaderboard(cid):
     with db() as conn:
         rows=conn.execute("SELECT name,wins FROM scores WHERE chat_id=? ORDER BY wins DESC LIMIT 10",(cid,)).fetchall()
