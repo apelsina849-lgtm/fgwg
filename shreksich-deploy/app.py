@@ -3140,7 +3140,7 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 /* live big wins */
 .wins{height:42px;border:1px solid #2a2f35;background:#0d1013;border-radius:14px;overflow:hidden;margin:0 0 16px;display:flex;align-items:center;position:relative}
 .wins:before{content:"LIVE";position:absolute;z-index:3;left:0;top:0;bottom:0;display:flex;align-items:center;padding:0 10px;font-size:10px;font-weight:950;color:#111;background:linear-gradient(135deg,#ffd431,#f4a900);box-shadow:7px 0 18px #000}
-.wins-track{display:flex;align-items:center;gap:28px;white-space:nowrap;width:max-content;padding-left:65px;animation:ticker 12s linear infinite}
+.wins-track{display:flex;align-items:center;gap:28px;white-space:nowrap;width:max-content;padding-left:65px;animation:ticker 24s linear infinite;will-change:transform}
 .win-item{font-size:12px;font-weight:800}.win-item.legendary,.win-item.gold{color:#ffd85c;text-shadow:0 0 14px #ffc40088}.win-item.mythic,.win-item.red{color:#ff6262;text-shadow:0 0 14px #ff202088}
 @keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 
@@ -3326,7 +3326,7 @@ body.keyboard-open .wrap{padding-bottom:30px}
 <body>
 <div class="wrap">
   <div class="top"><div class="brand">ШРЕКСИЧ <b>SHOP</b></div><div class="pill">PUBG MOBILE</div></div>
-  <div class="wins" id="winsTicker"><div class="wins-track"><span class="muted">Загружаем крупные выигрыши…</span></div></div>
+  <div class="wins" id="winsTicker" title="Крупные выигрыши всех игроков Шрексича"><div class="wins-track"><span class="muted">Загружаем крупные выигрыши…</span></div></div>
   <main id="app"><div class="empty">Загрузка магазина…</div></main>
 </div>
 <div class="nav" id="nav">
@@ -3555,11 +3555,17 @@ function go(t){
  tab=t;render()
 }
 
+let lastWinsFingerprint='';
 async function loadWinsFeed(){
  try{
+  // Глобальная история редких выигрышей. У всех пользователей отображается один поток.
   const wins=await api('/api/wins-feed');
   const el=document.querySelector('#winsTicker .wins-track');if(!el)return;
-  if(!wins.length){el.innerHTML='<span class="muted">Пока ждём первый Legendary / Mythic дроп</span>';return}
+  const fingerprint=JSON.stringify(wins.map(x=>[x.id,x.player,x.reward_name,x.reward_tier]));
+  if(fingerprint===lastWinsFingerprint)return; // Не перезапускаем CSS-анимацию каждые 20 секунд.
+  lastWinsFingerprint=fingerprint;
+  if(!wins.length){el.innerHTML='<span class="muted">Пока нет крупных выигрышей игроков</span>';el.style.animation='none';return}
+  el.style.animation='';
   const one=wins.map(x=>'<span class="win-item '+String(x.reward_tier).toLowerCase()+'">'+(x.reward_tier==='RED'||x.reward_tier==='MYTHIC'?'◆':'★')+' '+esc(x.player)+' выбил '+esc(x.reward_name)+' <b>'+esc(x.reward_tier)+'</b></span>').join('');
   el.innerHTML=one+one;
  }catch(_){}
