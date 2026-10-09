@@ -685,6 +685,25 @@ async def start_duel(uid,cid):
     except Exception:
         await send(uid,"Напарник ещё не открыл личный чат с ботом. Приглашение доставлено только тебе.")
 
+def raid_summary(cid,uid):
+    with db() as conn:
+        row=conn.execute("SELECT COUNT(*),COALESCE(SUM(loot-investment),0),COALESCE(SUM(escaped),0),COALESCE(SUM(investment),0),COALESCE(SUM(loot),0) FROM raid_history WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()
+    n,profit,escapes,cost,loot=row
+    return f"📊 ТВОИ РЕЙДЫ\\nВсего: {n}\\nУспешных эвакуаций: {escapes}\\nПроцент эвакуаций: {round(100*escapes/n) if n else 0}%\\nВложения: {cost:,}\\nДобыча: {loot:,}\\nУсловная прибыль: {profit:+,}\\n\\nЧтобы записать рейд, напиши «рейд 10000 18000 да» (вложения, добыча, эвакуация). Значения вводи в одной игровой валюте."
+
+def save_raid(cid,uid,question):
+    parts=question.lower().split()
+    if len(parts)!=4 or parts[0]!="рейд": return None
+    try:
+        cost=int(parts[1]);loot=int(parts[2])
+    except ValueError:
+        return "Формат: рейд 10000 18000 да"
+    if cost<0 or loot<0 or cost>10**12 or loot>10**12: return "Укажи корректные суммы."
+    if parts[3] not in ("да","нет"): return "Последнее слово: да или нет (успешная эвакуация)."
+    with db() as conn:
+        conn.execute("INSERT INTO raid_history(chat_id,user_id,ts,investment,loot,escaped) VALUES(?,?,?,?,?,?)",(cid,uid,int(time.time()),cost,loot,int(parts[3]=="да")))
+    return f"📊 Рейд записан. Результат: {loot-cost:+,} игровой валюты. Для статистики напиши «мои рейды»."
+
 def user_group(uid):
     with db() as conn:
         row=conn.execute("SELECT active_chat FROM user_preferences WHERE user_id=?",(uid,)).fetchone()
@@ -727,6 +746,13 @@ async def private_answer(uid,question,cid):
         await send(uid,"Сначала напиши Шреку в группе сообщества, чтобы привязать свой профиль.")
         return
     q=question.lower()
+    raid=save_raid(cid,uid,question)
+    if raid is not None:
+        await send(uid,raid,reply_markup=private_menu(uid))
+        return
+    if "мои рейды" in q or "статистика рейдов" in q:
+        await send(uid,raid_summary(cid,uid),reply_markup=private_menu(uid))
+        return
     if "забрать награды пропуска" in q or "забрать награду пропуска" in q:
         await send(uid,claim_pass(cid,uid),reply_markup=private_menu(uid))
         return
