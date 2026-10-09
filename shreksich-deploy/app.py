@@ -4147,30 +4147,125 @@ async function resolveInventory(id,action,btn){
  }catch(e){if(btn)btn.disabled=false;alert(e.message)}
 }
 
+
+let farmCatalogExpanded=false;
+let farmCatalogFilter='ALL';
+let farmCachedData=null;
+let farmCoinSerial=0;
+function farmCoinIcon(){
+ const id='shxcoin'+(++farmCoinSerial);
+ return '<svg viewBox="0 0 100 100" aria-label="ShrekCOIN" role="img"><defs>'+
+ '<linearGradient id="'+id+'" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fff5b9"/><stop offset=".27" stop-color="#f5cc52"/><stop offset=".58" stop-color="#c68118"/><stop offset=".8" stop-color="#ffe07d"/><stop offset="1" stop-color="#905411"/></linearGradient></defs>'+
+ '<ellipse cx="50" cy="55" rx="43" ry="42" fill="#714314"/><circle cx="50" cy="47" r="42" fill="url(#'+id+')" stroke="#ffdf81" stroke-width="2.5"/>'+
+ '<circle cx="50" cy="47" r="32" fill="none" stroke="#9d651d" stroke-width="3"/><circle cx="50" cy="47" r="35" fill="none" stroke="#ffeb9d" stroke-width="1"/>'+
+ '<path d="M24 30Q50 7 78 30" fill="none" stroke="#ffedac" stroke-width="2" opacity=".65"/>'+
+ '<text x="50" y="45" font-family="Arial,sans-serif" font-size="17" font-weight="1000" letter-spacing="-.8" text-anchor="middle" fill="#69380b">Shrek</text>'+
+ '<text x="50" y="61" font-family="Arial,sans-serif" font-size="14" font-weight="1000" text-anchor="middle" fill="#69380b">COIN</text></svg>';
+}
+function farmUcIcon(){
+ return '<svg viewBox="0 0 100 100" aria-label="UC Credits" role="img"><defs><linearGradient id="shxucgloss" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#c8f1ff"/><stop offset=".42" stop-color="#397caa"/><stop offset="1" stop-color="#0c2e4c"/></linearGradient></defs>'+
+ '<path d="M19 8L80 8 92 24 92 74 80 90 19 90 8 74 8 24Z" fill="#12283a" stroke="#79b8d2" stroke-width="3"/>'+
+ '<path d="M23 14L77 14 85 26 85 72 77 83 23 83 15 72 15 26Z" fill="url(#shxucgloss)" stroke="#d0f4ff" stroke-width="1.5"/>'+
+ '<path d="M18 21L82 21" stroke="#edfaff" stroke-width="2" opacity=".5"/>'+
+ '<text x="50" y="60" fill="#f4fdff" font-family="Arial,sans-serif" font-size="32" font-weight="1000" text-anchor="middle" stroke="#15324d" stroke-width="1" paint-order="stroke">UC</text>'+
+ '<text x="50" y="73" fill="#e8faff" font-family="Arial,sans-serif" font-size="9" font-weight="900" letter-spacing=".5" text-anchor="middle">CREDITS</text></svg>';
+}
+function farmPrice(value){return '<span class="farm-currency-inline">'+farmCoinIcon()+' '+Number(value).toLocaleString('ru-RU')+'</span>'}
+function farmItemSticker(item){
+ return '<div class="farm-collectible" data-tier="'+esc(item.tier)+'" aria-label="'+esc(item.name)+'"><span class="farm-collectible-shine"></span><span class="farm-collectible-icon">'+esc(item.icon)+'</span></div>'
+}
+function farmScene(d){
+ return '<div class="farm-landscape stage-'+d.stage+'"><svg viewBox="0 0 790 344" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Деревенская ферма, амбар, поле и деревянный забор">'+
+ '<defs><linearGradient id="shxFarmSky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#8ebccc"/><stop offset=".6" stop-color="#eed6a1"/><stop offset="1" stop-color="#f0be78"/></linearGradient>'+
+ '<linearGradient id="shxFarmGrass" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#69834c"/><stop offset=".6" stop-color="#405b2c"/><stop offset="1" stop-color="#25391c"/></linearGradient>'+
+ '<linearGradient id="shxFarmWood" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#b17e48"/><stop offset=".5" stop-color="#7d4b2c"/><stop offset="1" stop-color="#44271a"/></linearGradient>'+
+ '<linearGradient id="shxFarmRoof" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9a6545"/><stop offset=".55" stop-color="#623823"/><stop offset="1" stop-color="#39271e"/></linearGradient>'+
+ '</defs>'+
+ '<rect width="790" height="344" fill="url(#shxFarmSky)"/>'+
+ '<circle cx="638" cy="73" r="46" fill="#fff0b3" opacity=".8"/><circle cx="638" cy="73" r="69" fill="#fff5c5" opacity=".16"/>'+
+ '<path d="M0 160Q110 95 238 148Q367 98 504 156Q665 96 790 147V344H0Z" fill="#9ab080"/>'+
+ '<path d="M0 194Q122 150 257 184Q400 143 528 180Q674 151 790 187V344H0Z" fill="#6e8553"/>'+
+ '<path d="M0 226Q280 186 790 215V344H0Z" fill="url(#shxFarmGrass)"/>'+
+ '<path d="M0 278Q390 235 790 269V344H0Z" fill="#654931" opacity=".8"/>'+
+ '<path d="M-15 318Q230 269 790 315" stroke="#ac8050" stroke-width="12" opacity=".5" fill="none"/>'+
+ '<path d="M40 344Q180 288 382 310M285 344Q400 307 555 308M520 344Q659 294 800 318" stroke="#271e13" stroke-width="8" opacity=".38" fill="none"/>'+
+ '<g opacity=".76" fill="#344c2b"><path d="M35 179L62 99 99 179Z"/><path d="M78 185L123 86 168 185Z"/><path d="M661 185L710 87 758 185Z"/><path d="M731 200L780 109 826 200Z"/></g>'+
+ '<g><path d="M105 262L109 171" stroke="#50391e" stroke-width="13"/><circle cx="105" cy="163" r="52" fill="#577044"/><circle cx="80" cy="175" r="37" fill="#6e844f"/><circle cx="124" cy="157" r="40" fill="#6b7e49"/></g>'+
+ '<g transform="translate(300 93)"><path d="M-38 88L123 12 284 85V212H-38Z" fill="url(#shxFarmWood)" stroke="#452819" stroke-width="6"/>'+
+ '<path d="M-69 89L123 -10 304 88 281 109 123 29 -42 112Z" fill="url(#shxFarmRoof)" stroke="#2c2018" stroke-width="7"/>'+
+ '<path d="M-41 106L126 30 283 104" fill="none" stroke="#e6ae6c" stroke-width="3" opacity=".6"/>'+
+ '<g stroke="#dca875" stroke-width="2" opacity=".35"><path d="M-13 101V208M14 87V207M42 72V207M67 59V207M92 44V207M140 46V205M168 60V207M196 73V207M224 86V208M250 100V208"/></g>'+
+ '<path d="M76 212V129Q123 88 170 129V212Z" fill="#34251c" stroke="#dbad79" stroke-width="6"/>'+
+ '<path d="M123 107V212" stroke="#ddaa69" stroke-width="5"/><path d="M90 144L158 194M154 144L91 194" stroke="#ae7344" stroke-width="8"/>'+
+ '<rect x="195" y="127" width="49" height="44" fill="#362f21" stroke="#d6b180" stroke-width="7"/><path d="M218 129V170M197 148H244" stroke="#c7aa7d" stroke-width="5"/>'+
+ '<path d="M-20 211H279" stroke="#694525" stroke-width="9"/></g>'+
+ '<g transform="translate(112 253)"><path d="M0 20H226" stroke="#ad8858" stroke-width="10"/><path d="M16 -20V52M69 -18V50M122 -19V50M177 -20V50M215 -20V50" stroke="#d1a16c" stroke-width="11"/><path d="M0 -11H226" stroke="#a77942" stroke-width="6"/></g>'+
+ '<g transform="translate(550 241)"><path d="M-12 37H165" stroke="#bb955b" stroke-width="11"/><path d="M10 0V77M55 0V77M100 0V77M151 0V77" stroke="#cfab74" stroke-width="11"/><path d="M-12 15H165" stroke="#98713f" stroke-width="8"/></g>'+
+ '<g transform="translate(50 258)"><path d="M15 48L62 14 137 24 106 70Z" fill="#b28045" stroke="#5e4026" stroke-width="5"/>'+
+ '<path d="M44 26L70 12 138 24 106 43Z" fill="#e5bc73"/><circle cx="46" cy="73" r="16" fill="#493626" stroke="#c39f67" stroke-width="5"/><circle cx="117" cy="78" r="16" fill="#493626" stroke="#c39f67" stroke-width="5"/></g>'+
+ '<g fill="#86a45c" stroke="#385b27" stroke-width="3"><path d="M229 318Q211 274 200 292M233 317Q249 278 265 287M247 334Q255 294 281 305M670 339Q662 284 638 294M690 340Q700 296 722 312"/></g>'+
+ '<g transform="translate(565 296)"><rect width="55" height="31" rx="5" fill="#c8a36e" stroke="#755236" stroke-width="3"/><path d="M0 12H55M17 0V30M37 0V30" stroke="#ad8455" stroke-width="2"/></g>'+
+ '</svg><div class="farm-landscape-title"><span>Твоя деревенская ферма</span><span class="farm-stage-pill">ЭТАП '+d.stage+' / 5</span></div></div>';
+}
+function farmCatalogCards(d){
+ const data=d||farmCachedData;
+ if(!data)return '';
+ const all=data.resources||[];
+ const counts={};all.forEach(x=>{counts[x.tier]=(counts[x.tier]||0)+1});
+ const pool=all.filter(x=>farmCatalogFilter==='ALL'||x.tier===farmCatalogFilter).slice().sort((a,b)=>FARM_TIER_ORDER_JS.indexOf(a.tier)-FARM_TIER_ORDER_JS.indexOf(b.tier)||Number(a.coins)-Number(b.coins));
+ return pool.map(x=>{
+   const odds=Number((data.tier_weights||{})[x.tier]||0)/(counts[x.tier]||1);
+   const pct=odds===0?'0':odds<.01?odds.toFixed(4):odds<1?odds.toFixed(3):odds.toFixed(2);
+   return '<div class="farm-catalog-card" data-tier="'+esc(x.tier)+'">'+farmItemSticker(x)+
+   '<h4>'+esc(x.name)+'</h4><span class="farm-rarity-label '+esc(x.tier)+'">'+tierLabel(x.tier)+'</span>'+
+   farmPrice(x.coins)+'<span class="farm-chance-text">Шанс: '+pct+'% на ур. '+data.level+'</span></div>';
+ }).join('') || '<div class="empty">Нет предметов этой редкости</div>';
+}
 async function farmHtml(){
  const d=await api('/api/farm');
- const chances=Object.entries(d.tier_weights||{}).filter(x=>Number(x[1])>0.01).map(([t,p])=>'<span class="farm-chance '+tierClass(t)+'">'+tierLabel(t)+' '+Number(p).toFixed(p<1?2:1)+'%</span>').join('');
+ farmCachedData=d;
+ const chanceOrder=FARM_TIER_ORDER_JS.map(t=>[t,Number((d.tier_weights||{})[t]||0)]);
+ const chances=chanceOrder.filter(x=>x[1]>.0001).map(([t,p])=>'<span class="farm-chance '+tierClass(t)+'">'+tierLabel(t)+' '+Number(p).toFixed(p<1?2:1)+'%</span>').join('');
  const items=(d.inventory||[]).slice().sort((a,b)=>FARM_TIER_ORDER_JS.indexOf(a.tier)-FARM_TIER_ORDER_JS.indexOf(b.tier)||Number(a.coins)-Number(b.coins)).map(x=>
-  '<div class="farm-item"><div class="farm-item-head"><div class="farm-item-icon">'+esc(x.icon)+'</div><div><div class="farm-item-name">'+esc(x.name)+'</div><div class="'+tierClass(x.tier)+'">'+tierLabel(x.tier)+' • x'+x.qty+'</div></div></div><div class="farm-item-meta">Продажа: 🟢 '+x.coins+' ShrekCOINS / шт. • всего '+x.total_coins+'</div><button class="secondary" data-farm-sell="'+esc(x.id)+'" data-farm-qty="'+x.qty+'">Продать всё</button></div>'
+  '<div class="farm-item"><div class="farm-item-head"><div class="farm-item-icon">'+farmItemSticker(x)+'</div><div><div class="farm-item-name">'+esc(x.name)+'</div><span class="farm-rarity-label '+esc(x.tier)+'">'+tierLabel(x.tier)+'</span><div class="farm-item-meta">В наличии: '+x.qty+' шт.</div></div></div><div class="farm-item-meta">За шт.: '+farmPrice(x.coins)+'<br>Итого: '+farmPrice(x.total_coins)+'</div><button class="secondary" data-farm-sell="'+esc(x.id)+'" data-farm-qty="'+x.qty+'">Продать '+x.qty+' шт.</button></div>'
  ).join('');
  const withdrawals=(d.withdrawals||[]).map(w=>'<div class="order"><div class="name">'+w.uc_amount+' UC • '+esc(w.status)+'</div><div class="mini">UID '+esc(w.pubg_uid)+' • '+formatDropDate(w.created_at)+'</div></div>').join('');
- const upText=d.level>=d.max_level?'МАКСИМАЛЬНЫЙ УРОВЕНЬ':'УЛУЧШИТЬ ЗА '+d.upgrade_cost+' SHR';
- const modules=(d.coin_upgrades||[]).map(m=>'<div class="farm-module"><div class="farm-module-header"><span class="farm-module-icon">'+esc(m.icon)+'</span>'+esc(m.name)+'</div><div class="farm-module-desc">'+esc(m.description)+'</div><div class="mini">Уровень '+m.level+' / '+m.max_level+'</div><div class="farm-module-progress"><span style="width:'+(100*m.level/m.max_level)+'%"></span></div><button class="secondary" data-farm-module="'+esc(m.id)+'" '+(m.level>=m.max_level||d.shrek_coins<m.cost?'disabled':'')+'>'+(m.level>=m.max_level?'МАКС. УРОВЕНЬ':'УЛУЧШИТЬ • 🟢 '+m.cost)+'</button></div>').join('');
- return '<section class="hero"><div class="cat">METRO FARM</div><h1>Ферма ресурсов</h1><div class="muted">Прокачивайте ферму за SHR. Чем выше уровень, тем быстрее добыча, больше склад и выше шанс редкого Metro-ресурса.</div></section>'+
- '<div class="farm-scene stage-'+d.stage+'"><div class="farm-sky"></div><div class="farm-ground"></div><div class="farm-conveyor"></div><div class="farm-core"></div><div class="farm-tower left"></div><div class="farm-tower right"></div><div class="farm-drone">🚁</div><div class="farm-crate">📦</div><div class="farm-level-badge">LEVEL '+d.level+' / '+d.max_level+' • STAGE '+d.stage+'</div></div>'+
- '<div class="farm-metrics"><div class="farm-metric"><span class="mini">SHR</span><b>'+d.shr+'</b></div><div class="farm-metric"><span class="mini">SHREKCOINS</span><b>🟢 '+d.shrek_coins+'</b></div><div class="farm-metric"><span class="mini">UC CREDITS</span><b>🎮 '+d.uc_available+'</b></div></div>'+
- '<div class="farm-actions"><button class="buy" id="farmCollect" '+(d.available_cycles<=0?'disabled':'')+'>СОБРАТЬ ДОБЫЧУ • '+d.available_cycles+'</button><button class="secondary" id="farmUpgrade" '+(d.level>=d.max_level?'disabled':'')+'>'+upText+'</button></div>'+
- '<div class="mini">Склад: '+d.stored+' / '+d.capacity+' • цикл '+Math.ceil(d.interval_seconds/60)+' мин • до следующего '+formatReset(d.next_cycle_seconds)+'</div>'+
- '<div class="farm-tier-chances">'+chances+'</div>'+ 
- '<h3>Модули фермы за ShrekCOINS</h3><div class="mini">Монеты от продажи добычи можно тратить на развитие фермы. Модули постоянные.</div><div class="farm-modules">'+modules+'</div>'+
- '<div class="farm-activity"><div class="cat">НАГРАДА ЗА АКТИВНОСТЬ</div><div><b>Серия: '+d.activity_streak+' дн.</b> • всего активных дней '+d.activity_total+'</div><div class="muted">Соберите добычу и заберите +'+d.daily_uc_credits+' UC Credits. Каждый 7-й день серии — бесплатный билет CASE29, каждый 30-й — CASE79.</div><button class="buy" id="farmActivity" style="margin-top:9px" '+(d.activity_ready?'':'disabled')+'>'+(d.activity_ready?'ЗАБРАТЬ НАГРАДУ':'СНАЧАЛА СОБЕРИТЕ ДОБЫЧУ')+'</button></div>'+
- '<div class="row" style="align-items:center"><h3 style="margin:0;flex:1">Склад фермы</h3><button class="secondary" id="farmSellAll" '+((d.inventory||[]).length?'':'disabled')+'>Продать всё</button></div>'+
- '<div class="farm-inventory">'+(items||'<div class="empty">Склад пуст. Дождитесь добычи и нажмите «Собрать».</div>')+'</div>'+
- '<div class="farm-withdraw"><div class="cat">ВЫВОД UC</div><div class="muted">Выводимый баланс — UC Credits за активность. ShrekCOINS остаются игровой валютой фермы.</div><div class="row"><input id="farmPubgUid" placeholder="PUBG UID"><select id="farmUcAmount"><option value="120">120 UC</option><option value="325">325 UC</option><option value="660">660 UC</option><option value="1800">1800 UC</option></select></div><button class="buy" id="farmWithdraw" style="margin-top:8px" '+(Number(d.uc_available)<120?'disabled':'')+'>СОЗДАТЬ ЗАЯВКУ НА UC</button></div>'+
- '<h3>Последние заявки</h3>'+(withdrawals||'<div class="empty">Заявок на UC пока нет.</div>')
+ const modules=(d.coin_upgrades||[]).map(m=>'<div class="farm-module"><div class="farm-module-header"><span class="farm-module-icon">'+esc(m.icon)+'</span>'+esc(m.name)+'</div><div class="farm-module-desc">'+esc(m.description)+'</div><div class="mini">Уровень '+m.level+' / '+m.max_level+'</div><div class="farm-module-progress"><span style="width:'+(100*m.level/m.max_level)+'%"></span></div><button class="secondary" data-farm-module="'+esc(m.id)+'" '+(m.level>=m.max_level||d.shrek_coins<m.cost?'disabled':'')+'>'+(m.level>=m.max_level?'МАКС. УРОВЕНЬ':'УЛУЧШИТЬ • '+m.cost+' монет')+'</button></div>').join('');
+ const targets=(d.uc_targets||[]).map(t=>'<div class="farm-uc-target '+(t.need_more<=0?'farm-uc-complete':'')+'"><b>'+t.uc+' UC</b><span>Нужно '+t.required_credits+' UC Credits<br>'+(t.need_more<=0?'Доступно для заявки':('Осталось '+t.need_more+' • ≈'+t.days_at_daily_rate+' дн. при ежедневном бонусе'))+'</span></div>').join('');
+ const filters=[['ALL','Все'],['GRAY','Серые'],['CYAN','Голубые'],['BLUE','Синие'],['PURPLE','Фиолетовые'],['PINK','Розовые'],['RED','Красные'],['GOLD','Золотые']].map(([t,name])=>'<button data-farm-filter="'+t+'" class="'+(farmCatalogFilter===t?'active':'')+'">'+name+'</button>').join('');
+ const catalog=farmCatalogExpanded?'<div id="farmCatalogDetails"><div class="farm-filterbar">'+filters+'</div><div class="farm-catalog-grid" id="farmCatalogGrid">'+farmCatalogCards(d)+'</div><div class="farm-aux" style="margin-top:12px">Шанс для каждого отдельного предмета рассчитан по вероятности качества, разделённой на число предметов данного качества. Улучшения торговой лавки учтены в ценах.</div></div>':'';
+ const next=d.available_cycles>0?'Добыча готова':(d.stored>=d.capacity?'Склад заполнен':'Следующая добыча через '+formatReset(d.next_cycle_seconds));
+ const progress=d.available_cycles>0?100:(d.stored>=d.capacity?100:Math.max(0,100*(1-d.next_cycle_seconds/Math.max(1,d.interval_seconds))));
+ return '<div class="farm-ui">'+
+ '<div class="farm-lead"><div><span class="farm-eyebrow">SHREKSICH · METRO FARM</span><h1>Ферма ресурсов</h1><div class="muted">Твоя уютная ферма, добыча и торговля</div></div><div class="farm-lead-level">УРОВЕНЬ<br>'+d.level+' / '+d.max_level+'</div></div>'+
+ farmScene(d)+
+ '<div class="farm-overview"><div class="farm-wallet shr"><div class="farm-wallet-label">SHR</div><div class="farm-wallet-value"><span>'+d.shr+'</span></div></div>'+
+ '<div class="farm-wallet"><div class="farm-wallet-label">SHREKCOIN</div><div class="farm-wallet-value">'+farmCoinIcon()+'<span>'+d.shrek_coins+'</span></div></div>'+
+ '<div class="farm-wallet uc"><div class="farm-wallet-label">UC CREDITS</div><div class="farm-wallet-value">'+farmUcIcon()+'<span>'+d.uc_available+'</span></div></div></div>'+
+ '<div class="farm-status"><div><span>Скорость добычи</span><b>1 предмет / '+Math.ceil(d.interval_seconds/60)+' мин</b></div><div><span>Склад</span><b>'+d.stored+' / '+d.capacity+' предметов</b></div><div><span>'+next+'</span><b>'+(d.available_cycles>0?d.available_cycles+' шт. можно забрать':'Ферма работает')+'</b></div><div><span>Редкость улучшается</span><b>с уровнем фермы</b></div><div class="farm-status-bar"><span style="width:'+progress.toFixed(1)+'%"></span></div></div>'+
+ '<div class="farm-primary-actions"><button class="farm-primary" id="farmCollect" '+(d.available_cycles<=0?'disabled':'')+'>🧺 СОБРАТЬ • '+d.available_cycles+'</button><button class="secondary" id="farmUpgrade" '+(d.level>=d.max_level||d.shr<d.upgrade_cost?'disabled':'')+'>'+(d.level>=d.max_level?'МАКС. УРОВЕНЬ':'УЛУЧШИТЬ • '+d.upgrade_cost+' SHR')+'</button></div>'+
+ '<div class="farm-section wood"><div class="farm-section-head"><h3>🪵 Развитие фермы</h3></div><div class="farm-aux">Улучшайте инструменты, амбар и торговую лавку за заработанные ShrekCOINS. Улучшения остаются навсегда.</div><div class="farm-modules">'+modules+'</div></div>'+
+ '<div class="farm-section"><div class="farm-section-head"><h3>📚 Справочник ресурсов</h3><button class="farm-catalog-btn" id="farmCatalogToggle">'+(farmCatalogExpanded?'Скрыть':'Все предметы →')+'</button></div><div class="farm-aux">Все '+(d.resources||[]).length+' ресурсов, качество, цены продажи и реальные шансы для твоего уровня фермы.</div><div class="farm-tier-chances">'+chances+'</div>'+catalog+'</div>'+
+ '<div class="farm-section"><div class="farm-section-head"><h3>📦 Склад добычи</h3><button class="secondary" id="farmSellAll" '+((d.inventory||[]).length?'':'disabled')+'>Продать всё</button></div><div class="farm-inventory">'+(items||'<div class="empty">Склад пуст. Дождись готовой добычи и нажми «Собрать».</div>')+'</div></div>'+
+ '<div class="farm-activity"><div class="farm-section-head"><h3>🌱 Награды за активность</h3><span class="farm-rarity-label">Серия: '+d.activity_streak+' дн.</span></div><div class="farm-aux">Собери хотя бы один ресурс, затем забери +'+d.daily_uc_credits+' UC Credits. Награда доступна раз в 20 часов. Каждый 7-й день серии — билет CASE29, каждый 30-й — билет CASE79.</div><button class="buy" id="farmActivity" style="margin-top:12px;width:100%" '+(d.activity_ready?'':'disabled')+'>'+(d.activity_ready?'ЗАБРАТЬ ЕЖЕДНЕВНУЮ НАГРАДУ':'СОБЕРИ ДОБЫЧУ ИЛИ ДОЖДИСЬ НАГРАДЫ')+'</button></div>'+
+ '<div class="farm-withdraw"><div class="farm-section-head"><h3>'+farmUcIcon()+' Вывод UC</h3></div><div class="farm-aux">UC Credits — бонусы за активность, не ShrekCOINS и не Telegram Stars. Один UC Credit учитывается как один UC для заявки. Для получения награды нужен указанный баланс и PUBG UID. Выдачу подтверждает администратор.</div><div class="farm-uc-targets">'+targets+'</div><div class="farm-aux">Текущий баланс: '+d.uc_available+' UC Credits'+(d.uc_reserved>0?' • в ожидании: '+d.uc_reserved:'')+'. Расчёт дней предполагает ежедневное получение '+d.daily_uc_credits+' Credits без пропусков и дополнительных бонусов.</div><div class="row" style="margin-top:11px"><input id="farmPubgUid" placeholder="PUBG UID" inputmode="numeric"><select id="farmUcAmount"><option value="120">120 UC</option><option value="325">325 UC</option><option value="660">660 UC</option><option value="1800">1800 UC</option></select></div><button class="buy" id="farmWithdraw" style="width:100%;margin-top:10px" '+(Number(d.uc_available)<120?'disabled':'')+'>ОФОРМИТЬ ЗАЯВКУ НА UC</button></div>'+
+ '<div class="farm-section"><h3>Последние заявки</h3>'+(withdrawals||'<div class="farm-aux" style="margin-top:8px">Заявок на вывод UC пока нет.</div>')+'</div>'+
+ '</div>';
 }
 const FARM_TIER_ORDER_JS=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD'];
 function bindFarm(){
+ const cat=document.getElementById('farmCatalogToggle');
+ if(cat)cat.addEventListener('click',async()=>{farmCatalogExpanded=!farmCatalogExpanded;app.innerHTML=await farmHtml();bindFarm();addHomeExit()});
+ document.querySelectorAll('[data-farm-filter]').forEach(b=>b.addEventListener('click',()=>{
+  farmCatalogFilter=b.dataset.farmFilter;
+  document.querySelectorAll('[data-farm-filter]').forEach(k=>k.classList.toggle('active',k.dataset.farmFilter===farmCatalogFilter));
+  const grid=document.getElementById('farmCatalogGrid');if(grid)grid.innerHTML=farmCatalogCards(farmCachedData);
+ }));
+ const ucSelect=document.getElementById('farmUcAmount');
+ if(ucSelect)ucSelect.addEventListener('change',()=>{
+  const bt=document.getElementById('farmWithdraw');
+  if(bt&&farmCachedData)bt.disabled=Number(ucSelect.value)>Number(farmCachedData.uc_available||0);
+ });
  document.querySelectorAll('[data-farm-module]').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;try{const d=await api('/api/farm/coin-upgrade',{method:'POST',body:JSON.stringify({module:b.dataset.farmModule})});alert('Модуль улучшен до '+d.level+' уровня • -'+d.spent+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);b.disabled=false}}));
  const collect=document.getElementById('farmCollect');if(collect&&!collect.disabled)collect.addEventListener('click',async()=>{collect.disabled=true;try{const d=await api('/api/farm/collect',{method:'POST'});alert('Ферма добыла '+d.count+' предмет(ов)');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);collect.disabled=false}});
  const up=document.getElementById('farmUpgrade');if(up&&!up.disabled)up.addEventListener('click',async()=>{up.disabled=true;try{const d=await api('/api/farm/upgrade',{method:'POST'});alert('Ферма улучшена до '+d.level+' уровня');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);up.disabled=false}});
