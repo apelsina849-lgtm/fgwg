@@ -256,7 +256,20 @@ async def handle_callback(query):
             with db() as conn:
                 conn.execute("DELETE FROM memory WHERE user_id=?",(uid,))
             action="privacy"
-        if action=="home":
+        if group is not None and action in ("riddle","duel"):
+            await call("answerCallbackQuery",callback_query_id=qid)
+            if action=="riddle": await start_riddle(uid,group)
+            else: await start_duel(uid,group)
+            return
+        if action=="pass" and group is not None:
+            answer=battle_pass(group,uid)
+        elif action=="challenges" and group is not None:
+            answer=challenge_text(group,uid)
+        elif action=="guides":
+            answer=pubg_guide("база знаний")
+        elif action=="media":
+            answer="📸 Пришли скриншот рейда или голосовое сообщение в этот личный чат. Если подключён совместимый ИИ, Шрек сможет обработать его."
+        elif action=="home":
             answer="🐸 SHREKSICH AI — твой личный помощник. Задавай вопросы обычным текстом."
         elif group is None:
             answer="Сначала напиши Шреку в группе, чтобы привязать свой профиль."
