@@ -446,6 +446,8 @@ async def handle(msg):
     if cmd in ("/start","/help","/menu"):
         return  # No public menus in the group; owner controls are private.
     elif cmd=="/top": await send(cid,top_xp(cid))
+    elif cmd=="/daily": await send(cid,daily_text(cid,uid))
+    elif cmd=="/claim": await send(cid,"🎁 +50 XP!" if claim_daily(cid,uid) else "Проверь задания: /daily")
     elif cmd=="/profile":
         with db() as conn:
             row=conn.execute("SELECT xp FROM profiles WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()
