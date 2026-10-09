@@ -397,7 +397,8 @@ def add_xp(cid,uid,name):
         row=conn.execute("SELECT xp,last_xp FROM profiles WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()
         if now-row[1]>=60:
             conn.execute("UPDATE profiles SET xp=xp+5,last_xp=?,name=? WHERE chat_id=? AND user_id=?",(now,name[:80],cid,uid))
-            add_season_xp(cid,uid,5)
+            season=now//(30*86400)
+            conn.execute("INSERT INTO seasonal_xp(chat_id,user_id,season,xp) VALUES(?,?,?,5) ON CONFLICT(chat_id,user_id,season) DO UPDATE SET xp=xp+5",(cid,uid,season))
             return row[0]+5
     return row[0]
 
