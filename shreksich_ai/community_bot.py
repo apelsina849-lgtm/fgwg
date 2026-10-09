@@ -187,9 +187,34 @@ async def handle_callback(query):
             if minutes in (15,30,60):
                 with db() as conn:
                     conn.execute("UPDATE settings SET interval_minutes=?,next_quiz=? WHERE chat_id=?",(minutes,int(time.time())+minutes*60,row[0]))
+        elif data in ("admin:ai","admin:xp"):
+            column="ai_enabled" if data=="admin:ai" else "level_enabled"
+            with db() as conn:
+                conn.execute("INSERT OR IGNORE INTO preferences(chat_id) VALUES(?)",(row[0],))
+                conn.execute(f"UPDATE preferences SET {column}=1-{column} WHERE chat_id=?",(row[0],))
+        elif data=="admin:persona":
+            old=group_pref(row[0])[0]
+            modes=["friendly","expert","serious"]
+            new=modes[(modes.index(old)+1)%len(modes)] if old in modes else "friendly"
+            with db() as conn:
+                conn.execute("INSERT OR IGNORE INTO preferences(chat_id) VALUES(?)",(row[0],))
+                conn.execute("UPDATE preferences SET persona=? WHERE chat_id=?",(new,row[0]))
+        elif data=="admin:memory_clear":
+            with db() as conn:
+                conn.execute("DELETE FROM memory WHERE chat_id=?",(row[0],))
         row=owner_chat(uid)
-        try: await edit(cid,mid,admin_text(row),admin_menu(row))
-        except Exception: LOG.exception("Admin menu edit failed")
+        special=None
+        special_buttons=None
+        if data=="admin:stats":
+            special=admin_stats(row[0])
+        elif data=="admin:memory_confirm":
+            special="⚠️ Удалить историю диалогов всех участников? Это необратимо."
+            special_buttons=keyboard([[{"text":"🗑 Удалить","callback_data":"admin:memory_clear"}],[{"text":"Отмена","callback_data":"admin:refresh"}]])
+        if special and not special_buttons:
+            special_buttons=keyboard([[{"text":"⬅️ Назад","callback_data":"admin:refresh"}]])
+        try: await edit(cid,mid,special or admin_text(row),special_buttons or admin_menu(row))
+        except Exception as exc:
+            if "message is not modified" not in str(exc): LOG.exception("Admin menu edit failed")
         try: await call("answerCallbackQuery",callback_query_id=qid)
         except Exception: pass
         return
