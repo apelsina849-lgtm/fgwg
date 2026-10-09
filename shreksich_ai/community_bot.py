@@ -481,6 +481,10 @@ async def handle(msg):
         return  # No public menus in the group; owner controls are private.
     elif cmd=="/top": await send(cid,top_xp(cid))
     elif cmd=="/daily": await send(cid,daily_text(cid,uid))
+    elif cmd=="/achievements":
+        with db() as conn:
+            wins=conn.execute("SELECT COUNT(*) FROM achievements WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()[0]
+        await send(cid,"🏅 ДОСТИЖЕНИЯ"+chr(10)+("🥇 Первая победа в викторине" if wins else "Пока нет достижений. Победи в викторине!"))
     elif cmd=="/claim": await send(cid,"🎁 +50 XP!" if claim_daily(cid,uid) else "Проверь задания: /daily")
     elif cmd=="/profile":
         with db() as conn:
