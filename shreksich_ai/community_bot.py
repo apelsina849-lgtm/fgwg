@@ -192,7 +192,14 @@ async def handle(msg):
             log(cid,uid,"suspected_scam",text)
             await send(cid,"⚠️ Возможная мошенническая схема. Не передавайте пароли и коды. Используйте только официальный магазин.",reply_parameters={"message_id":msg["message_id"],"allow_sending_without_reply":True})
             return
-    cmd=text.split()[0].split("@")[0].lower()\n    if chat.get("type") in ("group","supergroup") and not text.startswith("/"):\n        reply=msg.get("reply_to_message") or {}\n        botname=(reply.get("from") or {}).get("username","").lower()\n        if botname=="shrekchataibot" or "@shrekchataibot" in text.lower():\n            question=re.sub(r"@shrekchataibot","",text,flags=re.I).strip()\n            await send(cid,await ask_ai(question),reply_parameters={"message_id":msg["message_id"],"allow_sending_without_reply":True})\n        return
+    cmd=text.split()[0].split("@")[0].lower()
+    if chat.get("type") in ("group","supergroup") and not text.startswith("/"):
+        reply=msg.get("reply_to_message") or {}
+        botname=(reply.get("from") or {}).get("username","").lower()
+        if botname=="shrekchataibot" or "@shrekchataibot" in text.lower():
+            question=re.sub(r"@shrekchataibot","",text,flags=re.I).strip()
+            await send(cid,await ask_ai(question),reply_parameters={"message_id":msg["message_id"],"allow_sending_without_reply":True})
+        return
     if cmd in ("/start","/help","/menu"):
         await send(cid,home_text(),reply_markup=menu())
     elif cmd=="/shop": await send(cid,SHOP_URL)
