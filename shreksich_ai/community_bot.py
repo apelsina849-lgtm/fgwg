@@ -114,9 +114,20 @@ def vision_query(file_id,caption=""):
         result=json.load(response)["choices"][0]["message"]["content"]
     return str(result)[:3500]
 
+def local_transcribe(file_id):
+    import tempfile
+    from faster_whisper import WhisperModel
+    audio=telegram_file(file_id,limit=12_000_000)
+    with tempfile.NamedTemporaryFile(suffix=".ogg") as source:
+        source.write(audio)
+        source.flush()
+        model=WhisperModel("tiny",device="cpu",compute_type="int8",download_root=os.getenv("SHREKSICH_WHISPER_CACHE","/data/whisper_models"))
+        segments,_=model.transcribe(source.name,language="ru",beam_size=1,vad_filter=True)
+        return " ".join(segment.text.strip() for segment in segments).strip()[:1500]
+
 def transcribe_voice(file_id):
     if not (TRANSCRIBE_URL and AI_KEY):
-        return None
+        return local_transcribe(file_id)
     audio=telegram_file(file_id,limit=12_000_000)
     boundary="----shreksichvoice"
     payload=("--"+boundary+"\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n"+(VOICE_MODEL or "whisper-1")+"\r\n--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.ogg\"\r\nContent-Type: audio/ogg\r\n\r\n").encode()+audio+("\r\n--"+boundary+"--\r\n").encode()
