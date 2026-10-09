@@ -910,6 +910,10 @@ async def handle(msg):
         if not ai_features(group)[0]:
             await send(uid,"🎙 Голосовые функции отключены администратором.")
             return
+        if msg["voice"].get("duration",0)>60:
+            await send(uid,"🎙 Отправь голосовое сообщение не длиннее 60 секунд.")
+            return
+        await send(uid,"🎙 Распознаю голосовое сообщение...")
         try:
             transcript=await asyncio.to_thread(transcribe_voice,msg["voice"]["file_id"])
             if not transcript:
