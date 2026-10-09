@@ -4848,9 +4848,9 @@ async function sellerHtml(){
  const d=await api('/api/seller'),profile=d.profile;
  const top='<div class="seller-hero"><div class="seller-headline">SHREKSICH · PARTNERS</div><h1>🤝 Кабинет продавца</h1>'+
  '<div class="mini" style="color:#b9ddeb">Товары, заказы и комиссии под контролем магазина</div>'+
- '<div class="seller-feature-grid"><div><strong>20%</strong><small>Базовая комиссия магазина</small></div>'+
- '<div><strong>Stars</strong><small>Оплата покупателя</small></div>'+
- '<div><strong>24/7</strong><small>Приём заказов</small></div></div></div>';
+ '<div class="seller-feature-grid"><div><strong>70%</strong><small>Продавцу</small></div>'+
+ '<div><strong>20%</strong><small>Магазину</small></div>'+
+ '<div><strong>10%</strong><small>В резерв</small></div></div></div>';
  if(!profile)return top+'<div class="shx-panel"><h3>Стать продавцом</h3>'+
  '<div class="seller-inputs"><input id="sellerName" maxlength="72" placeholder="Имя магазина / продавца">'+
  '<input id="sellerContact" maxlength="120" placeholder="Контакт для связи (например, @username)">'+
@@ -4859,7 +4859,7 @@ async function sellerHtml(){
  '<button class="buy" id="sellerApply">ОТПРАВИТЬ ЗАЯВКУ</button></div></div>';
  const status=profile.status==='approved'?'Одобрен':profile.status==='blocked'?'Заблокирован':'На рассмотрении';
  let html=top+'<div class="shx-panel"><div class="row" style="align-items:center;justify-content:space-between"><h3>Ваш статус</h3><span class="seller-status-pill '+esc(profile.status)+'">'+status+'</span></div>'+
- '<div class="name">'+esc(profile.display_name)+'</div><div class="mini">Комиссия магазина: '+Number(profile.commission_pct||20)+'% · Ваша доля: '+(100-Number(profile.commission_pct||20))+'% от стоимости оплаченного заказа</div></div>';
+ '<div class="name">'+esc(profile.display_name)+'</div><div class="mini">Новые заказы: продавцу 70% · магазину 20% · резерву 10% от оплаченных Stars. По старым заказам действуют сохранённые доли.</div></div>';
  if(profile.status!=='approved')return html;
  const orders=d.orders||[],settled=orders.filter(x=>x.settled),completed=orders.filter(x=>x.status==='Выполнен'&&!x.settled);
  const paidSum=settled.reduce((a,x)=>a+Number(x.seller_share_stars||0),0);
@@ -4884,7 +4884,9 @@ async function sellerHtml(){
  '<h3>'+esc(x.product_name)+'</h3><div class="mini">UID: '+esc(x.uid)+' · Ник: '+esc(x.nickname||'—')+'</div>'+
  (x.comment?'<div class="mini">Комментарий: '+esc(x.comment)+'</div>':'')+
  '<div class="seller-market-actions"><span class="seller-chip">Цена '+Number(x.stars_amount)+' ⭐</span>'+
- '<span class="seller-chip">Доля '+Number(x.seller_share_stars)+' ⭐</span>'+
+ '<span class="seller-chip">Продавцу '+Number(x.seller_share_stars)+' ⭐</span>'+
+ '<span class="seller-chip">Магазину '+(Number(x.platform_share_stars||0)-Number(x.reserve_share_stars||0))+' ⭐</span>'+
+ '<span class="seller-chip">Резерв '+Number(x.reserve_share_stars||0)+' ⭐</span>'+
  (x.settled?'<span class="seller-status-pill approved">Расчёт отмечен</span>':'')+'</div>'+
  (['Оплачен','Принят','В работе'].includes(x.status)?'<div class="seller-inputs" style="margin-top:10px">'+
  '<textarea id="sellerProof'+x.id+'" maxlength="700" placeholder="Подтверждение выдачи: что и как передали покупателю"></textarea>'+
@@ -6259,24 +6261,27 @@ function adminSellers(){
  const sellers=d.sellers||[],listings=d.listings||[],orders=d.orders||[];
  const outstanding=orders.filter(x=>x.status==='Выполнен'&&!x.settled_id);
  const totalSeller=orders.filter(x=>x.settled_id).reduce((v,x)=>v+Number(x.seller_share_stars||0),0);
- const shopCut=orders.filter(x=>x.status==='Выполнен').reduce((v,x)=>v+Number(x.platform_share_stars||0),0);
+ const completedOrders=orders.filter(x=>x.status==='Выполнен');
+ const shopCut=completedOrders.reduce((v,x)=>v+Number(x.platform_share_stars||0)-Number(x.reserve_share_stars||0),0);
+ const reserveCut=completedOrders.reduce((v,x)=>v+Number(x.reserve_share_stars||0),0);
  let html='<section class="seller-hero"><div class="seller-headline">OWNER PANEL · MARKETPLACE</div><h1>🤝 Продавцы</h1>'+
  '<div class="mini">Модерация товаров, распределение заказов и расчёты с поставщиками</div>'+
  '<div class="seller-feature-grid"><div><strong>'+sellers.length+'</strong><small>Заявки и продавцы</small></div>'+
  '<div><strong>'+listings.length+'</strong><small>Товары поставщиков</small></div>'+
  '<div><strong>'+outstanding.length+'</strong><small>К расчёту</small></div></div></section>'+
- '<div class="seller-income-row"><div><span>УЧЁТ ВЫПЛАТ ПРОДАВЦАМ</span><b>'+totalSeller+' ⭐</b></div>'+
- '<div><span>КОМИССИЯ ПО ВЫПОЛНЕННЫМ ЗАКАЗАМ</span><b>'+shopCut+' ⭐</b></div></div>'+
- '<div class="seller-help">Комиссия и доля — эквивалент валовых Stars, не чистая прибыль. Комиссии Telegram, возвраты и себестоимость отдельно. Кнопка «Расчёт проведён» только фиксирует реальное внешнее перечисление, не переводит Stars.</div>'+
+ '<div class="seller-income-row"><div><span>РАСЧЁТЫ С ПРОДАВЦАМИ</span><b>'+totalSeller+' ⭐</b></div>'+
+ '<div><span>МАГАЗИН · 20%</span><b>'+shopCut+' ⭐</b></div>'+
+ '<div><span>РЕЗЕРВ · 10%</span><b>'+reserveCut+' ⭐</b></div>'+
+ '<div><span>К ВЫПЛАТЕ ПРОДАВЦАМ</span><b>'+outstanding.reduce((v,x)=>v+Number(x.seller_share_stars||0),0)+' ⭐</b></div></div>'+
+ '<div class="seller-help">Для новых заказов действует распределение 70% продавцу, 20% магазину и 10% в резерв. По старым заказам сохранены исходные условия. Резерв — отдельная учётная доля Stars, а не автоматически выведенные средства. Комиссии Telegram, возвраты и себестоимость отдельно. Кнопка расчёта только фиксирует реальную внешнюю выплату.</div>'+
  '<h3 style="margin-top:19px">Заявки и участники</h3>';
  html+=(sellers.map(x=>'<div class="seller-admin-box" data-admin-seller="'+x.telegram_id+'">'+
  '<div class="row" style="align-items:center;justify-content:space-between"><b>'+esc(x.display_name)+'</b>'+
  '<span class="seller-status-pill '+esc(x.status)+'">'+esc(x.status)+'</span></div>'+
  '<div class="mini">'+esc(x.token||'')+' · '+esc(x.contact)+'</div>'+
  '<div class="mini">'+esc(x.experience||'')+'</div>'+
- '<div class="row" style="margin-top:9px;align-items:center"><label style="font-size:11px">Комиссия магазина %</label>'+
- '<input id="adminSellerPct'+x.telegram_id+'" type="number" min="5" max="60" value="'+Number(x.commission_pct||20)+'"></div>'+
- '<div class="seller-market-actions"><button class="buy" data-seller-approve="'+x.telegram_id+'">Одобрить / сохранить %</button>'+
+ '<div class="mini" style="margin-top:9px">Новые заказы: 70% продавцу · 20% магазину · 10% резерву</div>'+
+ '<div class="seller-market-actions"><button class="buy" data-seller-approve="'+x.telegram_id+'">Одобрить / сохранить</button>'+
  '<button class="danger" data-seller-block="'+x.telegram_id+'">Заблокировать</button></div></div>').join('')||
  '<div class="empty">Заявок пока нет</div>');
  html+='<h3 style="margin:18px 0 9px">Модерация товаров</h3>'+
@@ -6295,7 +6300,8 @@ function adminSellers(){
  '<h3>'+esc(x.product_name)+'</h3>'+
  '<div class="seller-market-actions"><span class="seller-chip">Оплачено '+Number(x.stars_amount)+' ⭐</span>'+
  '<span class="seller-chip">Продавцу '+Number(x.seller_share_stars)+' ⭐</span>'+
- '<span class="seller-chip">Магазину '+Number(x.platform_share_stars)+' ⭐</span></div>'+
+ '<span class="seller-chip">Магазину '+(Number(x.platform_share_stars||0)-Number(x.reserve_share_stars||0))+' ⭐</span>'+
+ '<span class="seller-chip">Резерв '+Number(x.reserve_share_stars||0)+' ⭐</span></div>'+
  (x.seller_delivery_note?'<div class="mini" style="margin-top:8px">Подтверждение продавца: '+esc(x.seller_delivery_note)+'</div>':'')+
  (x.status==='Проверка выдачи'?'<button class="buy" data-seller-complete="'+x.id+'" style="width:100%;margin-top:8px">✓ Выдача подтверждена</button>':'')+
  (x.status==='Выполнен'&&!Number(x.settled_id)?'<div class="seller-inputs" style="margin-top:10px">'+
@@ -6322,9 +6328,7 @@ function bindAdmin(){
  });
 
  const adminSellerChange=async(sellerId,status)=>{
-  const pct=Number(document.getElementById('adminSellerPct'+sellerId)?.value||20);
-  if(!Number.isInteger(pct)||pct<5||pct>60){alert('Комиссия должна быть от 5 до 60%');return}
-  try{await api('/api/admin/sellers/'+sellerId,{method:'PATCH',body:JSON.stringify({status,commission_pct:pct})});await refreshAdmin()}catch(e){alert(e.message)}
+  try{await api('/api/admin/sellers/'+sellerId,{method:'PATCH',body:JSON.stringify({status,commission_pct:30})});await refreshAdmin()}catch(e){alert(e.message)}
  };
  document.querySelectorAll('[data-seller-approve]').forEach(b=>b.addEventListener('click',()=>adminSellerChange(b.dataset.sellerApprove,'approved')));
  document.querySelectorAll('[data-seller-block]').forEach(b=>b.addEventListener('click',()=>{if(confirm('Отключить продавца от новых заказов?'))adminSellerChange(b.dataset.sellerBlock,'blocked')}));
