@@ -335,6 +335,107 @@ async def complete_case_opening(conn, opening) -> dict:
         "reward":reward
     }
 
+FARM_MAX_LEVEL = 20
+FARM_WITHDRAW_MIN_UC = 120
+FARM_DAILY_UC_CREDITS = 2
+FARM_TIER_ORDER = ("GRAY","CYAN","BLUE","PURPLE","PINK","RED","GOLD")
+
+FARM_RESOURCES = [
+    {"id":"postcard","name":"Открытка","tier":"GRAY","icon":"📮","coins":1},
+    {"id":"travel_guide","name":"Путеводитель","tier":"GRAY","icon":"🗺️","coins":1},
+    {"id":"magazine","name":"Журнал","tier":"GRAY","icon":"📖","coins":1},
+    {"id":"playing_cards","name":"Игральные карты","tier":"GRAY","icon":"🃏","coins":1},
+    {"id":"letter","name":"Письмо","tier":"GRAY","icon":"✉️","coins":1},
+    {"id":"can","name":"Банка","tier":"GRAY","icon":"🥫","coins":1},
+    {"id":"canteen","name":"Армейский чайник","tier":"GRAY","icon":"🫖","coins":2},
+    {"id":"video_tape","name":"Старая видеокассета","tier":"GRAY","icon":"📼","coins":2},
+    {"id":"compass","name":"Компас","tier":"GRAY","icon":"🧭","coins":2},
+
+    {"id":"pocket_watch","name":"Карманные часы","tier":"CYAN","icon":"⌚","coins":4},
+    {"id":"motor_oil","name":"Моторное масло","tier":"CYAN","icon":"🛢️","coins":4},
+    {"id":"heart_necklace","name":"Ожерелье-сердце","tier":"CYAN","icon":"📿","coins":5},
+    {"id":"purse","name":"Кошелёк","tier":"CYAN","icon":"👝","coins":5},
+    {"id":"gas_bottle","name":"Бутылка с горючим","tier":"CYAN","icon":"🧯","coins":6},
+    {"id":"diesel","name":"Дизель","tier":"CYAN","icon":"⛽","coins":6},
+    {"id":"lubricating_oil","name":"Смазка","tier":"CYAN","icon":"🧴","coins":7},
+    {"id":"car_key","name":"Ключ от машины","tier":"CYAN","icon":"🔑","coins":8},
+    {"id":"military_watch","name":"Армейские часы","tier":"CYAN","icon":"⏱️","coins":8},
+    {"id":"metro_2036","name":"Metro 2036","tier":"CYAN","icon":"📕","coins":8},
+
+    {"id":"dog_tag","name":"Армейский жетон","tier":"BLUE","icon":"🏷️","coins":14},
+    {"id":"water_purifier","name":"Опреснитель воды","tier":"BLUE","icon":"💧","coins":16},
+    {"id":"cpu","name":"Процессор","tier":"BLUE","icon":"🧠","coins":18},
+    {"id":"signal_generator","name":"Генератор сигнала","tier":"BLUE","icon":"📡","coins":21},
+    {"id":"tech_part","name":"Технический компонент","tier":"BLUE","icon":"⚙️","coins":24},
+
+    {"id":"password_white","name":"Письмо с паролем — белое","tier":"PURPLE","icon":"🤍","coins":34},
+    {"id":"password_red","name":"Письмо с паролем — красное","tier":"PURPLE","icon":"❤️","coins":35},
+    {"id":"password_yellow","name":"Письмо с паролем — жёлтое","tier":"PURPLE","icon":"💛","coins":36},
+    {"id":"password_green","name":"Письмо с паролем — зелёное","tier":"PURPLE","icon":"💚","coins":37},
+    {"id":"tablet","name":"Планшет","tier":"PURPLE","icon":"📱","coins":45},
+    {"id":"detector","name":"Детектор","tier":"PURPLE","icon":"📟","coins":52},
+
+    {"id":"precision_blueprint","name":"Чертёж высокоточного прибора","tier":"PINK","icon":"📐","coins":85},
+    {"id":"password_black","name":"Письмо с паролем — чёрное","tier":"PINK","icon":"🖤","coins":95},
+
+    {"id":"gold_watch","name":"Золотые механические часы","tier":"RED","icon":"🕰️","coins":145},
+    {"id":"gold_kettle","name":"Золотой армейский чайник","tier":"RED","icon":"🏺","coins":160},
+    {"id":"heart_of_gold","name":"Золотое ожерелье-сердце","tier":"RED","icon":"💛","coins":175},
+
+    {"id":"gold_bar","name":"Золотой слиток","tier":"GOLD","icon":"🪙","coins":260},
+]
+FARM_RESOURCE_BY_ID = {x["id"]:x for x in FARM_RESOURCES}
+
+def farm_upgrade_cost(level: int) -> int:
+    level = max(1,min(FARM_MAX_LEVEL,int(level)))
+    if level >= FARM_MAX_LEVEL:
+        return 0
+    return int(round(25 * (1.48 ** (level - 1))))
+
+def farm_interval_seconds(level: int) -> int:
+    level = max(1,min(FARM_MAX_LEVEL,int(level)))
+    return max(180, 600 - (level - 1) * 22)
+
+def farm_capacity(level: int) -> int:
+    level = max(1,min(FARM_MAX_LEVEL,int(level)))
+    return 36 + level * 12
+
+def farm_stage(level: int) -> int:
+    return min(5, 1 + (max(1,int(level)) - 1)//4)
+
+def farm_tier_weights(level: int) -> dict[str,float]:
+    p = (max(1,min(FARM_MAX_LEVEL,int(level))) - 1) / max(1,FARM_MAX_LEVEL - 1)
+    weights = {
+        "GRAY":72 - 30*p,
+        "CYAN":22 + 4*p,
+        "BLUE":5 + 8*p,
+        "PURPLE":1 + 9*p,
+        "PINK":0 + 5*p,
+        "RED":0 + 3*p,
+        "GOLD":0 + 1*p,
+    }
+    total = sum(weights.values()) or 1
+    return {k:round(v*100/total,3) for k,v in weights.items()}
+
+def pick_farm_resource(level: int) -> dict:
+    weights = farm_tier_weights(level)
+    tiers = list(FARM_TIER_ORDER)
+    tier = random.choices(tiers,weights=[weights[t] for t in tiers],k=1)[0]
+    pool = [x for x in FARM_RESOURCES if x["tier"] == tier]
+    return random.choice(pool)
+
+async def ensure_farm_state(conn, uid: int):
+    row = await (await conn.execute("SELECT * FROM farm_state WHERE telegram_id=?",(uid,))).fetchone()
+    if row:
+        return row
+    now = int(time.time())
+    await conn.execute(
+        "INSERT INTO farm_state(telegram_id,level,shrek_coins,uc_credits,uc_reserved,last_mine_at,last_collect_at,last_activity_at,activity_streak,activity_total) "
+        "VALUES(?,1,0,0,0,?,?,0,0,0)",
+        (uid,now-farm_interval_seconds(1),0)
+    )
+    return await (await conn.execute("SELECT * FROM farm_state WHERE telegram_id=?",(uid,))).fetchone()
+
 SHR_REWARDS = [
     {"points":5,"name":"Набор расходников"},
     {"points":10,"name":"Metro Starter Kit"},
@@ -607,6 +708,57 @@ async def init_db():
         await conn.execute("ALTER TABLE case_openings ADD COLUMN inventory_item_id INTEGER NOT NULL DEFAULT 0")
     await conn.execute("CREATE INDEX IF NOT EXISTS idx_case_openings_user_status ON case_openings(telegram_id,status)")
     await conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_case_openings_charge ON case_openings(telegram_charge_id) WHERE telegram_charge_id<>''")
+
+    await conn.executescript("""
+    CREATE TABLE IF NOT EXISTS farm_state(
+      telegram_id INTEGER PRIMARY KEY,
+      level INTEGER NOT NULL DEFAULT 1,
+      shrek_coins INTEGER NOT NULL DEFAULT 0,
+      uc_credits INTEGER NOT NULL DEFAULT 0,
+      uc_reserved INTEGER NOT NULL DEFAULT 0,
+      last_mine_at INTEGER NOT NULL DEFAULT 0,
+      last_collect_at INTEGER NOT NULL DEFAULT 0,
+      last_activity_at INTEGER NOT NULL DEFAULT 0,
+      activity_streak INTEGER NOT NULL DEFAULT 0,
+      activity_total INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS farm_inventory(
+      telegram_id INTEGER NOT NULL,
+      resource_id TEXT NOT NULL,
+      qty INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(telegram_id,resource_id)
+    );
+    CREATE TABLE IF NOT EXISTS farm_log(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS uc_withdrawals(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id INTEGER NOT NULL,
+      pubg_uid TEXT NOT NULL,
+      uc_amount INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Ожидает',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      processed_at TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_uc_withdrawals_status ON uc_withdrawals(status,id);
+    """)
+    farm_cols = {r["name"] for r in await (await conn.execute("PRAGMA table_info(farm_state)")).fetchall()}
+    for col,ddl in {
+        "uc_reserved":"INTEGER NOT NULL DEFAULT 0",
+        "last_collect_at":"INTEGER NOT NULL DEFAULT 0",
+        "last_activity_at":"INTEGER NOT NULL DEFAULT 0",
+        "activity_streak":"INTEGER NOT NULL DEFAULT 0",
+        "activity_total":"INTEGER NOT NULL DEFAULT 0",
+    }.items():
+        if col not in farm_cols:
+            await conn.execute(f"ALTER TABLE farm_state ADD COLUMN {col} {ddl}")
 
     reset = await (await conn.execute("SELECT value FROM settings WHERE key='bonus_tickets_v1'")).fetchone()
     if not reset:
@@ -1130,6 +1282,20 @@ class CaseAdminIn(BaseModel):
 
 class InventoryResolveIn(BaseModel):
     action: str = Field(min_length=4, max_length=8)
+
+
+class FarmSellIn(BaseModel):
+    resource_id: str = Field(min_length=1, max_length=64)
+    qty: int = Field(default=1, ge=1, le=100000)
+
+
+class FarmWithdrawIn(BaseModel):
+    pubg_uid: str = Field(min_length=5, max_length=64)
+    uc_amount: int = Field(ge=120, le=100000)
+
+
+class AdminFarmWithdrawalIn(BaseModel):
+    status: str = Field(min_length=4, max_length=20)
 
 
 class PromoToggleIn(BaseModel):
@@ -1808,6 +1974,352 @@ async def spin_promo(body: SpinPromoIn, x_telegram_init_data: str | None = Heade
         "donation_case_id":target_case,
         "donation_tickets_total":int(donation_total["total"] or 0)
     }
+
+
+@app.get("/api/farm")
+async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    conn = await db()
+    try:
+        state = await ensure_farm_state(conn,uid)
+        await conn.commit()
+        inv_rows = await (await conn.execute(
+            "SELECT resource_id,qty FROM farm_inventory WHERE telegram_id=? AND qty>0 ORDER BY updated_at DESC",
+            (uid,)
+        )).fetchall()
+        spin = await (await conn.execute("SELECT upgrade_points FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+        withdrawals = await (await conn.execute(
+            "SELECT id,pubg_uid,uc_amount,status,created_at,processed_at FROM uc_withdrawals WHERE telegram_id=? ORDER BY id DESC LIMIT 10",
+            (uid,)
+        )).fetchall()
+    finally:
+        await conn.close()
+
+    level = int(state["level"] or 1)
+    now = int(time.time())
+    interval = farm_interval_seconds(level)
+    stored = sum(int(x["qty"] or 0) for x in inv_rows)
+    cap = farm_capacity(level)
+    available_cycles = max(0,min(cap-stored,(now-int(state["last_mine_at"] or now))//interval))
+    inventory = []
+    for r in inv_rows:
+        item = FARM_RESOURCE_BY_ID.get(r["resource_id"])
+        if item:
+            inventory.append({**item,"qty":int(r["qty"] or 0),"total_coins":int(r["qty"] or 0)*int(item["coins"])})
+    activity_ready = bool(int(state["last_collect_at"] or 0) > int(state["last_activity_at"] or 0) and now-int(state["last_activity_at"] or 0)>=20*3600)
+    return {
+        "level":level,"max_level":FARM_MAX_LEVEL,"stage":farm_stage(level),
+        "shr":int(spin["upgrade_points"] or 0) if spin else 0,
+        "shrek_coins":int(state["shrek_coins"] or 0),
+        "uc_credits":int(state["uc_credits"] or 0),
+        "uc_reserved":int(state["uc_reserved"] or 0),
+        "uc_available":max(0,int(state["uc_credits"] or 0)-int(state["uc_reserved"] or 0)),
+        "withdraw_min_uc":FARM_WITHDRAW_MIN_UC,
+        "daily_uc_credits":FARM_DAILY_UC_CREDITS,
+        "interval_seconds":interval,"capacity":cap,"stored":stored,
+        "available_cycles":int(available_cycles),
+        "next_cycle_seconds":max(0,interval-max(0,now-int(state["last_mine_at"] or now))%interval) if stored<cap else 0,
+        "upgrade_cost":farm_upgrade_cost(level),
+        "tier_weights":farm_tier_weights(level),
+        "inventory":inventory,
+        "resources":FARM_RESOURCES,
+        "activity_streak":int(state["activity_streak"] or 0),
+        "activity_total":int(state["activity_total"] or 0),
+        "activity_ready":activity_ready,
+        "withdrawals":[dict(x) for x in withdrawals]
+    }
+
+
+@app.post("/api/farm/collect")
+async def farm_collect(x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            state = await ensure_farm_state(conn,uid)
+            level = int(state["level"] or 1)
+            now = int(time.time())
+            interval = farm_interval_seconds(level)
+            stored_row = await (await conn.execute(
+                "SELECT COALESCE(SUM(qty),0) q FROM farm_inventory WHERE telegram_id=?",(uid,)
+            )).fetchone()
+            stored = int(stored_row["q"] or 0)
+            capacity = farm_capacity(level)
+            room = max(0,capacity-stored)
+            if room <= 0:
+                await conn.execute("UPDATE farm_state SET last_mine_at=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(now,uid))
+                await conn.commit()
+                return {"ok":True,"mined":[],"count":0,"full":True}
+            elapsed = max(0,now-int(state["last_mine_at"] or now))
+            cycles = min(room,elapsed//interval,250)
+            if cycles <= 0:
+                await conn.rollback()
+                raise HTTPException(409,"Добыча ещё не готова")
+            mined = {}
+            for _ in range(int(cycles)):
+                item = pick_farm_resource(level)
+                mined[item["id"]] = mined.get(item["id"],0)+1
+            for resource_id,qty in mined.items():
+                await conn.execute(
+                    "INSERT INTO farm_inventory(telegram_id,resource_id,qty) VALUES(?,?,?) "
+                    "ON CONFLICT(telegram_id,resource_id) DO UPDATE SET qty=qty+excluded.qty,updated_at=CURRENT_TIMESTAMP",
+                    (uid,resource_id,qty)
+                )
+            new_last = int(state["last_mine_at"] or now) + int(cycles)*interval
+            if int(cycles) >= room:
+                new_last = now
+            await conn.execute(
+                "UPDATE farm_state SET last_mine_at=?,last_collect_at=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",
+                (new_last,now,uid)
+            )
+            await conn.execute(
+                "INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",
+                (uid,"collect",json.dumps(mined,ensure_ascii=False))
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {
+        "ok":True,"count":int(cycles),"full":False,
+        "mined":[{**FARM_RESOURCE_BY_ID[k],"qty":v} for k,v in mined.items() if k in FARM_RESOURCE_BY_ID]
+    }
+
+
+@app.post("/api/farm/sell")
+async def farm_sell(body: FarmSellIn, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    resource_id = body.resource_id.strip()
+    item = FARM_RESOURCE_BY_ID.get(resource_id)
+    if not item:
+        raise HTTPException(404,"Ресурс не найден")
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            state = await ensure_farm_state(conn,uid)
+            row = await (await conn.execute(
+                "SELECT qty FROM farm_inventory WHERE telegram_id=? AND resource_id=?",(uid,resource_id)
+            )).fetchone()
+            have = int(row["qty"] or 0) if row else 0
+            qty = min(have,int(body.qty))
+            if qty <= 0:
+                await conn.rollback()
+                raise HTTPException(409,"Этого ресурса нет на складе")
+            value = qty * int(item["coins"])
+            await conn.execute(
+                "UPDATE farm_inventory SET qty=qty-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND resource_id=?",
+                (qty,uid,resource_id)
+            )
+            await conn.execute(
+                "UPDATE farm_state SET shrek_coins=shrek_coins+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",
+                (value,uid)
+            )
+            await conn.execute(
+                "INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",
+                (uid,"sell",json.dumps({"resource_id":resource_id,"qty":qty,"coins":value},ensure_ascii=False))
+            )
+            await conn.commit()
+            state = await (await conn.execute("SELECT shrek_coins FROM farm_state WHERE telegram_id=?",(uid,))).fetchone()
+        finally:
+            await conn.close()
+    return {"ok":True,"sold_qty":qty,"coins_added":value,"shrek_coins":int(state["shrek_coins"] or 0)}
+
+
+@app.post("/api/farm/sell-all")
+async def farm_sell_all(x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            await ensure_farm_state(conn,uid)
+            rows = await (await conn.execute(
+                "SELECT resource_id,qty FROM farm_inventory WHERE telegram_id=? AND qty>0",(uid,)
+            )).fetchall()
+            total = 0
+            sold = 0
+            for r in rows:
+                item = FARM_RESOURCE_BY_ID.get(r["resource_id"])
+                if not item: continue
+                qty = int(r["qty"] or 0)
+                total += qty * int(item["coins"]); sold += qty
+            if sold <= 0:
+                await conn.rollback()
+                raise HTTPException(409,"Склад пуст")
+            await conn.execute("UPDATE farm_inventory SET qty=0,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(uid,))
+            await conn.execute("UPDATE farm_state SET shrek_coins=shrek_coins+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(total,uid))
+            await conn.execute("INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",(uid,"sell_all",json.dumps({"qty":sold,"coins":total})))
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"sold_qty":sold,"coins_added":total}
+
+
+@app.post("/api/farm/upgrade")
+async def farm_upgrade(x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            state = await ensure_farm_state(conn,uid)
+            level = int(state["level"] or 1)
+            if level >= FARM_MAX_LEVEL:
+                await conn.rollback()
+                raise HTTPException(409,"Ферма уже максимального уровня")
+            cost = farm_upgrade_cost(level)
+            await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",(uid,))
+            spin = await (await conn.execute("SELECT upgrade_points FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+            if int(spin["upgrade_points"] or 0) < cost:
+                await conn.rollback()
+                raise HTTPException(409,f"Нужно {cost} SHR")
+            await conn.execute("UPDATE spin_state SET upgrade_points=upgrade_points-? WHERE telegram_id=?",(cost,uid))
+            await conn.execute("UPDATE farm_state SET level=level+1,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(uid,))
+            await conn.execute("INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",(uid,"upgrade",json.dumps({"from":level,"to":level+1,"shr":cost})))
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"level":level+1,"cost":cost}
+
+
+@app.post("/api/farm/activity")
+async def farm_activity_reward(x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    now = int(time.time())
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            state = await ensure_farm_state(conn,uid)
+            last_activity = int(state["last_activity_at"] or 0)
+            last_collect = int(state["last_collect_at"] or 0)
+            if last_collect <= last_activity:
+                await conn.rollback()
+                raise HTTPException(409,"Сначала соберите добычу на ферме")
+            if last_activity and now-last_activity < 20*3600:
+                await conn.rollback()
+                raise HTTPException(429,"Награда за активность уже получена")
+            streak = int(state["activity_streak"] or 0)
+            if last_activity and now-last_activity <= 48*3600:
+                streak += 1
+            else:
+                streak = 1
+            total = int(state["activity_total"] or 0)+1
+            case_ticket = ""
+            if streak % 30 == 0:
+                case_ticket = "CASE79"
+            elif streak % 7 == 0:
+                case_ticket = "CASE29"
+            if case_ticket:
+                await conn.execute(
+                    "INSERT INTO donation_ticket_balances(telegram_id,case_id,tickets) VALUES(?,?,1) "
+                    "ON CONFLICT(telegram_id,case_id) DO UPDATE SET tickets=tickets+1",
+                    (uid,case_ticket)
+                )
+            await conn.execute(
+                "UPDATE farm_state SET uc_credits=uc_credits+?,last_activity_at=?,activity_streak=?,activity_total=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",
+                (FARM_DAILY_UC_CREDITS,now,streak,total,uid)
+            )
+            await conn.execute(
+                "INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",
+                (uid,"activity",json.dumps({"uc_credits":FARM_DAILY_UC_CREDITS,"streak":streak,"case_ticket":case_ticket}))
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"uc_credits_added":FARM_DAILY_UC_CREDITS,"streak":streak,"case_ticket":case_ticket}
+
+
+@app.post("/api/farm/withdraw")
+async def farm_withdraw(body: FarmWithdrawIn, x_telegram_init_data: str | None = Header(default=None)):
+    u = await current_user(x_telegram_init_data)
+    uid = int(u["id"])
+    if body.uc_amount < FARM_WITHDRAW_MIN_UC:
+        raise HTTPException(400,f"Минимальный вывод — {FARM_WITHDRAW_MIN_UC} UC")
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            state = await ensure_farm_state(conn,uid)
+            available = int(state["uc_credits"] or 0)-int(state["uc_reserved"] or 0)
+            if available < body.uc_amount:
+                await conn.rollback()
+                raise HTTPException(409,"Недостаточно UC Credits")
+            cur = await conn.execute(
+                "INSERT INTO uc_withdrawals(telegram_id,pubg_uid,uc_amount,status) VALUES(?,?,?,'Ожидает')",
+                (uid,body.pubg_uid.strip(),int(body.uc_amount))
+            )
+            wid = int(cur.lastrowid)
+            await conn.execute("UPDATE farm_state SET uc_reserved=uc_reserved+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(int(body.uc_amount),uid))
+            await conn.commit()
+        finally:
+            await conn.close()
+    try:
+        await tg("sendMessage",{"chat_id":OWNER_ID,"text":f"🪙 Новый запрос UC #{wid}\nЖетон: {u.get('token','—')}\nPUBG UID: {body.pubg_uid}\nСумма: {body.uc_amount} UC\nОткройте Owner Panel → UC выводы."})
+    except Exception:
+        pass
+    return {"ok":True,"id":wid,"status":"Ожидает","uc_amount":int(body.uc_amount)}
+
+
+@app.get("/api/admin/farm-withdrawals")
+async def admin_farm_withdrawals(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn = await db()
+    try:
+        rows = await (await conn.execute(
+            "SELECT w.id,w.telegram_id,u.token,u.username,u.first_name,w.pubg_uid,w.uc_amount,w.status,w.created_at,w.processed_at "
+            "FROM uc_withdrawals w LEFT JOIN users u ON u.telegram_id=w.telegram_id ORDER BY CASE WHEN w.status='Ожидает' THEN 0 ELSE 1 END,w.id DESC LIMIT 300"
+        )).fetchall()
+    finally:
+        await conn.close()
+    return [dict(x) for x in rows]
+
+
+@app.patch("/api/admin/farm-withdrawals/{withdrawal_id}")
+async def admin_farm_withdrawal_update(withdrawal_id: int, body: AdminFarmWithdrawalIn, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    status = body.status.strip()
+    if status not in ("Выполнен","Отклонён"):
+        raise HTTPException(400,"Статус: Выполнен или Отклонён")
+    async with db_write_lock:
+        conn = await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            row = await (await conn.execute("SELECT * FROM uc_withdrawals WHERE id=?",(withdrawal_id,))).fetchone()
+            if not row:
+                await conn.rollback()
+                raise HTTPException(404,"Заявка не найдена")
+            if row["status"] != "Ожидает":
+                await conn.rollback()
+                raise HTTPException(409,"Заявка уже обработана")
+            uid = int(row["telegram_id"]); amount = int(row["uc_amount"])
+            state = await ensure_farm_state(conn,uid)
+            if int(state["uc_reserved"] or 0) < amount:
+                await conn.rollback()
+                raise HTTPException(409,"Резерв UC повреждён")
+            if status == "Выполнен":
+                if int(state["uc_credits"] or 0) < amount:
+                    await conn.rollback()
+                    raise HTTPException(409,"Недостаточно UC Credits")
+                await conn.execute("UPDATE farm_state SET uc_credits=uc_credits-?,uc_reserved=uc_reserved-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(amount,amount,uid))
+            else:
+                await conn.execute("UPDATE farm_state SET uc_reserved=uc_reserved-?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(amount,uid))
+            await conn.execute("UPDATE uc_withdrawals SET status=?,processed_at=CURRENT_TIMESTAMP WHERE id=?",(status,withdrawal_id))
+            await conn.commit()
+        finally:
+            await conn.close()
+    try:
+        await tg("sendMessage",{"chat_id":uid,"text":f"🎮 Запрос UC #{withdrawal_id}: {status}. Сумма: {amount} UC."})
+    except Exception:
+        pass
+    return {"ok":True,"status":status}
 
 
 @app.get("/api/inventory")
@@ -2611,6 +3123,26 @@ body.keyboard-open .wrap{padding-bottom:30px}
 .spin-options span{font-size:13px;font-weight:800;color:#d7dbe0}
 .spin-result{min-height:22px;margin-top:10px;font-size:13px;font-weight:850;text-align:center}
 .spin-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.spin-stat{background:#111418;border:1px solid #24282d;border-radius:15px;padding:11px}.spin-stat .price{font-size:17px}@media(max-width:430px){.spin-stats{grid-template-columns:repeat(2,1fr)}}
+.farm-scene{position:relative;height:220px;border-radius:24px;overflow:hidden;margin:12px 0;background:linear-gradient(180deg,#091827 0%,#102431 58%,#0a0d0f 58%,#111 100%);border:1px solid #26333d;box-shadow:inset 0 1px #ffffff12,0 18px 42px #0008}
+.farm-sky{position:absolute;inset:0 0 42% 0;background:radial-gradient(circle at 72% 22%,#63d9ff22 0 16%,transparent 36%),linear-gradient(180deg,#07121f,#132c38)}
+.farm-ground{position:absolute;left:0;right:0;bottom:0;height:42%;background:linear-gradient(180deg,#262a2b,#111415)}
+.farm-core{position:absolute;left:50%;bottom:38px;width:112px;height:82px;transform:translateX(-50%);border-radius:18px 18px 8px 8px;background:linear-gradient(145deg,#313940,#151a1f);border:2px solid #4e5b65;box-shadow:0 0 24px #5fd9ff22}
+.farm-core:before{content:"";position:absolute;left:18px;right:18px;top:18px;height:20px;border-radius:7px;background:#173544;border:1px solid #4edfff;box-shadow:0 0 18px #43d9ff55}
+.farm-conveyor{position:absolute;left:5%;right:5%;bottom:24px;height:18px;border-radius:8px;background:repeating-linear-gradient(90deg,#30373c 0 20px,#171b1e 20px 38px);border:1px solid #4a5258;animation:farmMove 1.4s linear infinite}
+.farm-tower{position:absolute;bottom:45px;width:38px;height:92px;background:linear-gradient(90deg,#1b2024,#3b454c,#171b1f);border:1px solid #56616a;border-radius:8px 8px 3px 3px}
+.farm-tower.left{left:12%}.farm-tower.right{right:12%}.farm-tower:before{content:"";position:absolute;left:8px;right:8px;top:10px;height:28px;border-radius:5px;background:#133d46;box-shadow:0 0 15px #42e5ff66}
+.farm-drone{position:absolute;top:42px;left:14%;font-size:28px;animation:farmDrone 4.2s ease-in-out infinite}.farm-crate{position:absolute;right:17%;bottom:44px;font-size:34px;filter:drop-shadow(0 8px 8px #000)}
+.farm-scene.stage-1 .farm-tower,.farm-scene.stage-1 .farm-drone{display:none}.farm-scene.stage-2 .farm-tower.right,.farm-scene.stage-2 .farm-drone{display:none}.farm-scene.stage-3 .farm-drone{display:none}
+.farm-scene.stage-4 .farm-core,.farm-scene.stage-5 .farm-core{box-shadow:0 0 38px #6de9ff66}.farm-scene.stage-5{background:linear-gradient(180deg,#06131e,#143b42 58%,#0a0d0f 58%,#111)}
+@keyframes farmMove{to{background-position:38px 0}}@keyframes farmDrone{0%,100%{transform:translate(0,0)}50%{transform:translate(150px,18px)}}
+.farm-level-badge{position:absolute;left:12px;top:12px;z-index:4;background:#0a0d0fcc;border:1px solid #4edfff55;border-radius:14px;padding:8px 10px;font-size:12px;font-weight:950;color:#7feaff}
+.farm-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.farm-metric{background:#111418;border:1px solid #272d33;border-radius:16px;padding:11px}.farm-metric b{display:block;font-size:17px;margin-top:3px}
+.farm-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.farm-actions button{width:100%}
+.farm-inventory{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.farm-item{background:#111418;border:1px solid #272d33;border-radius:18px;padding:11px;min-width:0}.farm-item-head{display:flex;gap:9px;align-items:center}.farm-item-icon{width:45px;height:45px;flex:0 0 45px;display:grid;place-items:center;font-size:25px;border-radius:13px;background:#20262b;border:1px solid #343d44}.farm-item-name{font-size:12px;font-weight:900;line-height:1.15}.farm-item-meta{font-size:10px;color:#9ca4ac;margin-top:5px}.farm-item button{width:100%;margin-top:8px;padding:8px;font-size:11px}
+.farm-tier-chances{display:flex;gap:6px;overflow-x:auto;margin:10px 0 14px}.farm-chance{flex:0 0 auto;border-radius:12px;padding:7px 9px;background:#12161a;border:1px solid #2a3036;font-size:10px}
+.farm-activity{background:linear-gradient(135deg,#10191c,#132c25);border:1px solid #245c45;border-radius:18px;padding:13px;margin:12px 0}.farm-activity b{color:#6df5b0}
+.farm-withdraw{background:#111418;border:1px solid #2b3036;border-radius:18px;padding:13px;margin-top:12px}
+@media(max-width:390px){.farm-metrics{grid-template-columns:1fr 1fr}.farm-inventory{grid-template-columns:1fr}.farm-actions{grid-template-columns:1fr}}
 .rarity-catalog{margin:18px 0 8px}
 .rarity-catalog-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:10px}
 .rarity-catalog-head h3{margin:0}.rarity-catalog-head .mini{text-align:right}
@@ -2923,7 +3455,8 @@ function sticker(title,sub,icon,cls,attrs){
   support:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M4 12v5h4v-6H4M20 12v5h-4v-6h4"/><path d="M16 19c-1 1-2 2-4 2"/></svg>',
   settings:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a8 8 0 0 0-1.7 1L5 6.1 3 9.5 5 11a7 7 0 0 0 0 2l-2 1.5L5 18l2.4-1a8 8 0 0 0 1.7 1l.4 3h5l.4-3a8 8 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1Z"/></svg>',
   history:'<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6"/><path d="M4 4v4.6h4.6"/><path d="M12 7v5l3 2"/></svg>',
-  cases:'<svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7"/><path d="M8 13h8M12 11v8"/></svg>'
+  cases:'<svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7"/><path d="M8 13h8M12 11v8"/></svg>',
+  farm:'<svg viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11H4Z"/><path d="M8 20v-6h8v6M7 10h2m6 0h2"/><path d="M2 20h20"/></svg>'
  };
  return '<div class="sticker '+cls+'" '+attrs+'><span class="sticker-icon">'+(icons[icon]||icons.shop)+'</span><div class="sticker-copy"><div class="sticker-title">'+title+'</div><div class="sticker-sub">'+sub+'</div></div></div>'
 }
@@ -2935,6 +3468,7 @@ function home(){
  sticker('HYPE SPIN','1 free / 24h','spin','st-purple','data-go="spin"')+
  sticker('Мои заказы','Статусы покупок','orders','st-blue','data-go="orders"')+
  sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+
+ sticker('Metro Farm','Добыча и прокачка','farm','st-gold','data-go="farm"')+
  sticker('Рефералы','Билеты и бонусы','referral','st-red','data-go="referral"')+
  sticker('Новости','@shreksi4PubgNEWS','news','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+
  sticker('Наш чат','@chatshreksi4','chat','st-cyan','data-tg="https://t.me/chatshreksi4"')+
@@ -3385,6 +3919,36 @@ async function resolveInventory(id,action,btn){
  }catch(e){if(btn)btn.disabled=false;alert(e.message)}
 }
 
+async function farmHtml(){
+ const d=await api('/api/farm');
+ const chances=Object.entries(d.tier_weights||{}).filter(x=>Number(x[1])>0.01).map(([t,p])=>'<span class="farm-chance '+tierClass(t)+'">'+tierLabel(t)+' '+Number(p).toFixed(p<1?2:1)+'%</span>').join('');
+ const items=(d.inventory||[]).slice().sort((a,b)=>FARM_TIER_ORDER_JS.indexOf(a.tier)-FARM_TIER_ORDER_JS.indexOf(b.tier)||Number(a.coins)-Number(b.coins)).map(x=>
+  '<div class="farm-item"><div class="farm-item-head"><div class="farm-item-icon">'+esc(x.icon)+'</div><div><div class="farm-item-name">'+esc(x.name)+'</div><div class="'+tierClass(x.tier)+'">'+tierLabel(x.tier)+' • x'+x.qty+'</div></div></div><div class="farm-item-meta">Продажа: 🟢 '+x.coins+' ShrekCOINS / шт. • всего '+x.total_coins+'</div><button class="secondary" data-farm-sell="'+esc(x.id)+'" data-farm-qty="'+x.qty+'">Продать всё</button></div>'
+ ).join('');
+ const withdrawals=(d.withdrawals||[]).map(w=>'<div class="order"><div class="name">'+w.uc_amount+' UC • '+esc(w.status)+'</div><div class="mini">UID '+esc(w.pubg_uid)+' • '+formatDropDate(w.created_at)+'</div></div>').join('');
+ const upText=d.level>=d.max_level?'МАКСИМАЛЬНЫЙ УРОВЕНЬ':'УЛУЧШИТЬ ЗА '+d.upgrade_cost+' SHR';
+ return '<section class="hero"><div class="cat">METRO FARM</div><h1>Ферма ресурсов</h1><div class="muted">Прокачивайте ферму за SHR. Чем выше уровень, тем быстрее добыча, больше склад и выше шанс редкого Metro-ресурса.</div></section>'+
+ '<div class="farm-scene stage-'+d.stage+'"><div class="farm-sky"></div><div class="farm-ground"></div><div class="farm-conveyor"></div><div class="farm-core"></div><div class="farm-tower left"></div><div class="farm-tower right"></div><div class="farm-drone">🚁</div><div class="farm-crate">📦</div><div class="farm-level-badge">LEVEL '+d.level+' / '+d.max_level+' • STAGE '+d.stage+'</div></div>'+
+ '<div class="farm-metrics"><div class="farm-metric"><span class="mini">SHR</span><b>'+d.shr+'</b></div><div class="farm-metric"><span class="mini">SHREKCOINS</span><b>🟢 '+d.shrek_coins+'</b></div><div class="farm-metric"><span class="mini">UC CREDITS</span><b>🎮 '+d.uc_available+'</b></div></div>'+
+ '<div class="farm-actions"><button class="buy" id="farmCollect" '+(d.available_cycles<=0?'disabled':'')+'>СОБРАТЬ ДОБЫЧУ • '+d.available_cycles+'</button><button class="secondary" id="farmUpgrade" '+(d.level>=d.max_level?'disabled':'')+'>'+upText+'</button></div>'+
+ '<div class="mini">Склад: '+d.stored+' / '+d.capacity+' • цикл '+Math.ceil(d.interval_seconds/60)+' мин • до следующего '+formatReset(d.next_cycle_seconds)+'</div>'+
+ '<div class="farm-tier-chances">'+chances+'</div>'+
+ '<div class="farm-activity"><div class="cat">НАГРАДА ЗА АКТИВНОСТЬ</div><div><b>Серия: '+d.activity_streak+' дн.</b> • всего активных дней '+d.activity_total+'</div><div class="muted">Соберите добычу и заберите +'+d.daily_uc_credits+' UC Credits. Каждый 7-й день серии — бесплатный билет CASE29, каждый 30-й — CASE79.</div><button class="buy" id="farmActivity" style="margin-top:9px" '+(d.activity_ready?'':'disabled')+'>'+(d.activity_ready?'ЗАБРАТЬ НАГРАДУ':'СНАЧАЛА СОБЕРИТЕ ДОБЫЧУ')+'</button></div>'+
+ '<div class="row" style="align-items:center"><h3 style="margin:0;flex:1">Склад фермы</h3><button class="secondary" id="farmSellAll" '+((d.inventory||[]).length?'':'disabled')+'>Продать всё</button></div>'+
+ '<div class="farm-inventory">'+(items||'<div class="empty">Склад пуст. Дождитесь добычи и нажмите «Собрать».</div>')+'</div>'+
+ '<div class="farm-withdraw"><div class="cat">ВЫВОД UC</div><div class="muted">Выводимый баланс — UC Credits за активность. ShrekCOINS остаются игровой валютой фермы.</div><div class="row"><input id="farmPubgUid" placeholder="PUBG UID"><select id="farmUcAmount"><option value="120">120 UC</option><option value="325">325 UC</option><option value="660">660 UC</option><option value="1800">1800 UC</option></select></div><button class="buy" id="farmWithdraw" style="margin-top:8px" '+(Number(d.uc_available)<120?'disabled':'')+'>СОЗДАТЬ ЗАЯВКУ НА UC</button></div>'+
+ '<h3>Последние заявки</h3>'+(withdrawals||'<div class="empty">Заявок на UC пока нет.</div>')
+}
+const FARM_TIER_ORDER_JS=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD'];
+function bindFarm(){
+ const collect=document.getElementById('farmCollect');if(collect&&!collect.disabled)collect.addEventListener('click',async()=>{collect.disabled=true;try{const d=await api('/api/farm/collect',{method:'POST'});alert('Ферма добыла '+d.count+' предмет(ов)');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);collect.disabled=false}});
+ const up=document.getElementById('farmUpgrade');if(up&&!up.disabled)up.addEventListener('click',async()=>{up.disabled=true;try{const d=await api('/api/farm/upgrade',{method:'POST'});alert('Ферма улучшена до '+d.level+' уровня');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);up.disabled=false}});
+ document.querySelectorAll('[data-farm-sell]').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;try{const d=await api('/api/farm/sell',{method:'POST',body:JSON.stringify({resource_id:b.dataset.farmSell,qty:Number(b.dataset.farmQty||1)})});sfxSell();alert('+'+d.coins_added+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);b.disabled=false}}));
+ const all=document.getElementById('farmSellAll');if(all&&!all.disabled)all.addEventListener('click',async()=>{if(!confirm('Продать весь склад за ShrekCOINS?'))return;all.disabled=true;try{const d=await api('/api/farm/sell-all',{method:'POST'});sfxSell();alert('Продано '+d.sold_qty+' предметов • +'+d.coins_added+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);all.disabled=false}});
+ const act=document.getElementById('farmActivity');if(act&&!act.disabled)act.addEventListener('click',async()=>{act.disabled=true;try{const d=await api('/api/farm/activity',{method:'POST'});alert('+'+d.uc_credits_added+' UC Credits'+(d.case_ticket?' • бесплатный билет '+d.case_ticket:''));app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);act.disabled=false}});
+ const wd=document.getElementById('farmWithdraw');if(wd&&!wd.disabled)wd.addEventListener('click',async()=>{wd.disabled=true;try{const d=await api('/api/farm/withdraw',{method:'POST',body:JSON.stringify({pubg_uid:document.getElementById('farmPubgUid').value,uc_amount:Number(document.getElementById('farmUcAmount').value)})});alert('Заявка #'+d.id+' создана');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);wd.disabled=false}})
+}
+
 async function referralHtml(){
  const r=await api('/api/referral');
  return '<section class="hero"><div class="cat">REFERRAL</div><h1>Приглашай друзей</h1><div class="muted">'+esc(r.reward_text)+'</div></section>'+
@@ -3493,12 +4057,12 @@ async function loadAdminData(){
  const r=await Promise.all([
   api('/api/admin/stats'),api('/api/admin/orders'),api('/api/admin/users'),api('/api/admin/products'),
   api('/api/admin/promos'),api('/api/admin/tickets'),api('/api/admin/spins'),api('/api/admin/upgrades'),api('/api/admin/referrals'),
-  api('/api/admin/cases')
+  api('/api/admin/cases'),api('/api/admin/farm-withdrawals')
  ]);
- adminData={stats:r[0],orders:r[1],users:r[2],products:r[3],promos:r[4],tickets:r[5],spins:r[6],upgrades:r[7],referrals:r[8],cases:r[9]}
+ adminData={stats:r[0],orders:r[1],users:r[2],products:r[3],promos:r[4],tickets:r[5],spins:r[6],upgrades:r[7],referrals:r[8],cases:r[9],farmWithdrawals:r[10]}
 }
 function adminNav(){
- const items=[['overview','Обзор'],['orders','Заказы'],['users','Игроки'],['products','Товары'],['cases','Кейсы'],['promos','Промо'],['rewards','Награды'],['support','Поддержка'],['bot','Бот']];
+ const items=[['overview','Обзор'],['orders','Заказы'],['users','Игроки'],['products','Товары'],['cases','Кейсы'],['promos','Промо'],['rewards','Награды'],['withdrawals','UC выводы'],['support','Поддержка'],['bot','Бот']];
  return '<div class="admin-nav">'+items.map(x=>'<button data-admin="'+x[0]+'" class="'+(adminSection===x[0]?'active':'')+'">'+x[1]+'</button>').join('')+'</div>'
 }
 function metric(label,val){return '<div class="metric"><span class="mini">'+label+'</span><b>'+val+'</b></div>'}
@@ -3545,13 +4109,18 @@ function adminRewards(){
  const refs=adminData.referrals.slice(0,80).map(x=>'<div class="order"><div class="name">'+esc(x.referrer_name||x.referrer_username||x.referrer_token||'Игрок')+' → '+esc(x.referred_name||x.referred_username||x.referred_token||'Игрок')+'</div><div class="mini">'+esc(x.referrer_token||'—')+' → '+esc(x.referred_token||'—')+' • '+(x.rewarded?'✅ Награда выдана':'⏳ Ждём первую оплату')+' • '+esc(x.created_at)+'</div></div>').join('');
  return '<h2>Выигрыши</h2>'+(spin||'<div class="empty">Нет</div>')+'<h2>Upgrade Lab</h2>'+(ups||'<div class="empty">Нет</div>')+'<h2>Рефералы</h2>'+(refs||'<div class="empty">Нет</div>')
 }
+function adminWithdrawals(){
+ const rows=adminData.farmWithdrawals||[];
+ return '<h2>UC выводы</h2><div class="card"><div class="muted">После фактической выдачи UC в PUBG нажмите «Выполнен». Только тогда UC Credits окончательно списываются у игрока.</div></div>'+
+ (rows.map(w=>'<div class="admin-card"><div class="cat">#'+w.id+' • '+esc(w.status)+'</div><div class="name">'+w.uc_amount+' UC • '+esc(w.token||'Без жетона')+'</div><div class="mini">'+esc(w.first_name||w.username||'Игрок')+(w.username?' @'+esc(w.username):'')+' • PUBG UID '+esc(w.pubg_uid)+' • '+esc(w.created_at)+'</div>'+(w.status==='Ожидает'?'<div class="row" style="margin-top:8px"><button class="buy" data-farm-wd-ok="'+w.id+'">Выполнен</button><button class="danger" data-farm-wd-no="'+w.id+'">Отклонить</button></div>':'')+'</div>').join('')||'<div class="empty">Заявок пока нет.</div>')
+}
 function adminSupport(){
  return '<h2>Обращения</h2>'+adminData.tickets.map(t=>'<div class="admin-card"><div class="cat">#'+t.id+' • '+esc(t.category)+' • '+esc(t.status)+'</div><div style="margin:8px 0">'+esc(t.message)+'</div><div class="token-code">'+esc(t.user_token||'Без жетона')+'</div><textarea id="tr'+t.id+'" placeholder="Ответ пользователю"></textarea><div class="row"><button class="blue" data-ticket-reply="'+t.id+'">Ответить</button><button class="secondary" data-ticket-close="'+t.id+'">Закрыть</button></div></div>').join('')
 }
 function adminBot(){
  return '<h2>Управление ботом</h2><div class="card"><h3>Сообщение пользователю</h3><input id="botUserToken" placeholder="Жетон SHX-..."><textarea id="botUserMsg" placeholder="Сообщение"></textarea><button class="buy" id="botSendBtn">Отправить</button></div><div class="card" style="margin-top:12px"><h3>Рассылка</h3><textarea id="broadcastMsg" placeholder="Сообщение всем зарегистрированным пользователям"></textarea><button class="danger" id="broadcastBtn">Запустить рассылку</button></div><div class="card" style="margin-top:12px"><div class="name">Команды бота</div><div class="muted">/start • /shop • /faq • /ref • /token • /help<br>Каждый пользователь имеет постоянный жетон SHX-.... Вся работа с пользователями идёт по жетонам.</div></div>'
 }
-function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
+function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='withdrawals')return adminWithdrawals();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
 async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+adminSectionHtml()}
 async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">Обновляем…</div>';app.innerHTML=await adminHtml();bindAdmin()}
 function bindAdmin(){
@@ -3577,6 +4146,8 @@ function bindAdmin(){
  document.querySelectorAll('[data-ticket-close]').forEach(b=>b.addEventListener('click',async()=>{try{await api('/api/admin/tickets/'+b.dataset.ticketClose+'/close',{method:'POST'});refreshAdmin()}catch(e){alert(e.message)}}));
  const bs=document.getElementById('botSendBtn');if(bs)bs.addEventListener('click',async()=>{try{await api('/api/admin/message',{method:'POST',body:JSON.stringify({token:document.getElementById('botUserToken').value,message:document.getElementById('botUserMsg').value})});alert('Сообщение отправлено')}catch(e){alert(e.message)}});
  const us=document.getElementById('userSearch');if(us)us.addEventListener('input',()=>{const q=us.value.trim().toLowerCase();document.querySelectorAll('.user-row').forEach(r=>r.style.display=!q||String(r.dataset.search||'').includes(q)?'':'none')});
+ document.querySelectorAll('[data-farm-wd-ok]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Подтвердить, что UC уже выданы игроку?'))return;try{await api('/api/admin/farm-withdrawals/'+b.dataset.farmWdOk,{method:'PATCH',body:JSON.stringify({status:'Выполнен'})});refreshAdmin()}catch(e){alert(e.message)}}));
+ document.querySelectorAll('[data-farm-wd-no]').forEach(b=>b.addEventListener('click',async()=>{try{await api('/api/admin/farm-withdrawals/'+b.dataset.farmWdNo,{method:'PATCH',body:JSON.stringify({status:'Отклонён'})});refreshAdmin()}catch(e){alert(e.message)}}));
  const br=document.getElementById('broadcastBtn');if(br)br.addEventListener('click',async()=>{if(!confirm('Отправить всем пользователям?'))return;try{await api('/api/admin/broadcast',{method:'POST',body:JSON.stringify({message:document.getElementById('broadcastMsg').value})});alert('Рассылка запущена')}catch(e){alert(e.message)}})
 }
 
@@ -3589,6 +4160,7 @@ async function render(){
   else if(tab==='spin'){app.innerHTML=await spinHtml();bindSpin()}
   else if(tab==='orders'){app.innerHTML=await ordersHtml()}
   else if(tab==='inventory'){app.innerHTML=await inventoryHtml();bindInventory()}
+  else if(tab==='farm'){app.innerHTML=await farmHtml();bindFarm()}
   else if(tab==='referral'){app.innerHTML=await referralHtml();bindReferral()}
   else if(tab==='support'){app.innerHTML=supportHtml();bindSupport()}
   else if(tab==='settings'){app.innerHTML=settingsHtml();bindSettings()}
