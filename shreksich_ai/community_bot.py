@@ -159,6 +159,11 @@ def moderation_pref(cid):
         row=conn.execute("SELECT anti_scam,anti_flood FROM moderation WHERE chat_id=?",(cid,)).fetchone()
     return row or (1,1)
 
+def ai_features(cid):
+    with db() as conn:
+        row=conn.execute("SELECT voice_enabled,images_enabled,duels_enabled FROM ai_options WHERE chat_id=?",(cid,)).fetchone()
+    return row or (1,1,1)
+
 def admin_menu(row):
     cid,enabled,interval,_=row
     persona,ai_on,xp_on=group_pref(cid)
@@ -170,6 +175,7 @@ def admin_menu(row):
         [{"text":"🎮 Провести викторину","callback_data":"admin:quiz"},{"text":"🎪 Событие","callback_data":"admin:event"}],
         [{"text":"⏳ Частота ответов","callback_data":"admin:cooldown"},{"text":"🎁 Награда XP","callback_data":"admin:reward"}],
         [{"text":"🛡 Антискам","callback_data":"admin:scam"},{"text":"🚫 Антифлуд","callback_data":"admin:flood"}],
+        [{"text":"📸 Фото ИИ","callback_data":"admin:images"},{"text":"🎙 Голос","callback_data":"admin:voice"},{"text":"⚔️ Дуэли","callback_data":"admin:duels"}],
         [{"text":"📊 Статистика","callback_data":"admin:stats"},{"text":"🧠 Очистить память","callback_data":"admin:memory_confirm"}],
         [{"text":"🔄 Обновить","callback_data":"admin:refresh"}],
     ])
@@ -178,10 +184,11 @@ def admin_text(row):
     persona,ai_on,xp_on=group_pref(cid)
     cooldown,reward=options(cid)
     anti_scam,anti_flood=moderation_pref(cid)
+    voice_on,image_on,duels_on=ai_features(cid)
     return (f"🐸 SHREKSICH AI 2.0 • ПАНЕЛЬ ВЛАДЕЛЬЦА\n\nЧат: {cid}\n"
             f"ИИ: {'включён' if ai_on else 'выключен'}\nХарактер: {persona}\n"
             f"XP: {'включён' if xp_on else 'выключен'}\n"
-            f"Автовикторины: {'включены' if enabled else 'выключены'} (каждые {interval} мин)"+chr(10)+f"Ответы ИИ: не чаще раза в {cooldown} сек"+chr(10)+f"Награда за викторину: {reward} XP"+chr(10)+f"Антискам: {bool(anti_scam)} | Антифлуд: {bool(anti_flood)}")
+            f"Автовикторины: {'включены' if enabled else 'выключены'} (каждые {interval} мин)"+chr(10)+f"Ответы ИИ: не чаще раза в {cooldown} сек"+chr(10)+f"Награда за викторину: {reward} XP"+chr(10)+f"Антискам: {bool(anti_scam)} | Антифлуд: {bool(anti_flood)}"+chr(10)+f"Фото: {bool(image_on)} | Голос: {bool(voice_on)} | Дуэли: {bool(duels_on)}")
 def admin_stats(cid):
     with db() as conn:
         players=conn.execute("SELECT COUNT(*) FROM profiles WHERE chat_id=?",(cid,)).fetchone()[0]
