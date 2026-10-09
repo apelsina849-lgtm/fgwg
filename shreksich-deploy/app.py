@@ -3568,6 +3568,30 @@ input,textarea,select{background:#0a1625;border-color:#2c455e}
 @media(min-width:620px){.shx-farm-catalog .farm-catalog-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:365px){.shx-wallet svg{width:28px;height:28px;flex-basis:28px}.shx-wallet-count{font-size:14px}.shx-wallet-name{font-size:8px}.shx-tile{min-height:115px}.shx-tile .tile-copy b{font-size:14px}.farm-ui .farm-module{padding:7px}.farm-ui .farm-module-desc{font-size:9px}}
 
+
+/* Standalone circular free roulette */
+.roul-page{max-width:590px;margin:0 auto}.roul-hero{text-align:center;background:linear-gradient(145deg,#112b4b,#0c162b 65%,#322210);border-color:#53708e;padding:19px 16px}
+.roul-hero h1{font-size:28px}.roul-box{border-radius:25px;padding:18px 13px;background:radial-gradient(circle at 50% 32%,#1c3656,#0b172b 70%);border:1px solid #3d6081;box-shadow:inset 0 1px #ffffff22,0 16px 35px #000a}
+.roul-stage{position:relative;aspect-ratio:1;width:min(100%,340px);margin:4px auto 16px;display:grid;place-items:center;isolation:isolate}
+.roul-stage:before{content:"";position:absolute;inset:-2%;border-radius:50%;background:repeating-conic-gradient(#f9d987 0 10deg,#85541e 10deg 19deg);box-shadow:0 0 0 4px #4b331e,0 16px 30px #0009,0 0 28px #e6a93b77}
+.roul-wheel{position:absolute;inset:4%;border-radius:50%;border:4px solid #fbdc8d;overflow:hidden;box-shadow:inset 0 0 12px #0009;will-change:transform}
+.roul-wheel:after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;background:radial-gradient(circle at 27% 17%,#ffffff55,transparent 36%),radial-gradient(circle,#0000 38%,#0009 100%)}
+.roul-label{position:absolute;font-size:clamp(9px,2.7vw,12px);font-weight:1000;color:white;text-shadow:0 2px 6px #000,0 0 4px #000;z-index:2;line-height:1.2;text-align:center;white-space:nowrap;transform:translate(-50%,-50%)}
+.roul-label small{display:block;font-size:9px;color:#fff5c7}
+.roul-hub{position:absolute;inset:35%;z-index:5;border-radius:50%;background:radial-gradient(circle at 36% 26%,#fff4c6,#e8b54f 48%,#9d5b19);border:5px solid #ffecb2;box-shadow:0 3px 15px #000a;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#51330c;font-size:clamp(11px,3.8vw,15px);font-weight:1000}
+.roul-hub small{font-size:8px;letter-spacing:.5px}
+.roul-pointer{position:absolute;z-index:9;top:-2%;left:50%;transform:translateX(-50%);width:43px;height:55px;background:linear-gradient(110deg,#ffecb1,#eeb135 65%,#a65a19);clip-path:polygon(50% 100%,3% 10%,27% 2%,73% 2%,97% 10%);filter:drop-shadow(0 5px 5px #000)}
+.roul-legend{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:5px 0 12px}
+.roul-legend span{font-size:10px;font-weight:900;padding:6px 8px;background:#132940;border:1px solid #375577;border-radius:20px}
+.roul-legend i{display:inline-block;height:9px;width:9px;vertical-align:middle;border-radius:50%;margin-right:5px}
+.roul-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:12px 0}
+.roul-stat{background:#0b2035;border:1px solid #385675;border-radius:13px;padding:9px 5px;text-align:center}.roul-stat small{display:block;color:#a4b8cd;font-size:9px}.roul-stat b{display:block;font-size:20px;color:#ffe29d;margin-top:4px}
+.roul-go{width:100%;padding:16px 8px;font-size:15px;background:linear-gradient(130deg,#ffe4a3,#f6b931 60%,#c88b22);box-shadow:0 0 21px #ffb83345;color:#231b0a}
+.roul-hint{font-size:11px;color:#abc4dc;text-align:center;line-height:1.5;margin:12px 0 3px}
+.roul-result{text-align:center;margin:12px 0 0}
+.roul-result:not(:empty){background:#0d2035;border:1px solid #376088;border-radius:15px;padding:15px}
+.roul-route{width:100%;margin:10px 0;color:#c4e4ff;background:#102840;border:1px solid #34577b}
+
 </style>
 </head>
 <body>
@@ -4088,6 +4112,112 @@ function selectedCaseIdleStrip(){
  if(!arr.length)arr=['GRAY'];
  while(arr.length<9)arr=arr.concat(arr);
  return arr.slice(0,9).map(t=>cubeHtml(t)).join('')
+}
+
+
+const ROULETTE_COLORS={GRAY:'#778695',CYAN:'#22a6c8',BLUE:'#3c76d9',PURPLE:'#865bc7',PINK:'#d562ae',RED:'#db5760',GOLD:'#e5b843'};
+const ROULETTE_LABELS={GRAY:'СЕРЫЙ',CYAN:'ГОЛУБОЙ',BLUE:'СИНИЙ',PURPLE:'ФИОЛЕТ',PINK:'РОЗОВЫЙ',RED:'КРАСНЫЙ',GOLD:'ЗОЛОТО'};
+let rouletteLastAngle=0,rouletteSlices=[];
+function makeRouletteWheel(cfg){
+ const ts=(cfg?.tiers||[]).filter(t=>ROULETTE_COLORS[t.tier]&&Number(t.chance)>0);
+ const total=ts.reduce((a,t)=>a+Number(t.chance),0);
+ if(!total)return {slices:[],bg:'conic-gradient(#243b5a 0 360deg)',labels:'',legend:''};
+ let pos=0;const slices=[],stops=[],labels=[],legend=[];
+ for(const t of ts){
+  const span=360*Number(t.chance)/total,from=pos,parts=Math.max(1,Math.round(span/26));
+  for(let i=0;i<parts;i++){
+   const end=i===parts-1?from+span:pos+span/parts;
+   const shade=(i%2)?{'GRAY':'#929caa','CYAN':'#42bddb','BLUE':'#6595e9','PURPLE':'#a177de','PINK':'#ed7bc5','RED':'#ec7680','GOLD':'#ffe286'}[t.tier]:ROULETTE_COLORS[t.tier];
+   const edge=Math.min(.9,(end-pos)/12);
+   stops.push(shade+' '+pos.toFixed(4)+'deg '+(end-edge).toFixed(4)+'deg','#14263e '+(end-edge).toFixed(4)+'deg '+end.toFixed(4)+'deg');
+   slices.push({tier:t.tier,start:pos,end});pos=end;
+  }
+  if(span>16){
+   const mid=(from+span/2)*Math.PI/180;
+   const x=(50+32*Math.sin(mid)).toFixed(2),y=(50-32*Math.cos(mid)).toFixed(2);
+   labels.push('<span class="roul-label" style="left:'+x+'%;top:'+y+'%">'+ROULETTE_LABELS[t.tier]+'<small>'+Number(t.chance)+'%</small></span>');
+  }
+  legend.push('<span><i style="background:'+ROULETTE_COLORS[t.tier]+'"></i>'+tierLabel(t.tier)+' '+Number(t.chance)+'%</span>');
+ }
+ return {slices,bg:'conic-gradient(from 0deg,'+stops.join(',')+')',labels:labels.join(''),legend:legend.join('')};
+}
+async function rouletteHtml(){
+ spinState=await api('/api/spin/state');
+ const cfg=spinState.roulette,enabled=!!(cfg&&cfg.active),pending=spinState.pending_drop,paid=spinState.paid_case_opening;
+ const wheel=makeRouletteWheel(cfg);rouletteSlices=wheel.slices;
+ const free=Number(spinState.free_remaining||0),ticket=Number(spinState.bonus_tickets||0);
+ const ready=enabled&&!pending&&!paid&&(free+ticket)>0;
+ const note=pending?'Приз уже выпал: сначала сохраните или продайте его.':paid?'Сначала заберите оплаченный кейс во вкладке «Кейсы».':!enabled?'Рулетка отключена администратором.':free>0?'Вращение бесплатное. Результат выбирает сервер.':ticket>0?'Будет использован один бонусный билет.':'Следующая бесплатная прокрутка через '+formatReset(spinState.next_reset_seconds);
+ const history=(spinState.history||[]).filter(x=>x.source==='free'||x.source==='ticket').slice(0,5).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div><div class="mini">'+tierLabel(x.reward_tier)+' · '+formatDropDate(x.created_at)+'</div></div>').join('');
+ return '<div class="roul-page"><section class="hero roul-hero"><div class="cat">МЕТРО · КОЛЕСО ФОРТУНЫ</div><h1>Бесплатная <span class="gold">рулетка</span></h1><div class="muted">Настоящее круглое колесо, случайные призы и честные шансы.</div></section>'+
+ '<section class="roul-box"><div class="roul-stage"><div class="roul-wheel" id="roulWheel" style="background:'+wheel.bg+';transform:rotate('+(rouletteLastAngle%360)+'deg)">'+wheel.labels+'</div><div class="roul-hub">ШРЕКСИЧ<small>METRO SPIN</small></div><div class="roul-pointer"></div></div>'+
+ '<div class="roul-legend">'+wheel.legend+'</div>'+
+ '<div class="roul-stats"><div class="roul-stat"><small>БЕСПЛАТНО</small><b>'+free+' / '+Number(spinState.max_free_spins||0)+'</b></div><div class="roul-stat"><small>БИЛЕТЫ</small><b>🎟 '+ticket+'</b></div><div class="roul-stat"><small>SHR</small><b>'+Number(spinState.shr||0)+'</b></div></div>'+
+ '<button id="roulSpin" class="roul-go" '+(ready?'':'disabled')+'>'+(pending?'ЗАБЕРИТЕ ПРИЗ':free>0?'🎡 КРУТИТЬ БЕСПЛАТНО':ticket>0?'🎟 КРУТИТЬ ЗА БИЛЕТ':'ВРАЩЕНИЙ НЕТ')+'</button>'+
+ '<div class="spin-lock-note" id="spinLockNote">Колесо вращается — дождитесь награды.</div><div class="roul-hint">'+note+'</div><div class="roul-result" id="roulResult"></div></section>'+
+ '<button id="roulCases" class="roul-route">📦 Перейти к платным кейсам</button>'+
+ '<div class="shx-panel"><h3>🎟 Промокод на прокрутки</h3><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
+ '<div class="shx-panel"><h3>Последние выигрыши рулетки</h3>'+(history||'<div class="empty">Здесь появятся ваши награды.</div>')+'</div></div>';
+}
+function rouletteAngleFor(tier){
+ const matches=rouletteSlices.filter(x=>x.tier===tier);
+ if(!matches.length)return rouletteLastAngle%360;
+ const pick=matches[Math.floor(Math.random()*matches.length)];
+ return ((360-(pick.start+pick.end)/2)%360+360)%360;
+}
+function bindRoulette(){
+ const play=document.getElementById('roulSpin');if(play&&!play.disabled)play.addEventListener('click',rollRoulette);
+ const cases=document.getElementById('roulCases');if(cases)cases.addEventListener('click',()=>go('spin'));
+ const promo=document.getElementById('spinPromoBtn');if(promo)promo.addEventListener('click',applySpinPromo);
+ const p=spinState?.pending_drop;
+ if(p?.reward){
+  const wheel=document.getElementById('roulWheel'),result=document.getElementById('roulResult');
+  rouletteLastAngle=rouletteAngleFor(p.reward.tier);
+  if(wheel)wheel.style.transform='rotate('+rouletteLastAngle+'deg)';
+  if(result)revealReward(result,p);
+ }
+}
+async function rollRoulette(){
+ const btn=document.getElementById('roulSpin'),wheel=document.getElementById('roulWheel'),result=document.getElementById('roulResult');
+ if(!btn||btn.disabled||!wheel||!result||spinNavigationLocked)return;
+ btn.disabled=true;btn.textContent='ОПРЕДЕЛЯЕМ ПРИЗ…';
+ setSpinNavigationLocked(true);
+ let playing=false;
+ try{
+  const d=await api('/api/spin/free',{method:'POST'});
+  if(!d?.reward?.tier)throw Error('Сервер не вернул приз');
+  lastSpinReward=d.reward;
+  const start=rouletteLastAngle%360,angle=rouletteAngleFor(d.reward.tier);
+  const correction=((angle-start)%360+360)%360;
+  const end=start+360*9+correction;
+  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
+  if(!skip){
+   await ensureAudioReady();
+   startSpinSound(8500);playing=true;
+   if(wheel.animate){
+    const anim=wheel.animate([{transform:'rotate('+start+'deg)'},{transform:'rotate('+end+'deg)'}],{duration:8500,easing:'cubic-bezier(.12,.66,.08,1)',fill:'forwards'});
+    await anim.finished.catch(()=>{});
+    wheel.style.transform='rotate('+angle+'deg)';
+    anim.cancel();
+   }else{
+    wheel.style.transition='transform 8.5s cubic-bezier(.12,.66,.08,1)';
+    void wheel.offsetWidth;
+    wheel.style.transform='rotate('+end+'deg)';
+    await sleep(8550);
+    wheel.style.transition='';
+    wheel.style.transform='rotate('+angle+'deg)';
+   }
+   stopSpinSound();playing=false;
+  }else wheel.style.transform='rotate('+angle+'deg)';
+  rouletteLastAngle=angle;
+  sfxDrop(d.reward.tier);revealReward(result,d);
+  btn.textContent='🎁 ПРИЗ ВЫПАЛ';
+  loadWinsFeed();
+  if(['RED','GOLD','LEGENDARY','MYTHIC'].includes(d.reward.tier))showDropFx(d.reward);
+ }catch(e){
+  if(!e.silent)alert(e.message);
+  try{app.innerHTML=await rouletteHtml();bindRoulette();addHomeExit()}catch(_){}
+ }finally{if(playing)stopSpinSound();setSpinNavigationLocked(false)}
 }
 
 async function spinHtml(){
