@@ -107,7 +107,7 @@ def admin_menu(row):
         [{"text":"🐸 Характер: "+{"friendly":"Дружелюбный","expert":"Эксперт PUBG","serious":"Серьёзный"}.get(persona,persona),"callback_data":"admin:persona"}],
         [{"text":"🎮 Автовикторины "+("✅" if enabled else "❌"),"callback_data":"admin:toggle"}],
         [{"text":"⏱ 15 мин","callback_data":"admin:interval:15"},{"text":"⏱ 30 мин","callback_data":"admin:interval:30"},{"text":"⏱ 60 мин","callback_data":"admin:interval:60"}],
-        [{"text":"🎮 Провести викторину","callback_data":"admin:quiz"}],
+        [{"text":"🎮 Провести викторину","callback_data":"admin:quiz"},{"text":"🎪 Событие","callback_data":"admin:event"}],
         [{"text":"⏳ Частота ответов","callback_data":"admin:cooldown"},{"text":"🎁 Награда XP","callback_data":"admin:reward"}],
         [{"text":"🛡 Антискам","callback_data":"admin:scam"},{"text":"🚫 Антифлуд","callback_data":"admin:flood"}],
         [{"text":"📊 Статистика","callback_data":"admin:stats"},{"text":"🧠 Очистить память","callback_data":"admin:memory_confirm"}],
@@ -229,6 +229,12 @@ async def handle_callback(query):
             return
         if data=="admin:quiz":
             await quiz_start(row[0])
+        elif data=="admin:event":
+            start=int(time.time())+3600
+            with db() as conn:
+                conn.execute("INSERT OR REPLACE INTO events_schedule(chat_id,title,starts_at,created_by) VALUES(?,?,?,?)",(row[0],"Вечер Metro Royale",start,uid))
+                conn.execute("DELETE FROM event_signups WHERE chat_id=?",(row[0],))
+            await send(row[0],"🎪 ВЕЧЕР METRO ROYALE!\nНачало через 1 час.\nНажми кнопку, чтобы записаться.",reply_markup=keyboard([[{"text":"🎮 Участвовать","callback_data":"event:join"}]]))
         elif data=="admin:toggle":
             with db() as conn:
                 conn.execute("UPDATE settings SET enabled=1-enabled,next_quiz=? WHERE chat_id=?",(int(time.time())+row[2]*60,row[0]))
@@ -286,6 +292,15 @@ async def handle_callback(query):
             if "message is not modified" not in str(exc): LOG.exception("Admin menu edit failed")
         try: await call("answerCallbackQuery",callback_query_id=qid)
         except Exception: pass
+        return
+    if data=="event:join":
+        with db() as conn:
+            event=conn.execute("SELECT title,starts_at FROM events_schedule WHERE chat_id=?",(cid,)).fetchone()
+            if event and event[1]>int(time.time()):
+                conn.execute("INSERT OR IGNORE INTO event_signups(chat_id,user_id) VALUES(?,?)",(cid,uid))
+                response="🎮 Ты записан! Событие начнётся через час после объявления."
+            else: response="Регистрация завершена."
+        await call("answerCallbackQuery",callback_query_id=qid,text=response,show_alert=True)
         return
     notice=""
     try:
