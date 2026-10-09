@@ -896,6 +896,8 @@ async def announce_top_drop(user_id: int, reward: dict):
 
 def keyboard(user_id: int):
     rows = [[{"text":"🛒 Открыть магазин","web_app":{"url":BASE_URL}}]]
+    rows.append([{"text":"🌾 Ферма","web_app":{"url":BASE_URL + "/?tab=farm"}},
+                 {"text":"🎰 Рулетки","web_app":{"url":BASE_URL + "/?tab=spin"}}])
     rows.append([{"text":"📦 Мои заказы","web_app":{"url":BASE_URL + "/?tab=orders"}},
                  {"text":"💬 Поддержка","web_app":{"url":BASE_URL + "/?tab=support"}}])
     rows.append([{"text":"📢 Новости","url":"https://t.me/shreksi4PubgNEWS"},
@@ -965,6 +967,21 @@ async def referral_link(user_id: int):
     return f"https://t.me/{bot_username}?start=ref_{token}" if bot_username else BASE_URL
 
 
+async def send_farm(chat_id: int):
+    await tg("sendMessage", {
+        "chat_id":chat_id,
+        "parse_mode":"HTML",
+        "text":("🌾 <b>Metro Farm — твоя ферма</b>\n\n"
+                "Собирай ресурсы, продавай их за ShrekCOINS и улучшай буровую станцию, склад и торговый терминал.\n"
+                "Ежедневные задания и награды — внутри фермы.\n\n"
+                "Нажми кнопку ниже, чтобы перейти прямо к добыче."),
+        "reply_markup":{"inline_keyboard":[
+            [{"text":"🌾 Открыть ферму","web_app":{"url":BASE_URL + "/?tab=farm"}}],
+            [{"text":"🏠 Вернуться в магазин","web_app":{"url":BASE_URL}}]
+        ]}
+    })
+
+
 async def send_token(chat_id: int, user_id: int):
     conn = await db()
     try:
@@ -987,7 +1004,8 @@ async def send_faq(chat_id: int):
         "🎰 <b>SPIN:</b> до 3 бесплатных вращений за 24 часа + бонусные билеты от админа и рефералов.\n"
         "🎟 <b>Промокоды:</b> вводятся при оформлении заказа и уменьшают цену в Stars.\n"
         "👥 <b>Рефералы:</b> после первой оплаченной покупки приглашённого вы получаете 1 бонусный SPIN-билет и 3 SHR.\n"
-        "💬 <b>Поддержка:</b> создайте обращение в Mini App или напишите в нашем чате."
+        "🌾 <b>Ферма:</b> команда /farm откроет добычу ресурсов, склад и улучшения за ShrekCOINS.\n"
+        "💬 <b>Поддержка:</b создайте обращение в Mini App или напишите в нашем чате."
     )
     await tg("sendMessage", {"chat_id":chat_id,"parse_mode":"HTML","text":text,"reply_markup":keyboard(chat_id)})
 
@@ -1009,6 +1027,9 @@ async def answer_question(chat_id: int, text: str):
         answer = "📦 Все ваши заказы и их статусы находятся в Mini App → «Заказы»."
     elif any(x in q for x in ("спин", "рулет", "билет")):
         answer = "🎰 Доступно до 3 бесплатных SPIN за 24 часа. Дополнительные бонусные билеты можно получить от администратора или за рефералов."
+    elif any(x in q for x in ("ферм", "добыч", "shrekcoins", "шреккоин")):
+        await send_farm(chat_id)
+        return
     elif any(x in q for x in ("промо", "скидк", "купон")):
         answer = "🎟 Промокод вводится перед созданием заказа. Если он активен, цена в Stars пересчитается автоматически."
     elif any(x in q for x in ("рефер", "приглас", "друг")):
@@ -1040,6 +1061,9 @@ async def process_update(update: dict):
         return
     if msg and text.startswith("/shop"):
         await send_start(int(msg["chat"]["id"]), int(user.get("id", 0)))
+        return
+    if msg and text.split("@")[0].split(" ")[0] == "/farm":
+        await send_farm(int(msg["chat"]["id"]))
         return
     if msg and (text.startswith("/faq") or text.startswith("/help")):
         await send_faq(int(msg["chat"]["id"]))
@@ -1217,6 +1241,7 @@ async def polling():
         await tg("setMyCommands", {"commands":[
           {"command":"start","description":"Главное меню"},
           {"command":"shop","description":"Открыть магазин"},
+          {"command":"farm","description":"🌾 Открыть ферму"},
           {"command":"faq","description":"Ответы на вопросы"},
           {"command":"ref","description":"Реферальная ссылка"},
           {"command":"token","description":"Мой жетон"},
