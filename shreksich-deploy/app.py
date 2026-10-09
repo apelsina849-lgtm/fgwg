@@ -4174,6 +4174,135 @@ function caseIconMarkup(icon){
  };
  return '<div class="case-icon case-icon-'+esc(k)+'"><svg viewBox="0 0 40 34" aria-hidden="true">'+(paths[k]||paths.crate)+'</svg></div>'
 }
+
+function caseItemArchetype(name){
+ const n=String(name||'').toLowerCase();
+ if(/metro cash|метро кэш|налич/.test(n))return 'cash';
+ if(/ammo|патрон/.test(n))return 'ammo';
+ if(/grenade|гранат|метательн/.test(n))return 'grenade';
+ if(/med|аптеч|бинт|обезбол|adren|адреналин|stim|лечени/.test(n))return 'medical';
+ if(/helmet|шлем/.test(n))return 'helmet';
+ if(/armor|брон|жилет|plates/.test(n))return 'armor';
+ if(/key|ключ/.test(n))return 'key';
+ if(/weapon|оруж|прицел|дульн|рукоят|магазин/.test(n))return 'weapon';
+ if(/repair|ремонт|детал|module|модул|полимер|металлолом|радиодетал|инструмент/.test(n))return 'tools';
+ if(/energy|ration|энергет/.test(n))return 'ration';
+ if(/pack|kit|bundle|рюкзак|сумка|снаряжен|booster/.test(n))return 'pack';
+ if(/vault|case|crate|cache|box|supply|contraband|ящик/.test(n))return 'crate';
+ return 'artifact';
+}
+function caseLootSticker(item,compact=false){
+ const name=String(item?.name||'Metro Item'),tier=String(item?.tier||'GRAY').toUpperCase();
+ let hash=2166136261;for(let i=0;i<name.length;i++)hash=Math.imul(hash^name.charCodeAt(i),16777619)>>>0;
+ const gold=tier==='GOLD'||tier==='RED';
+ const hue={GRAY:'#a8b9c7',CYAN:'#7cecf2',BLUE:'#81b7ff',PURPLE:'#d6a0ff',PINK:'#ff9fce',RED:'#ff8d97',GOLD:'#ffe18a'}[tier]||'#dbe6ef';
+ const dark={GRAY:'#415769',CYAN:'#12687b',BLUE:'#255a9b',PURPLE:'#7043a4',PINK:'#ac477d',RED:'#aa3946',GOLD:'#a47727'}[tier]||'#364e61';
+ const tag=String(name.match(/\b\d+(?:\.\d+)?[MK]\b/i)?.[0]||name.split(/\s+/).filter(Boolean).map(w=>w[0]).join('').slice(0,4)||'MR').slice(0,6).toUpperCase();
+ const serial=String(hash%997).padStart(3,'0');
+ const archetype=caseItemArchetype(name);
+ let form='';
+ if(archetype==='cash'){
+  form='<path d="M15 47L58 29 89 44 46 64Z" fill="#192f2b" stroke="'+hue+'" stroke-width="2"/>'+
+   '<path d="M14 31L57 13 89 30 46 49Z" fill="#2d7354" stroke="#afe9b4" stroke-width="3"/>'+
+   '<path d="M14 38L57 20 89 37 46 56Z" fill="#39785b" stroke="#c7f4c0" stroke-width="2"/>'+
+   '<path d="M17 42L60 24 87 38 44 58Z" fill="#438d65" stroke="#d2f8c8"/>'+
+   '<path d="M45 28L60 24 72 31 57 38Z" fill="#b6dfb0"/><circle cx="53" cy="39" r="7" fill="none" stroke="#d1f0ba" stroke-width="2"/>'+
+   '<path d="M42 26L53 32 53 59 44 63 44 38Z" fill="#d8b36b" stroke="#ffe5a6" stroke-width="2"/>';
+ }else if(archetype==='medical'){
+  form='<path d="M22 30L50 16 79 28 51 44Z" fill="'+hue+'" stroke="#f8fdff" stroke-width="2"/>'+
+   '<path d="M22 30V68L51 82V44Z" fill="'+dark+'" stroke="'+hue+'" stroke-width="3"/>'+
+   '<path d="M79 28V67L51 82V44Z" fill="#203a4a" stroke="'+hue+'" stroke-width="3"/>'+
+   '<path d="M33 48H41V40L47 43V51H55V59H47V67L41 64V56H33Z" fill="#f6f7f4"/>'+
+   '<path d="M43 18V13Q51 7 59 13V22" fill="none" stroke="#d9f7ff" stroke-width="4"/>';
+ }else if(archetype==='armor'){
+  form='<path d="M23 22L40 15 51 26 64 15 81 22 73 48 70 77 31 77 29 46Z" fill="'+dark+'" stroke="'+hue+'" stroke-width="4"/>'+
+   '<path d="M40 19L51 30 64 19 68 37 58 44 58 72 42 72 42 44 34 36Z" fill="'+hue+'" opacity=".75"/>'+
+   '<path d="M40 46H62V67H40Z" fill="#17253a" stroke="#f7ecda" stroke-width="2"/>'+
+   '<path d="M41 51H61M41 57H61M41 63H61" stroke="'+hue+'" stroke-width="2"/>';
+ }else if(archetype==='helmet'){
+  form='<path d="M16 53Q13 23 50 17Q86 20 85 53L75 61H61L51 72 41 61H26Z" fill="'+dark+'" stroke="'+hue+'" stroke-width="4"/>'+
+   '<path d="M24 48Q28 26 50 27Q72 26 77 48Z" fill="#314c68" stroke="#c8deef" stroke-width="2"/>'+
+   '<path d="M26 52H76L65 62H46L38 69H26Z" fill="#071923" stroke="'+hue+'" stroke-width="2"/>'+
+   '<path d="M32 31L41 27M59 27L69 31" stroke="#fff9d1" stroke-width="3" opacity=".7"/>';
+ }else if(archetype==='weapon'){
+  form='<g transform="rotate(-17 50 50)"><path d="M13 35H69V44H81V51H67V56H48L39 73H28L36 55H20Z" fill="'+dark+'" stroke="'+hue+'" stroke-width="3"/>'+
+   '<path d="M22 30H65V35H22Z" fill="#d5e4f0" stroke="'+hue+'" stroke-width="2"/><path d="M67 35H94V41H67Z" fill="#c5d6e1"/>'+
+   '<path d="M39 56L51 58 47 78H35Z" fill="#31465e" stroke="'+hue+'" stroke-width="2"/>'+
+   '<path d="M30 28L35 19H58L64 28" fill="none" stroke="#c8e4f3" stroke-width="3"/></g>';
+ }else if(archetype==='ammo'){
+  form='<path d="M24 73V34L35 22 44 33V73Z" fill="#ba8b40" stroke="#ffe5a5" stroke-width="3"/>'+
+   '<path d="M44 77V26L55 12 66 26V77Z" fill="'+dark+'" stroke="'+hue+'" stroke-width="3"/>'+
+   '<path d="M64 72V39L75 25 85 39V72Z" fill="#b7813f" stroke="#ffe5b0" stroke-width="3"/>'+
+   '<path d="M24 55H44M44 51H66M64 56H85" stroke="#ffe4a0" stroke-width="4"/>';
+ }else if(archetype==='grenade'){
+  form='<path d="M38 18H63V29H38Z" fill="#859cac" stroke="#eafaff" stroke-width="2"/>'+
+   '<path d="M50 13V7H68L73 17" fill="none" stroke="#b9dbeb" stroke-width="4"/>'+
+   '<rect x="25" y="27" width="50" height="52" rx="18" fill="'+dark+'" stroke="'+hue+'" stroke-width="4"/>'+
+   '<path d="M26 45H74M26 59H74M44 28V79M58 28V79" stroke="'+hue+'" stroke-width="3"/>';
+ }else if(archetype==='key'){
+  form='<g transform="rotate(-28 50 50)"><circle cx="37" cy="26" r="16" fill="none" stroke="'+hue+'" stroke-width="8"/>'+
+   '<circle cx="37" cy="26" r="7" fill="#132a3f"/><path d="M37 43V87H48V76H56V67H48V56H42" fill="'+dark+'" stroke="'+hue+'" stroke-width="4"/></g>';
+ }else if(archetype==='tools'){
+  form='<circle cx="50" cy="45" r="26" fill="'+dark+'" stroke="'+hue+'" stroke-width="6" stroke-dasharray="9 5"/>'+
+   '<circle cx="50" cy="45" r="15" fill="#1e3548" stroke="#e1eaf1" stroke-width="3"/>'+
+   '<circle cx="50" cy="45" r="6" fill="'+hue+'"/>'+
+   '<path d="M18 78L76 20" stroke="#d4a571" stroke-width="8" stroke-linecap="round"/>'+
+   '<path d="M69 12L87 29L79 40L61 22Z" fill="#bfd0df" stroke="#f6f9ff" stroke-width="2"/>';
+ }else if(archetype==='ration'){
+  form='<path d="M24 25L72 25 79 73 20 73Z" fill="'+dark+'" stroke="'+hue+'" stroke-width="4"/>'+
+   '<path d="M23 27Q50 13 76 27" fill="none" stroke="#fff5df" stroke-width="4"/>'+
+   '<circle cx="50" cy="52" r="14" fill="#61965b" stroke="#e4f3ac" stroke-width="3"/>'+
+   '<path d="M44 53Q49 38 56 50M39 60L59 43" stroke="#e6f7bf" stroke-width="3" fill="none"/>';
+ }else if(archetype==='pack'){
+  form='<rect x="24" y="21" width="53" height="61" rx="10" fill="'+dark+'" stroke="'+hue+'" stroke-width="4"/>'+
+   '<path d="M36 21V15Q51 5 65 16V21" fill="none" stroke="#ecdbb4" stroke-width="4"/>'+
+   '<rect x="31" y="44" width="39" height="31" rx="6" fill="#234052" stroke="'+hue+'" stroke-width="3"/>'+
+   '<path d="M38 44V33M64 44V33M32 58H70" stroke="#dfe6e8" stroke-width="3"/>'+
+   '<circle cx="50" cy="58" r="5" fill="'+hue+'"/>';
+ }else if(archetype==='crate'){
+  form='<path d="M14 33L48 17 85 36 51 53Z" fill="'+hue+'" stroke="#fff3cd" stroke-width="2.8"/>'+
+   '<path d="M14 33V71L51 89V53Z" fill="'+dark+'" stroke="'+hue+'" stroke-width="3"/>'+
+   '<path d="M85 36V72L51 89V53Z" fill="#1f354a" stroke="'+hue+'" stroke-width="3"/>'+
+   '<path d="M26 27L63 45V82M36 23L73 41M25 39V76M73 44V77" fill="none" stroke="#d7bc8a" stroke-width="4"/>'+
+   '<path d="M30 58L41 64M60 66L75 58" stroke="'+hue+'" stroke-width="4"/>';
+ }else{
+  form='<path d="M50 9L75 29 84 57 62 83 36 83 16 57 25 29Z" fill="'+dark+'" stroke="'+hue+'" stroke-width="5"/>'+
+   '<path d="M50 9L50 67L16 57M50 67L84 57M25 29L75 29" fill="none" stroke="'+hue+'" stroke-width="3"/>'+
+   '<circle cx="50" cy="46" r="11" fill="#8acaca" stroke="#e1ffff" stroke-width="3"/>';
+ }
+ const rays=hash%3===0?'<path d="M13 16L22 20M78 12L84 21M11 74L20 70" stroke="'+hue+'" stroke-width="3" stroke-linecap="round"/>':hash%3===1?'<circle cx="18" cy="20" r="3" fill="'+hue+'"/><circle cx="79" cy="17" r="4" fill="'+hue+'"/>':'<path d="M15 16L20 24L25 16M75 15L80 23L85 15" stroke="'+hue+'" stroke-width="3" fill="none"/>';
+ const svg='<svg viewBox="0 0 100 100" role="img" aria-label="'+esc(name)+'">'+
+ '<ellipse cx="50" cy="89" rx="35" ry="5" fill="#000" opacity=".4"/>'+rays+form+
+ '<rect x="12" y="82" width="76" height="14" rx="5" fill="#102132" stroke="'+hue+'" stroke-width="1.8"/>'+
+ '<text x="43" y="92" font-size="10" font-family="Arial,sans-serif" font-weight="900" text-anchor="middle" fill="'+hue+'">'+esc(tag)+'</text>'+
+ '<text x="81" y="92" font-size="7" font-family="Arial,sans-serif" font-weight="800" text-anchor="end" fill="#c8d4de">'+serial+'</text>'+
+ (gold?'<path d="M80 9L83 20L94 23L83 26L80 38L77 26L67 23L77 20Z" fill="#fff2b3" opacity=".9"/>':'')+
+ '</svg>';
+ return '<div class="case-loot-sticker'+(compact?' compact':'')+'" data-tier="'+esc(tier)+'" title="'+esc(name)+'">'+svg+'</div>';
+}
+function caseLootCard(item){
+ return '<div class="case-loot-card" data-tier="'+esc(item.tier)+'">'+caseLootSticker(item,true)+
+ '<div style="min-width:0"><div class="case-loot-card-name">'+esc(item.name)+'</div><div class="case-loot-card-meta">'+tierLabel(item.tier)+' • '+Number(item.value_stars||0).toLocaleString('ru-RU')+' SHR</div></div></div>';
+}
+function caseItemsOf(cfg){
+ const allowed=new Set(cfg?.contents||[]);
+ return (spinState?.rewards||[]).filter(x=>allowed.has(x.name)).slice().sort((a,b)=>Number(a.value_stars)-Number(b.value_stars)||a.name.localeCompare(b.name,'ru'));
+}
+function caseSelectedPreview(cfg){
+ if(!cfg)return '';
+ const all=caseItemsOf(cfg);
+ if(!all.length)return '';
+ // Distinct tier sampler, followed by a few inexpensive rewards. Display in ascending price order.
+ const tierSamples=[],seen=new Set();
+ for(const r of all){if(!seen.has(r.tier)){seen.add(r.tier);tierSamples.push(r)}}
+ for(const r of all){if(tierSamples.length>=6)break;if(!tierSamples.includes(r))tierSamples.push(r)}
+ tierSamples.sort((a,b)=>a.value_stars-b.value_stars);
+ return '<div class="shx-panel" style="margin-top:13px"><h3 style="margin:0 0 5px">🎁 Предметы кейса «'+esc(cfg.name)+'»</h3>'+
+ '<div class="muted" style="font-size:11px">Примеры наград, объёмные стикеры и цветные рамки редкости. Стоимость указана в SHR.</div>'+
+ '<div class="case-loot-grid">'+tierSamples.map(caseLootCard).join('')+'</div>'+
+ '<button type="button" class="secondary" style="width:100%" id="spinAllItems">Все '+all.length+' предметов и шансы →</button></div>';
+}
+
 function spinSourceLabel(source){
  const s=String(source||'');
  if(s==='ticket')return '🎟 Билет рулетки';
@@ -4473,7 +4602,7 @@ async function spinHtml(){
  else if(donation>0)modeNote='Будет использован синий Donation Ticket. Stars не спишутся.';
  else modeNote='Стоимость открытия: '+Number(cfg&&cfg.stars_price||0)+' Telegram Stars.';
  return '<section class="hero"><div class="cat">МЕТРО-КЕЙСЫ</div><h1>Платные <span class="gold">кейсы</span></h1><div class="muted">Кейсы открываются за Telegram Stars или синие Donation Tickets. Бесплатная круглая рулетка находится в отдельном разделе.</div></section>'+
- spinCasePickerHtml()+
+ spinCasePickerHtml()+caseSelectedPreview(cfg)+
  '<div class="spin-stats"><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION TICKETS</div><div class="price blue-ticket">🎫 '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
  '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(canOpen?'':'disabled')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь завершения открытия кейса</div>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
@@ -4483,6 +4612,7 @@ async function spinHtml(){
 }
 function bindSpin(){
  bindSpinCasePicker();
+ const allItems=document.getElementById('spinAllItems');if(allItems)allItems.addEventListener('click',()=>go('case-catalog'));
  const b=document.getElementById('spinBtn');if(b&&!b.disabled)b.addEventListener('click',spinOnce);
  const p=document.getElementById('spinPromoBtn');if(p)p.addEventListener('click',applySpinPromo);
  const skip=document.getElementById('skipSpinAnimation');if(skip)skip.addEventListener('change',()=>localStorage.setItem('shx_skip_spin_animation',skip.checked?'1':'0'));
@@ -4590,7 +4720,7 @@ function revealReward(result,data){
  if(!result)return;
  const reward=data.reward;
  result.innerHTML='<div class="reveal-name '+tierClass(reward.tier)+'">'+esc(reward.name)+'</div>'+
- '<div class="mini">Решите, что сделать с предметом</div>'+
+ caseLootSticker(reward)+'<div class="mini">Решите, что сделать с предметом</div>'+
  '<div class="drop-actions"><button class="save-drop" id="saveDropBtn">Сохранить</button><button class="sell-drop" id="sellDropBtn">Продать за '+data.sell_shr+' SHR</button></div>';
  const save=document.getElementById('saveDropBtn'),sell=document.getElementById('sellDropBtn');
  if(save)save.addEventListener('click',()=>resolveDrop(data.inventory_item_id,'save',save));
