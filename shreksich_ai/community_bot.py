@@ -414,6 +414,8 @@ async def handle(msg):
         try:
             if group_pref(cid)[2]: add_xp(cid,uid,user.get("first_name") or user.get("username") or "Игрок")
         except Exception: LOG.exception("XP update failed")
+    if chat.get("type") in ("group","supergroup") and not text.startswith("/") and len(text)>=3:
+        add_daily(cid,uid,text.lower().startswith("шрек "))
     cmd=text.split()[0].split("@")[0].lower()
     if chat.get("type")=="private":
         row=owner_chat(uid)
