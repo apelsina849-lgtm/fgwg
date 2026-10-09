@@ -102,17 +102,48 @@ def telegram_file(file_id,limit=8_000_000):
     if len(data)>limit: raise ValueError("File too large")
     return data
 
+def local_image_caption(file_id):
+    import io
+    from PIL import Image
+    from transformers import BlipProcessor, BlipForConditionalGeneration
+    import torch
+    global _BLIP_CACHE
+    if "_BLIP_CACHE" not in globals():
+        model_name=os.getenv("SHREKSICH_LOCAL_VISION_MODEL","Salesforce/blip-image-captioning-base")
+        processor=BlipProcessor.from_pretrained(model_name)
+        model=BlipForConditionalGeneration.from_pretrained(model_name).to("cpu").eval()
+        _BLIP_CACHE=(processor,model)
+    processor,model=_BLIP_CACHE
+    photo=Image.open(io.BytesIO(telegram_file(file_id,limit=8_000_000))).convert("RGB")
+    photo.thumbnail((768,768))
+    inputs=processor(images=photo,return_tensors="pt")
+    with torch.inference_mode():
+        result=model.generate(**inputs,max_new_tokens=65,num_beams=3)
+    return processor.decode(result[0],skip_special_tokens=True).strip()
+
 def vision_query(file_id,caption=""):
-    if not (AI_URL and AI_KEY and VISION_MODEL):
-        return "📸 Анализ скриншотов пока не подключён: администратору нужно настроить ИИ-модель с поддержкой изображений. Не присылай пароли или коды."
-    image=telegram_file(file_id)
-    encoded=base64.b64encode(image).decode("ascii")
-    prompt="Ты эксперт PUBG Mobile Metro Royale. Проанализируй видимые предметы, экипировку и риски. Не выдумывай цены или скрытые детали. Дай конкретные рекомендации по рейду. "+caption[:300]
-    body={"model":VISION_MODEL,"messages":[{"role":"user","content":[{"type":"text","text":prompt},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,"+encoded}}]}],"max_tokens":500}
-    request=urllib.request.Request(AI_URL,data=json.dumps(body).encode(),headers={"Authorization":"Bearer "+AI_KEY,"Content-Type":"application/json"})
-    with urllib.request.urlopen(request,timeout=35) as response:
-        result=json.load(response)["choices"][0]["message"]["content"]
-    return str(result)[:3500]
+    if AI_URL and AI_KEY and VISION_MODEL:
+        image=telegram_file(file_id,limit=8_000_000)
+        encoded=base64.b64encode(image).decode("ascii")
+        question=caption.strip()[:500] or "Что изображено на фото?"
+        prompt=("Отвечай по-русски. Анализируй только видимые детали. Если это PUBG Mobile Metro Royale, "
+                "опиши снаряжение и риски, но не выдумывай статистику или стоимость предметов. Вопрос: "+question)
+        body={"model":VISION_MODEL,"messages":[{"role":"user","content":[
+            {"type":"text","text":prompt},
+            {"type":"image_url","image_url":{"url":"data:image/jpeg;base64,"+encoded}}
+        ]}],"max_tokens":650}
+        request=urllib.request.Request(AI_URL,data=json.dumps(body).encode(),headers={"Authorization":"Bearer "+AI_KEY,"Content-Type":"application/json"})
+        with urllib.request.urlopen(request,timeout=45) as response:
+            result=json.load(response)["choices"][0]["message"]["content"]
+        if isinstance(result,list):
+            result=" ".join(x.get("text","") for x in result if isinstance(x,dict))
+        return str(result).strip()[:3500]
+    description=local_image_caption(file_id)
+    return ("📸 Локальный анализ фото (базовое распознавание)\\n\\n"
+            "Обнаружено: "+description+"\\n\\n"
+            "Это предварительное описание изображения, а не точное распознавание игровых предметов. "
+            "Для детального разбора PUBG, цен и характеристик нужна полноценная Vision-модель. "
+            +("\\nВаш вопрос: "+caption[:300] if caption else ""))
 
 def local_transcribe(file_id):
     import tempfile
