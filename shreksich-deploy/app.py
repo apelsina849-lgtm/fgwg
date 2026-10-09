@@ -423,13 +423,19 @@ def farm_coin_upgrade_cost(module: str, level: int) -> int:
     return int(round(spec["base"] * (1.75 ** max(0, min(level, FARM_COIN_MAX_LEVEL)))))
 
 def farm_mining_interval(level: int, drill_level: int = 0) -> int:
-    return max(90, farm_interval_seconds(level) * (100 - 9 * max(0,min(FARM_COIN_MAX_LEVEL,int(drill_level)))) // 100)
+    # Economy v2: all farms mine items twice as slowly. Drill improvements
+    # still reduce the interval by 9% per level, as before.
+    old_interval = max(90, farm_interval_seconds(level) * (100 - 9 * max(0,min(FARM_COIN_MAX_LEVEL,int(drill_level)))) // 100)
+    return old_interval * 2
 
 def farm_total_capacity(level: int, warehouse_level: int = 0) -> int:
     return farm_capacity(level) + 24 * max(0,min(FARM_COIN_MAX_LEVEL,int(warehouse_level)))
 
 def farm_sale_price(item: dict, trader_level: int = 0) -> int:
-    return max(1, int(round(int(item["coins"]) * (100 + 15 * max(0,min(FARM_COIN_MAX_LEVEL,int(trader_level)))) / 100)))
+    # Every farm resource is worth exactly twice its previous ShrekCOIN value.
+    # Preserve the existing +15% per trader level and its rounding behavior.
+    old_price = max(1, int(round(int(item["coins"]) * (100 + 15 * max(0,min(FARM_COIN_MAX_LEVEL,int(trader_level)))) / 100)))
+    return old_price * 2
 
 def farm_coin_modules(state) -> list[dict]:
     results = []
@@ -486,7 +492,7 @@ async def ensure_farm_state(conn, uid: int):
     await conn.execute(
         "INSERT INTO farm_state(telegram_id,level,shrek_coins,uc_credits,uc_reserved,last_mine_at,last_collect_at,last_activity_at,activity_streak,activity_total,uc_mine_last_at,uc_mine_progress) "
         "VALUES(?,1,0,0,0,?,?,0,0,0,?,0)",
-        (uid,now-farm_interval_seconds(1),0,now)
+        (uid,now-farm_mining_interval(1),0,now)
     )
     return await (await conn.execute("SELECT * FROM farm_state WHERE telegram_id=?",(uid,))).fetchone()
 
@@ -837,6 +843,33 @@ async def init_db():
     """)
     await conn.execute("INSERT OR IGNORE INTO uc_mining_fund(id) VALUES(1)")
     await conn.execute("UPDATE farm_state SET uc_mine_last_at=? WHERE uc_mine_last_at=0",(int(time.time()),))
+
+    # Economy v2 one-time migration: keep already-earned item cycles and
+    # partial progress when doubling every interval. Do not change existing
+    # stored items, balances, UC counters, or inventory rows.
+    farm_economy_v2 = await (await conn.execute(
+        "SELECT value FROM settings WHERE key='farm_items_slower_x2_prices_x2_v2'"
+    )).fetchone()
+    if not farm_economy_v2:
+        rollout_now = int(time.time())
+        farm_rows = await (await conn.execute(
+            "SELECT telegram_id,last_mine_at FROM farm_state"
+        )).fetchall()
+        migrated = []
+        for farm_row in farm_rows:
+            mined_at = int(farm_row["last_mine_at"] or 0)
+            if mined_at <= 0:
+                continue
+            old_elapsed = min(30*86400,max(0,rollout_now-mined_at))
+            migrated.append((rollout_now-2*old_elapsed,int(farm_row["telegram_id"])))
+        if migrated:
+            await conn.executemany(
+                "UPDATE farm_state SET last_mine_at=? WHERE telegram_id=?",
+                migrated
+            )
+        await conn.execute(
+            "INSERT INTO settings(key,value) VALUES('farm_items_slower_x2_prices_x2_v2','1')"
+        )
 
     reset = await (await conn.execute("SELECT value FROM settings WHERE key='bonus_tickets_v1'")).fetchone()
     if not reset:
