@@ -203,8 +203,8 @@ def admin_stats(cid):
         active=conn.execute("SELECT COUNT(DISTINCT user_id) FROM usage_stats WHERE chat_id=? AND ts>?",(cid,int(time.time())-7*86400)).fetchone()[0]
         pass_claims=conn.execute("SELECT COUNT(*) FROM battle_rewards WHERE chat_id=?",(cid,)).fetchone()[0]
         duels=conn.execute("SELECT COUNT(*) FROM duels WHERE chat_id=? AND finished=1",(cid,)).fetchone()[0]
-    detail="\\n".join(f"{kind}: {count} (ошибок: {failed or 0})" for kind,count,failed in usage)
-    return f"📊 SHREKSICH AI • АНАЛИТИКА\\n\\nУчастников: {players}\\nАктивных за 7 дней: {active}\\nВсего XP: {xp}\\nПобед: {wins}\\nЗаписей памяти: {memory}\\nЗаявок в команду: {teams}\\nРегистраций на событие: {events}\\nНаград пропуска: {pass_claims}\\nЗавершённых дуэлей: {duels}\\nСобытий безопасности за сутки: {alerts}\\n\\nИспользование ИИ за 7 дней:\\n"+(detail or "Нет запросов")
+    detail="\n".join(f"{kind}: {count} (ошибок: {failed or 0})" for kind,count,failed in usage)
+    return f"📊 SHREKSICH AI • АНАЛИТИКА\n\nУчастников: {players}\nАктивных за 7 дней: {active}\nВсего XP: {xp}\nПобед: {wins}\nЗаписей памяти: {memory}\nЗаявок в команду: {teams}\nРегистраций на событие: {events}\nНаград пропуска: {pass_claims}\nЗавершённых дуэлей: {duels}\nСобытий безопасности за сутки: {alerts}\n\nИспользование ИИ за 7 дней:\n"+(detail or "Нет запросов")
 async def periodic_quizzes():
     while True:
         await asyncio.sleep(30)
