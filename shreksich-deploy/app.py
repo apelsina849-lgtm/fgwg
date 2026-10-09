@@ -6139,12 +6139,13 @@ async function loadAdminData(){
  const r=await Promise.all([
   api('/api/admin/stats'),api('/api/admin/orders'),api('/api/admin/users'),api('/api/admin/products'),
   api('/api/admin/promos'),api('/api/admin/tickets'),api('/api/admin/spins'),api('/api/admin/upgrades'),api('/api/admin/referrals'),
-  api('/api/admin/cases'),api('/api/admin/farm-withdrawals'),api('/api/admin/uc-fund')
+  api('/api/admin/cases'),api('/api/admin/farm-withdrawals'),api('/api/admin/uc-fund'),
+  api('/api/admin/sellers')
  ]);
- adminData={stats:r[0],orders:r[1],users:r[2],products:r[3],promos:r[4],tickets:r[5],spins:r[6],upgrades:r[7],referrals:r[8],cases:r[9],farmWithdrawals:r[10],ucFund:r[11]}
+ adminData={stats:r[0],orders:r[1],users:r[2],products:r[3],promos:r[4],tickets:r[5],spins:r[6],upgrades:r[7],referrals:r[8],cases:r[9],farmWithdrawals:r[10],ucFund:r[11],sellers:r[12]}
 }
 function adminNav(){
- const items=[['overview','Обзор'],['orders','Заказы'],['users','Игроки'],['products','Товары'],['cases','Кейсы'],['promos','Промо'],['rewards','Награды'],['withdrawals','UC выводы'],['ucfund','UC фонд'],['support','Поддержка'],['bot','Бот']];
+ const items=[['overview','Обзор'],['orders','Заказы'],['users','Игроки'],['products','Товары'],['sellers','Продавцы'],['cases','Кейсы'],['promos','Промо'],['rewards','Награды'],['withdrawals','UC выводы'],['ucfund','UC фонд'],['support','Поддержка'],['bot','Бот']];
  return '<div class="admin-nav">'+items.map(x=>'<button data-admin="'+x[0]+'" class="'+(adminSection===x[0]?'active':'')+'">'+x[1]+'</button>').join('')+'</div>'
 }
 function metric(label,val){return '<div class="metric"><span class="mini">'+label+'</span><b>'+val+'</b></div>'}
@@ -6155,7 +6156,7 @@ function adminOverview(){
  (s.top_product?'<div class="card" style="margin-top:12px"><div class="mini">ТОП ТОВАР</div><div class="name">'+esc(s.top_product)+'</div></div>':'')
 }
 function adminOrders(){
- return '<h2>Заказы</h2>'+adminData.orders.map(o=>{const st=['Ожидает оплаты','Оплачен','Принят','В работе','Ожидает клиента','Выполнен','Отменён','Возврат'];return '<div class="admin-card"><div class="cat">#'+o.number+' • '+esc(o.user_token||'Без жетона')+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+stars(o.stars_amount)+' • PUBG UID '+esc(o.uid)+(o.promo_code?' • '+esc(o.promo_code):'')+'</div><div class="adminline"><select id="os'+o.id+'">'+st.map(s=>'<option '+(s===o.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-order-save="'+o.id+'">Сохранить</button></div></div>'}).join('')
+ return '<h2>Заказы</h2>'+adminData.orders.map(o=>{const st=['Ожидает оплаты','Истёк','Проверка оплаты','Оплачен','Принят','В работе','Ожидает клиента','Проверка выдачи','Выполнен','Отменён','Возврат'];return '<div class="admin-card"><div class="cat">#'+o.number+' • '+esc(o.user_token||'Без жетона')+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+stars(o.stars_amount)+' • PUBG UID '+esc(o.uid)+(o.promo_code?' • '+esc(o.promo_code):'')+'</div><div class="adminline"><select id="os'+o.id+'">'+st.map(s=>'<option '+(s===o.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-order-save="'+o.id+'">Сохранить</button></div></div>'}).join('')
 }
 function adminUsers(){
  const cases=(adminData.cases&&adminData.cases.cases)||[];
@@ -6220,7 +6221,59 @@ function adminUcFunding(){
  '<button class="buy" id="ucFundAdd" style="width:100%">Пополнить фонд UC</button></div>'+
  '<h3>Журнал пополнений</h3>'+(d.history||[]).map(x=>'<div class="order"><b>+'+Number(x.credited_amount)+' UC Credits</b><div class="mini">'+esc(x.note)+'</div></div>').join('')
 }
-function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='withdrawals')return adminWithdrawals();if(adminSection==='ucfund')return adminUcFunding();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
+
+function adminSellers(){
+ const d=adminData.sellers||{sellers:[],listings:[],orders:[]};
+ const sellers=d.sellers||[],listings=d.listings||[],orders=d.orders||[];
+ const outstanding=orders.filter(x=>x.status==='Выполнен'&&!x.settled_id);
+ const totalSeller=orders.filter(x=>x.settled_id).reduce((v,x)=>v+Number(x.seller_share_stars||0),0);
+ const shopCut=orders.filter(x=>x.status==='Выполнен').reduce((v,x)=>v+Number(x.platform_share_stars||0),0);
+ let html='<section class="seller-hero"><div class="seller-headline">OWNER PANEL · MARKETPLACE</div><h1>🤝 Продавцы</h1>'+
+ '<div class="mini">Модерация товаров, распределение заказов и расчёты с поставщиками</div>'+
+ '<div class="seller-feature-grid"><div><strong>'+sellers.length+'</strong><small>Заявки и продавцы</small></div>'+
+ '<div><strong>'+listings.length+'</strong><small>Товары поставщиков</small></div>'+
+ '<div><strong>'+outstanding.length+'</strong><small>К расчёту</small></div></div></section>'+
+ '<div class="seller-income-row"><div><span>УЧЁТ ВЫПЛАТ ПРОДАВЦАМ</span><b>'+totalSeller+' ⭐</b></div>'+
+ '<div><span>КОМИССИЯ ПО ВЫПОЛНЕННЫМ ЗАКАЗАМ</span><b>'+shopCut+' ⭐</b></div></div>'+
+ '<div class="seller-help">Комиссия и доля — эквивалент валовых Stars, не чистая прибыль. Комиссии Telegram, возвраты и себестоимость отдельно. Кнопка «Расчёт проведён» только фиксирует реальное внешнее перечисление, не переводит Stars.</div>'+
+ '<h3 style="margin-top:19px">Заявки и участники</h3>';
+ html+=(sellers.map(x=>'<div class="seller-admin-box" data-admin-seller="'+x.telegram_id+'">'+
+ '<div class="row" style="align-items:center;justify-content:space-between"><b>'+esc(x.display_name)+'</b>'+
+ '<span class="seller-status-pill '+esc(x.status)+'">'+esc(x.status)+'</span></div>'+
+ '<div class="mini">'+esc(x.token||'')+' · '+esc(x.contact)+'</div>'+
+ '<div class="mini">'+esc(x.experience||'')+'</div>'+
+ '<div class="row" style="margin-top:9px;align-items:center"><label style="font-size:11px">Комиссия магазина %</label>'+
+ '<input id="adminSellerPct'+x.telegram_id+'" type="number" min="5" max="60" value="'+Number(x.commission_pct||20)+'"></div>'+
+ '<div class="seller-market-actions"><button class="buy" data-seller-approve="'+x.telegram_id+'">Одобрить / сохранить %</button>'+
+ '<button class="danger" data-seller-block="'+x.telegram_id+'">Заблокировать</button></div></div>').join('')||
+ '<div class="empty">Заявок пока нет</div>');
+ html+='<h3 style="margin:18px 0 9px">Модерация товаров</h3>'+
+ (listings.map(x=>'<div class="seller-admin-box"><div class="row"><span class="seller-status-pill '+esc(x.seller_status)+'">'+esc(x.seller_status)+'</span>'+
+ '<span class="seller-stock-tag">В наличии '+Number(x.seller_stock||0)+'</span></div>'+
+ '<h3>'+esc(x.name)+'</h3><div class="mini">'+esc(x.seller_name||'')+
+ ' · '+Number(x.stars_price||0)+' ⭐ · '+esc(x.category)+'</div>'+
+ '<div class="mini">'+esc(x.description||'')+'</div>'+
+ '<div class="seller-market-actions"><button class="buy" data-seller-listing-approve="'+x.id+'">В каталог</button>'+
+ '<button class="secondary" data-seller-listing-pause="'+x.id+'">Скрыть</button>'+
+ '<button class="danger" data-seller-listing-reject="'+x.id+'">Отклонить</button></div></div>').join('')||
+ '<div class="empty">Продавцы пока не добавляли товары</div>');
+ html+='<h3 style="margin:18px 0 9px">Оплаченные заказы продавцов</h3>'+
+ (orders.map(x=>'<div class="seller-admin-box"><div class="mini">#'+x.number+
+ ' · '+esc(x.seller_name)+' · '+esc(x.status)+'</div>'+
+ '<h3>'+esc(x.product_name)+'</h3>'+
+ '<div class="seller-market-actions"><span class="seller-chip">Оплачено '+Number(x.stars_amount)+' ⭐</span>'+
+ '<span class="seller-chip">Продавцу '+Number(x.seller_share_stars)+' ⭐</span>'+
+ '<span class="seller-chip">Магазину '+Number(x.platform_share_stars)+' ⭐</span></div>'+
+ (x.seller_delivery_note?'<div class="mini" style="margin-top:8px">Подтверждение продавца: '+esc(x.seller_delivery_note)+'</div>':'')+
+ (x.status==='Проверка выдачи'?'<button class="buy" data-seller-complete="'+x.id+'" style="width:100%;margin-top:8px">✓ Выдача подтверждена</button>':'')+
+ (x.status==='Выполнен'&&!Number(x.settled_id)?'<div class="seller-inputs" style="margin-top:10px">'+
+ '<input id="sellerSettleNote'+x.id+'" maxlength="400" placeholder="Способ и идентификатор реально проведённого расчёта">'+
+ '<button class="secondary" data-seller-settle="'+x.id+'">Зафиксировать расчёт</button></div>':'')+
+ (x.settled_id?'<div class="seller-status-pill approved" style="margin-top:8px">✓ Расчёт зафиксирован</div>':'')+
+ '</div>').join('')||'<div class="empty">Оплаченных заказов нет</div>');
+ return html;
+}
+function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='sellers')return adminSellers();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='withdrawals')return adminWithdrawals();if(adminSection==='ucfund')return adminUcFunding();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
 async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+adminSectionHtml()}
 async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">Обновляем…</div>';app.innerHTML=await adminHtml();bindAdmin()}
 function bindAdmin(){
@@ -6235,6 +6288,30 @@ function bindAdmin(){
   fundBtn.disabled=true;
   try{await api('/api/admin/uc-fund',{method:'POST',body:JSON.stringify({credits,note,profit_verified})});await refreshAdmin()}catch(e){alert(e.message);fundBtn.disabled=false}
  });
+
+ const adminSellerChange=async(sellerId,status)=>{
+  const pct=Number(document.getElementById('adminSellerPct'+sellerId)?.value||20);
+  if(!Number.isInteger(pct)||pct<5||pct>60){alert('Комиссия должна быть от 5 до 60%');return}
+  try{await api('/api/admin/sellers/'+sellerId,{method:'PATCH',body:JSON.stringify({status,commission_pct:pct})});await refreshAdmin()}catch(e){alert(e.message)}
+ };
+ document.querySelectorAll('[data-seller-approve]').forEach(b=>b.addEventListener('click',()=>adminSellerChange(b.dataset.sellerApprove,'approved')));
+ document.querySelectorAll('[data-seller-block]').forEach(b=>b.addEventListener('click',()=>{if(confirm('Отключить продавца от новых заказов?'))adminSellerChange(b.dataset.sellerBlock,'blocked')}));
+ const listingChange=async(id,status)=>{
+  try{await api('/api/admin/seller-listings/'+id,{method:'PATCH',body:JSON.stringify({status})});await refreshAdmin()}catch(e){alert(e.message)}
+ };
+ document.querySelectorAll('[data-seller-listing-approve]').forEach(b=>b.addEventListener('click',()=>listingChange(b.dataset.sellerListingApprove,'active')));
+ document.querySelectorAll('[data-seller-listing-pause]').forEach(b=>b.addEventListener('click',()=>listingChange(b.dataset.sellerListingPause,'paused')));
+ document.querySelectorAll('[data-seller-listing-reject]').forEach(b=>b.addEventListener('click',()=>listingChange(b.dataset.sellerListingReject,'rejected')));
+ document.querySelectorAll('[data-seller-complete]').forEach(b=>b.addEventListener('click',async()=>{
+  if(!confirm('Покупатель действительно получил товар?'))return;
+  try{await api('/api/admin/orders/'+b.dataset.sellerComplete,{method:'PATCH',body:JSON.stringify({status:'Выполнен'})});await refreshAdmin()}catch(e){alert(e.message)}
+ }));
+ document.querySelectorAll('[data-seller-settle]').forEach(b=>b.addEventListener('click',async()=>{
+  const id=b.dataset.sellerSettle;
+  const note=document.getElementById('sellerSettleNote'+id).value.trim();
+  if(!confirm('Подтвердите, что расчёт с продавцом реально выполнен вне бота. Это только запись в учёте.'))return;
+  try{await api('/api/admin/seller-orders/'+id+'/settle',{method:'POST',body:JSON.stringify({note})});await refreshAdmin()}catch(e){alert(e.message)}
+ }));
  document.querySelectorAll('[data-order-save]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.orderSave;try{await api('/api/admin/orders/'+id,{method:'PATCH',body:JSON.stringify({status:document.getElementById('os'+id).value})});alert('Статус сохранён')}catch(e){alert(e.message)}}));
  const gb=document.getElementById('grantBtn');if(gb)gb.addEventListener('click',async()=>{try{await api('/api/admin/rewards/grant',{method:'POST',body:JSON.stringify({token:document.getElementById('grantToken').value,tickets:Number(document.getElementById('grantTickets').value||0),donation_tickets:Number(document.getElementById('grantDonation').value||0),donation_case_id:document.getElementById('grantDonationCase').value,upgrade_points:Number(document.getElementById('grantPts').value||0)})});alert('Награда выдана');refreshAdmin()}catch(e){alert(e.message)}});
  document.querySelectorAll('[data-message-user]').forEach(b=>b.addEventListener('click',()=>{adminSection='bot';app.innerHTML=adminNav()+adminBot();document.getElementById('botUserToken').value=b.dataset.messageUser;bindAdmin()}));
