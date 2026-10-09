@@ -601,7 +601,7 @@ def battle_pass(cid,uid):
     xp=row[0] if row else 0
     level=min(20,xp//100)
     upcoming=[f"Уровень {n}: {name}"+(" ✅" if n in claimed else (" 🎁 доступно" if n<=level else "")) for n,name in PASS_REWARDS.items()]
-    return "🎖 БОЕВОЙ ПРОПУСК\\nСезон: "+str(season)+"\\nXP сезона: "+str(xp)+"\\nУровень: "+str(level)+"/20\\nСледующий уровень: "+str(max(0,(level+1)*100-xp))+" XP\\n\\n"+"\\n".join(upcoming)+"\\n\\nНапиши «забрать награды пропуска»."
+    return "🎖 БОЕВОЙ ПРОПУСК\nСезон: "+str(season)+"\nXP сезона: "+str(xp)+"\nУровень: "+str(level)+"/20\nСледующий уровень: "+str(max(0,(level+1)*100-xp))+" XP\n\n"+"\n".join(upcoming)+"\n\nНапиши «забрать награды пропуска»."
 
 def claim_pass(cid,uid):
     season=int(time.time())//(30*86400)
@@ -626,7 +626,7 @@ PUBG_GUIDES={
 def pubg_guide(query):
     q=query.lower()
     if any(w in q for w in ("база знаний","все гайды","список гайдов")):
-        return "📚 БАЗА ЗНАНИЙ METRO ROYALE\\nТемы: "+", ".join(PUBG_GUIDES)+"\\nНапиши «гайд броня» или «гайд эвакуация»."
+        return "📚 БАЗА ЗНАНИЙ METRO ROYALE\nТемы: "+", ".join(PUBG_GUIDES)+"\nНапиши «гайд броня» или «гайд эвакуация»."
     if any(w in q for w in ("гайд","инструкция","советы по")):
         for key,value in PUBG_GUIDES.items():
             if key in q: return value
