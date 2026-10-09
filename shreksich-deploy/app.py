@@ -3754,6 +3754,19 @@ input,textarea,select{background:#0a1625;border-color:#2c455e}
 .farm-upgrade-btn:disabled .farm-upgrade-cost{color:#9fa9b4}
 @media(max-width:580px){.farm-ui .farm-module .farm-upgrade-btn{font-size:10px;min-height:58px}}
 
+
+/* Clean mode: all tutorial hints removed from player mini app.
+   Keep controls, win status, rarity odds, prices and withdrawal requirements. */
+#app .spin-case-note,#app .case-guide-note,#app .roul-hint,#app .spin-lock-note,
+#app .case-farm-feature-desc,#app .farm-aux,#app .case-prizes-panel>.muted,
+#app .settings-grid .setting-card>.muted,#app .roul-hero>.muted,
+#app .spin-shell>.muted,#app .spin-case-note,#app .rarity-catalog-head>.mini,
+#app .shx-farm-catalog .shx-panel>.muted,
+#app .case-guide+.muted,#app .farm-lead>.muted,
+#app .spin-shell~.card>.muted,#app .case-farm-feature-content>.muted
+{display:none!important}
+#app .farm-uc-need,#app .farm-uc-target,#app .case-odds-chip,#app .farm-upgrade-cost{display:revert}
+
 </style>
 </head>
 <body>
@@ -4189,7 +4202,7 @@ function tierChance(tier){
 }
 function rarityCatalogHtml(){
  const tiers=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD'];
- return '<section class="rarity-catalog"><div class="rarity-catalog-head"><h3>Качество кубиков</h3><div class="mini">Нажмите на кубик<br>чтобы посмотреть содержимое</div></div><div class="rarity-scroll">'+
+ return '<section class="rarity-catalog"><div class="rarity-catalog-head"><h3>Качество кубиков</h3><div class="mini"></div></div><div class="rarity-scroll">'+
  tiers.map(t=>{
    const count=(spinState.rewards||[]).filter(x=>x.tier===t).length;
    return '<button type="button" class="rarity-card" data-rarity-open="'+t+'"><div class="loot-cube '+cubeClass(t)+'"><span>?</span></div><div class="rarity-card-title '+tierClass(t)+'">'+tierLabel(t)+'</div><div class="rarity-card-chance">'+tierChance(t)+'%</div><div class="rarity-card-count">'+count+' предметов</div></button>'
@@ -4349,7 +4362,7 @@ function caseSelectedPreview(cfg){
  for(const r of all){if(tierSamples.length>=6)break;if(!tierSamples.includes(r))tierSamples.push(r)}
  tierSamples.sort((a,b)=>a.value_stars-b.value_stars);
  return '<div class="shx-panel case-prizes-panel" style="margin-top:13px"><h3 style="margin:0 0 5px">🎁 Предметы кейса «'+esc(cfg.name)+'»</h3>'+
- '<div class="muted" style="font-size:11px">Награды этого кейса, объёмные стикеры и рамки по редкости. Стоимость указана в SHR.</div>'+
+ '<div class="muted" style="font-size:11px"></div>'+
  '<div class="case-loot-grid">'+tierSamples.map(caseLootCard).join('')+'</div>'+
  '<button type="button" class="secondary case-view-all" aria-expanded="false" aria-controls="spinAllItemsContent" id="spinAllItems">Показать все '+caseItemCountText(all.length)+' и шансы ↓</button>'+
  '<div class="case-all-items hide" id="spinAllItemsContent"></div></div>';
@@ -4387,7 +4400,7 @@ function spinCasePickerHtml(){
    '<div class="spin-case-top">'+caseIconMarkup(c.icon)+'<div class="spin-case-copy"><div class="spin-case-title">'+esc(c.name)+'</div><div class="spin-case-price">'+esc(c.price_label)+'</div></div></div>'+
    '<div class="spin-case-desc">'+esc(c.description||'Metro Royale кейс')+'</div><div class="spin-case-odds">'+odds+'</div>'+
    (ticket>0&&c.id!=='FREE'?'<div class="spin-case-ticket">🎫 '+ticket+' Donation Ticket</div>':'')+'</button>'
- }).join('')+'</div><div class="spin-case-note">Платные кейсы открываются за Telegram Stars. Синий Donation Ticket открывает донат-кейс без списания Stars.</div></section>'
+ }).join('')+'</div><div class="spin-case-note"></div></section>'
 }
 function bindSpinCasePicker(){
  document.querySelectorAll('[data-spin-case]').forEach(b=>b.addEventListener('click',async()=>{
@@ -4531,14 +4544,14 @@ async function rouletteHtml(){
  const history=(spinState.history||[]).filter(x=>x.source==='free'||x.source==='ticket').slice(0,5).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div><div class="mini">'+tierLabel(x.reward_tier)+'</div></div>').join('');
  const rouletteSkipDefault=localStorage.getItem('shx_roulette_skip_v1')==='1';
  const rouletteSoundEnabled=soundsEnabled();
- return '<div class="roul-page"><section class="hero roul-hero"><div class="cat">МЕТРО · КОЛЕСО ФОРТУНЫ</div><h1>Бесплатная <span class="gold">рулетка</span></h1><div class="muted">Настоящее круглое колесо, случайные призы и честные шансы.</div></section>'+
+ return '<div class="roul-page"><section class="hero roul-hero"><div class="cat">МЕТРО · КОЛЕСО ФОРТУНЫ</div><h1>Бесплатная <span class="gold">рулетка</span></h1><div class="muted"></div></section>'+
  '<section class="roul-box"><div class="roul-stage"><div class="roul-wheel" id="roulWheel" style="background:'+wheel.bg+';transform:rotate('+(rouletteLastAngle%360)+'deg)">'+wheel.labels+'</div><button type="button" class="roul-hub roul-hub-action" id="roulSpin" aria-label="Крутить колесо фортуны" '+(ready?'':'disabled')+'><span class="roul-hub-title">ШРЕКСИЧ</span><strong class="roul-hub-main" id="roulHubMain">'+hubMain+'</strong><small class="roul-hub-sub" id="roulHubSub">'+hubSub+'</small></button><div class="roul-pointer"></div></div>'+
  '<div class="roul-legend">'+wheel.legend+'</div>'+
  '<div class="roul-stats"><div class="roul-stat"><small>БЕСПЛАТНО</small><b>'+free+' / '+Number(spinState.max_free_spins||0)+'</b></div><div class="roul-stat"><small>БИЛЕТЫ</small><b>🎟 '+ticket+'</b></div><div class="roul-stat"><small>SHR</small><b>'+Number(spinState.shr||0)+'</b></div></div>'+
 
  '<div class="roul-options"><label class="roul-option"><input type="checkbox" id="roulSkipPref" '+(rouletteSkipDefault?'checked':'')+'><span>⏩ Пропускать анимацию</span></label><label class="roul-option"><input type="checkbox" id="roulMusicPref" '+(rouletteSoundEnabled?'checked':'')+'><span>🔊 Мелодия и щелчки</span></label></div>'+ 
  '<button type="button" class="roul-skip-now hide" id="roulSkipNow">⏭ Пропустить прокрутку</button><div class="roul-progress hide" id="roulProgress"><i id="roulProgressBar"></i></div><div class="roul-spin-status" id="roulStatus" role="status" aria-live="polite"></div>'+
- '<div class="spin-lock-note" id="spinLockNote">Можно пропустить анимацию — приз уже определён сервером.</div><div class="roul-hint">Нажмите на золотой круг в центре колеса, чтобы начать.<div style="margin-top:4px">'+note+'</div></div><div class="roul-result" id="roulResult"></div></section>'+
+ '<div class="spin-lock-note" id="spinLockNote"></div><div class="roul-hint"><div style="margin-top:4px">'+note+'</div></div><div class="roul-result" id="roulResult"></div></section>'+
  '<button id="roulCases" class="roul-route">📦 Перейти к платным кейсам</button>'+
  '<div class="shx-panel"><h3>🎟 Промокод на прокрутки</h3><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  '<div class="shx-panel"><h3>Последние выигрыши рулетки</h3>'+(history||'<div class="empty">Здесь появятся ваши награды.</div>')+'</div></div>';
@@ -4651,7 +4664,7 @@ function caseFarmFeature(d){
  return '<section class="case-farm-feature"><div class="case-farm-scene">'+farmScene({stage})+'<div class="case-farm-sky" aria-hidden="true">🌾</div></div>'+
  '<div class="case-farm-feature-content"><div class="farm-eyebrow">METRO FARM · ТВОЯ ФЕРМА</div>'+
  '<div class="case-farm-feature-title">🌿 Ферма ресурсов</div>'+
- '<div class="case-farm-feature-desc">Собирай находки, улучшай амбар и инструменты, продавай добычу за ShrekCOIN. Получай UC Credits за активность и бонусные билеты в кейсы.</div>'+
+ '<div class="case-farm-feature-desc"></div>'+
  '<div class="case-farm-icons">'+showcase.map(farmItemSticker).join('')+'</div>'+
  '<div class="case-farm-feature-stats"><span>🌾 Уровень '+Number(d?.level||1)+'</span>'+
  '<span>🪙 '+Number(d?.shrek_coins||0).toLocaleString('ru-RU')+' ShrekCOIN</span>'+
@@ -4683,13 +4696,13 @@ async function spinHtml(){
  else if(adminFree)modeNote='Этот кейс отмечен бесплатным в админ-панели.';
  else if(donation>0)modeNote='Будет использован синий Donation Ticket. Stars не спишутся.';
  else modeNote='Стоимость открытия: '+Number(cfg&&cfg.stars_price||0)+' Telegram Stars.';
- return '<section class="hero"><div class="cat">МЕТРО-КЕЙСЫ</div><h1>Платные <span class="gold">кейсы</span></h1><div class="muted">Кейсы открываются за Telegram Stars или синие Donation Tickets. Бесплатная круглая рулетка находится в отдельном разделе.</div></section>'+
+ return '<section class="hero"><div class="cat">МЕТРО-КЕЙСЫ</div><h1>Платные <span class="gold">кейсы</span></h1><div class="muted"></div></section>'+
  spinCasePickerHtml()+caseSelectedPreview(cfg)+
  '<div class="spin-stats"><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION TICKETS</div><div class="price blue-ticket">🎫 '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
- '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(canOpen?'':'disabled')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote">Дождитесь завершения открытия кейса</div>'+
+ '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(canOpen?'':'disabled')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote"></div>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
  '<div class="muted" style="margin-top:10px">'+modeNote+'</div></div>'+
- '<div class="card"><div class="cat">ПРОМОКОД НА ПРОКРУТКИ</div><div class="muted">Промокод может выдать обычные SPIN-билеты или отдельные синие Donation Tickets для донат-кейсов.</div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
+ '<div class="card"><div class="cat">ПРОМОКОД НА ПРОКРУТКИ</div><div class="muted"></div><div class="row"><input id="spinPromoCode" placeholder="Промокод"><button class="secondary" id="spinPromoBtn">Активировать</button></div><div class="mini" id="spinPromoInfo"></div></div>'+
  caseFarmFeature(caseFarmData)+'<h3>Последние 5 выпадений</h3>'+(history||'<div class="empty">История пока пустая.</div>')
 }
 function bindSpin(){
@@ -5093,7 +5106,7 @@ async function farmCatalogPage(){
  return '<div class="shx-farm-catalog"><div class="shx-page-title"><button class="shx-back" id="farmCatalogBack">← Ферма</button><h1>Каталог предметов</h1></div>'+
  '<div class="shx-panel"><div class="muted">Все '+(d.resources||[]).length+' предметов • цены за ShrekCOIN • качество и реальные шансы на уровне '+d.level+'</div></div>'+
  '<div class="farm-filterbar">'+filters+'</div><div class="farm-catalog-grid" id="farmCatalogGrid">'+farmCatalogCards(d)+'</div>'+
- '<div class="shx-panel"><div class="muted">Вероятность отдельного предмета = вероятность его редкости ÷ количество предметов той же редкости. Торговый бонус учитывается в ценах.</div></div></div>';
+ '<div class="shx-panel"><div class="muted"></div></div></div>';
 }
 function bindFarmCatalogPage(){
  const back=document.getElementById('farmCatalogBack');if(back)back.addEventListener('click',()=>go('farm'));
@@ -5119,22 +5132,22 @@ async function farmHtml(){
  const minCredits=Number.isFinite(ucMin)?ucMin:120;
  const ucOptions=(d.uc_targets||[]).map(t=>'<option value="'+Number(t.uc)+'">'+Number(t.uc)+' UC — '+Number(t.required_credits)+' Credits</option>').join('')||'<option value="120">120 UC — 120 Credits</option>';
  const filters=[['ALL','Все'],['GRAY','Серые'],['CYAN','Голубые'],['BLUE','Синие'],['PURPLE','Фиолетовые'],['PINK','Розовые'],['RED','Красные'],['GOLD','Золотые']].map(([t,name])=>'<button data-farm-filter="'+t+'" class="'+(farmCatalogFilter===t?'active':'')+'">'+name+'</button>').join('');
- const catalog=farmCatalogExpanded?'<div id="farmCatalogDetails"><div class="farm-filterbar">'+filters+'</div><div class="farm-catalog-grid" id="farmCatalogGrid">'+farmCatalogCards(d)+'</div><div class="farm-aux" style="margin-top:12px">Шанс для каждого отдельного предмета рассчитан по вероятности качества, разделённой на число предметов данного качества. Улучшения торговой лавки учтены в ценах.</div></div>':'';
+ const catalog=farmCatalogExpanded?'<div id="farmCatalogDetails"><div class="farm-filterbar">'+filters+'</div><div class="farm-catalog-grid" id="farmCatalogGrid">'+farmCatalogCards(d)+'</div><div class="farm-aux" style="margin-top:12px"></div></div>':'';
  const next=d.available_cycles>0?'Добыча готова':(d.stored>=d.capacity?'Склад заполнен':'Следующая добыча через '+formatReset(d.next_cycle_seconds));
  const progress=d.available_cycles>0?100:(d.stored>=d.capacity?100:Math.max(0,100*(1-d.next_cycle_seconds/Math.max(1,d.interval_seconds))));
  return '<div class="farm-ui">'+
- '<div class="farm-lead"><div><span class="farm-eyebrow">SHREKSICH · METRO FARM</span><h1>Ферма ресурсов</h1><div class="muted">Твоя уютная ферма, добыча и торговля</div></div><div class="farm-lead-level">УРОВЕНЬ<br>'+d.level+' / '+d.max_level+'</div></div>'+
+ '<div class="farm-lead"><div><span class="farm-eyebrow">SHREKSICH · METRO FARM</span><h1>Ферма ресурсов</h1><div class="muted"></div></div><div class="farm-lead-level">УРОВЕНЬ<br>'+d.level+' / '+d.max_level+'</div></div>'+
  farmScene(d)+
  '<div class="farm-overview"><div class="farm-wallet shr"><div class="farm-wallet-label">SHR</div><div class="farm-wallet-value"><span>'+d.shr+'</span></div></div>'+
  '<div class="farm-wallet"><div class="farm-wallet-label">SHREKCOIN</div><div class="farm-wallet-value">'+farmCoinIcon()+'<span>'+d.shrek_coins+'</span></div></div>'+
  '<div class="farm-wallet uc"><div class="farm-wallet-label">UC CREDITS</div><div class="farm-wallet-value">'+farmUcIcon()+'<span>'+d.uc_available+'</span></div></div></div>'+
  '<div class="farm-status"><div><span>Скорость добычи</span><b>1 предмет / '+Math.ceil(d.interval_seconds/60)+' мин</b></div><div><span>Склад</span><b>'+d.stored+' / '+d.capacity+' предметов</b></div><div><span>'+next+'</span><b>'+(d.available_cycles>0?d.available_cycles+' шт. можно забрать':'Ферма работает')+'</b></div><div><span>Редкость улучшается</span><b>с уровнем фермы</b></div><div class="farm-status-bar"><span style="width:'+progress.toFixed(1)+'%"></span></div></div>'+
  '<div class="farm-primary-actions"><button class="farm-primary" id="farmCollect" '+(d.available_cycles<=0?'disabled':'')+'>🧺 СОБРАТЬ • '+d.available_cycles+'</button><button class="secondary" id="farmUpgrade" '+(d.level>=d.max_level||d.shr<d.upgrade_cost?'disabled':'')+'>'+(d.level>=d.max_level?'МАКС. УРОВЕНЬ':'УЛУЧШИТЬ • '+d.upgrade_cost+' SHR')+'</button></div>'+
- '<div class="farm-section wood"><div class="farm-section-head"><h3>🪵 Развитие фермы</h3></div><div class="farm-aux">Улучшения оплачиваются золотыми монетами 🪙 ShrekCOIN, полученными за продажу ресурсов. Это не SHR и не UC Credits. Улучшения остаются навсегда.</div><div class="farm-modules">'+modules+'</div></div>'+
+ '<div class="farm-section wood"><div class="farm-section-head"><h3>🪵 Развитие фермы</h3></div><div class="farm-aux"></div><div class="farm-modules">'+modules+'</div></div>'+
  '<div class="farm-section"><div class="farm-section-head"><h3>📚 Справочник ресурсов</h3><button class="farm-catalog-btn" id="farmCatalogToggle">'+(farmCatalogExpanded?'Скрыть':'Все предметы →')+'</button></div><div class="farm-aux">Все '+(d.resources||[]).length+' ресурсов, качество, цены продажи и реальные шансы для твоего уровня фермы.</div><div class="farm-tier-chances">'+chances+'</div>'+catalog+'</div>'+
- '<div class="farm-section"><div class="farm-section-head"><h3>📦 Склад добычи</h3><button class="secondary" id="farmSellAll" '+((d.inventory||[]).length?'':'disabled')+'>Продать всё</button></div><div class="farm-inventory">'+(items||'<div class="empty">Склад пуст. Дождись готовой добычи и нажми «Собрать».</div>')+'</div></div>'+
- '<div class="farm-activity"><div class="farm-section-head"><h3>🌱 Награды за активность</h3><span class="farm-rarity-label">Серия: '+d.activity_streak+' дн.</span></div><div class="farm-aux">Собери хотя бы один ресурс, затем забери +'+d.daily_uc_credits+' UC Credits. Награда доступна раз в 20 часов. Каждый 7-й день серии — билет CASE29, каждый 30-й — билет CASE79.</div><button class="buy" id="farmActivity" style="margin-top:12px;width:100%" '+(d.activity_ready?'':'disabled')+'>'+(d.activity_ready?'ЗАБРАТЬ ЕЖЕДНЕВНУЮ НАГРАДУ':'СОБЕРИ ДОБЫЧУ ИЛИ ДОЖДИСЬ НАГРАДЫ')+'</button></div>'+
- '<div class="farm-withdraw"><div class="farm-section-head"><h3>'+farmUcIcon()+' Вывод UC</h3></div><div class="farm-uc-need"><strong>Минимум для вывода: '+minCredits+' UC Credits → '+minCredits+' UC</strong><div style="margin-top:5px">Твой баланс: <strong>'+Number(d.uc_available)+' Credits</strong>. Нужны UC Credits в количестве, соответствующем выбранной награде. Ни ShrekCOIN, ни SHR, ни Stars для этой заявки не используются.</div></div><div class="farm-aux">UC Credits начисляются за активность. Для вывода укажи свой PUBG UID; после заявки выдачу подтверждает администратор.</div><div class="farm-uc-targets">'+targets+'</div><div class="farm-aux">Текущий баланс: '+d.uc_available+' UC Credits'+(d.uc_reserved>0?' • в ожидании: '+d.uc_reserved:'')+'.</div><div class="row" style="margin-top:11px"><input id="farmPubgUid" placeholder="PUBG UID" inputmode="numeric"><select id="farmUcAmount">'+ucOptions+'</select></div><div class="farm-uc-need" id="farmUcSelectedNeed">Для вывода выбранной суммы необходимо минимум '+minCredits+' UC Credits.</div><button class="buy" id="farmWithdraw" style="width:100%;margin-top:10px" '+(Number(d.uc_available)<minCredits?'disabled':'')+'>ОФОРМИТЬ ЗАЯВКУ НА UC</button></div>'+
+ '<div class="farm-section"><div class="farm-section-head"><h3>📦 Склад добычи</h3><button class="secondary" id="farmSellAll" '+((d.inventory||[]).length?'':'disabled')+'>Продать всё</button></div><div class="farm-inventory">'+(items||'<div class="empty">Склад пуст</div>')+'</div></div>'+
+ '<div class="farm-activity"><div class="farm-section-head"><h3>🌱 Награды за активность</h3><span class="farm-rarity-label">Серия: '+d.activity_streak+' дн.</span></div><div class="farm-aux"></div><button class="buy" id="farmActivity" style="margin-top:12px;width:100%" '+(d.activity_ready?'':'disabled')+'>'+(d.activity_ready?'ЗАБРАТЬ ЕЖЕДНЕВНУЮ НАГРАДУ':'НАГРАДА НЕДОСТУПНА')+'</button></div>'+
+ '<div class="farm-withdraw"><div class="farm-section-head"><h3>'+farmUcIcon()+' Вывод UC</h3></div><div class="farm-uc-need"><strong>Минимум для вывода: '+minCredits+' UC Credits → '+minCredits+' UC</strong><div style="margin-top:5px">Твой баланс: <strong>'+Number(d.uc_available)+' Credits</strong>. </div></div><div class="farm-aux"></div><div class="farm-uc-targets">'+targets+'</div><div class="farm-aux">Текущий баланс: '+d.uc_available+' UC Credits'+(d.uc_reserved>0?' • в ожидании: '+d.uc_reserved:'')+'.</div><div class="row" style="margin-top:11px"><input id="farmPubgUid" placeholder="PUBG UID" inputmode="numeric"><select id="farmUcAmount">'+ucOptions+'</select></div><div class="farm-uc-need" id="farmUcSelectedNeed">Для вывода выбранной суммы необходимо минимум '+minCredits+' UC Credits.</div><button class="buy" id="farmWithdraw" style="width:100%;margin-top:10px" '+(Number(d.uc_available)<minCredits?'disabled':'')+'>ОФОРМИТЬ ЗАЯВКУ НА UC</button></div>'+
  '<div class="farm-section"><h3>Последние заявки</h3>'+(withdrawals||'<div class="farm-aux" style="margin-top:8px">Заявок на вывод UC пока нет.</div>')+'</div>'+
  '</div>';
 }
@@ -5235,9 +5248,9 @@ async function caseCatalogHtml(){
    '<div class="case-guide-desc">'+esc(c.description||'')+'</div>'+
    '<div class="case-tier-row">'+tiers.map(t=>'<button type="button" class="case-tier-btn" data-case-tier="'+esc(c.id)+'" data-tier="'+esc(t.tier)+'">'+caseLootSticker((spinState.rewards||[]).find(x=>x.tier===t.tier&&allowed.has(x.name))||{name:c.name,tier:t.tier},true)+'<div class="rarity-card-title '+tierClass(t.tier)+'">'+caseTierLabel(c.id,t.tier)+'</div><div class="rarity-card-chance">'+Number(t.chance||0)+'%</div></button>').join('')+'</div>'+
  '<div class="case-loot-preview"><div class="case-loot-preview-title">🎁 Предметы и их стоимость</div><div class="case-loot-grid">'+caseItemsOf(c).slice(0,6).map(caseLootCard).join('')+'</div></div>'+
- '<div class="case-guide-note">Нажмите на качество, чтобы посмотреть только предметы этого кейса. Цены идут по возрастанию.</div></div>'
+ '<div class="case-guide-note"></div></div>'
  }).join('');
- return '<section class="hero"><div class="cat">КЕЙСЫ И ПРЕДМЕТЫ</div><h1>Каталог кейсов</h1><div class="muted">У каждого кейса свои качества, проценты и содержимое. Всё редактируется из админ-панели.</div></section>'+
+ return '<section class="hero"><div class="cat">КЕЙСЫ И ПРЕДМЕТЫ</div><h1>Каталог кейсов</h1><div class="muted"></div></section>'+
  '<div class="case-guide">'+html+'</div><div class="rarity-modal hide" id="caseTierModal"><div class="rarity-sheet" id="caseTierSheet"></div></div>'
 }
 function openCaseTier(caseId,tier){
@@ -5261,9 +5274,9 @@ function bindCaseCatalog(){
 function settingsHtml(){
  const skip=localStorage.getItem('shx_skip_spin_animation')==='1';
  const sound=soundsEnabled();
- return '<section class="hero"><div class="cat">НАСТРОЙКИ</div><h1>Шрексич</h1><div class="muted">Управляйте анимацией, звуками и быстрыми разделами.</div></section>'+
- '<div class="settings-grid"><div class="setting-card"><h3>Анимация SPIN</h3><div class="muted">Обычный прокрут длится 30 секунд: быстрый старт и плавное замедление до полной остановки.</div><label class="switch-row"><span>Пропускать анимацию</span><input type="checkbox" id="settingsSkip" '+(skip?'checked':'')+'></label></div>'+
- '<div class="setting-card"><h3>Звуки эффектов</h3><div class="muted">Прокрут, остановка, выпадение, продажа и сохранение. SFX генерируются внутри приложения.</div><label class="switch-row"><span>Звуки включены</span><input type="checkbox" id="settingsSound" '+(sound?'checked':'')+'></label></div></div>'+
+ return '<section class="hero"><div class="cat">НАСТРОЙКИ</div><h1>Шрексич</h1><div class="muted"></div></section>'+
+ '<div class="settings-grid"><div class="setting-card"><h3>Анимация SPIN</h3><div class="muted"></div><label class="switch-row"><span>Пропускать анимацию</span><input type="checkbox" id="settingsSkip" '+(skip?'checked':'')+'></label></div>'+
+ '<div class="setting-card"><h3>Звуки эффектов</h3><div class="muted"></div><label class="switch-row"><span>Звуки включены</span><input type="checkbox" id="settingsSound" '+(sound?'checked':'')+'></label></div></div>'+
  '<div class="sticker-grid">'+sticker('Инвентарь','Предметы и SHR','inventory','st-cyan','data-go="inventory"')+sticker('Кубики и предметы','Кейсы, качества и цены','cases','st-gold','data-go="case-catalog"')+sticker('История дропов','Фильтр по времени и редкости','history','st-purple','data-go="drop-history"')+sticker('Поддержка','Обращения и помощь','support','st-blue','data-go="support"')+'</div>'
 }
 function bindSettings(){
