@@ -63,6 +63,7 @@ def db():
     c.execute("CREATE TABLE IF NOT EXISTS user_preferences(user_id INTEGER PRIMARY KEY,active_chat INTEGER,privacy INTEGER DEFAULT 1,ai_memory INTEGER DEFAULT 1,play_style TEXT DEFAULT '',fav_map TEXT DEFAULT '')")
     c.execute("CREATE TABLE IF NOT EXISTS teammates(chat_id INTEGER,user_id INTEGER PRIMARY KEY,mode TEXT,style TEXT,created_at INTEGER)")
     c.execute("CREATE TABLE IF NOT EXISTS seasons(chat_id INTEGER PRIMARY KEY,season_start INTEGER NOT NULL)")
+    c.execute("CREATE TABLE IF NOT EXISTS seasonal_xp(chat_id INTEGER,user_id INTEGER,season INTEGER,xp INTEGER DEFAULT 0,PRIMARY KEY(chat_id,user_id,season))")
     c.commit()
     return c
 def api(method, payload):
@@ -378,6 +379,17 @@ def group_pref(cid):
         row=conn.execute("SELECT persona,ai_enabled,level_enabled FROM preferences WHERE chat_id=?",(cid,)).fetchone()
     return row or ("friendly",1,1)
 
+def add_season_xp(cid,uid,amount):
+    season=int(time.time())//(30*86400)
+    with db() as conn:
+        conn.execute("INSERT INTO seasonal_xp(chat_id,user_id,season,xp) VALUES(?,?,?,?) ON CONFLICT(chat_id,user_id,season) DO UPDATE SET xp=xp+excluded.xp",(cid,uid,season,amount))
+
+def season_top(cid):
+    season=int(time.time())//(30*86400)
+    with db() as conn:
+        rows=conn.execute("SELECT p.name,s.xp FROM seasonal_xp s JOIN profiles p ON p.chat_id=s.chat_id AND p.user_id=s.user_id WHERE s.chat_id=? AND s.season=? ORDER BY s.xp DESC LIMIT 10",(cid,season)).fetchall()
+    return "🏆 Рейтинг сезона (30 дней)\\n"+("\\n".join(f"{i}. {name}: {xp} XP" for i,(name,xp) in enumerate(rows,1)) if rows else "Пока нет участников")
+
 def add_xp(cid,uid,name):
     now=int(time.time())
     with db() as conn:
@@ -385,6 +397,7 @@ def add_xp(cid,uid,name):
         row=conn.execute("SELECT xp,last_xp FROM profiles WHERE chat_id=? AND user_id=?",(cid,uid)).fetchone()
         if now-row[1]>=60:
             conn.execute("UPDATE profiles SET xp=xp+5,last_xp=?,name=? WHERE chat_id=? AND user_id=?",(now,name[:80],cid,uid))
+            add_season_xp(cid,uid,5)
             return row[0]+5
     return row[0]
 
