@@ -293,6 +293,7 @@ async def handle(msg):
         return
     if cmd in ("/start","/help","/menu"):
         await send(cid,home_text(),reply_markup=menu())
+    elif cmd=="/top": await send(cid,leaderboard(cid))
     elif cmd=="/shop": await send(cid,SHOP_URL)
     elif cmd=="/ping": await send(cid,"✅ Бот на связи. Меню: /start")
     elif cmd=="/ai":
