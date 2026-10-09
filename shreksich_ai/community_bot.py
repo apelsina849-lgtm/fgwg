@@ -96,7 +96,7 @@ def owner_chat(uid):
 def group_owner(cid,uid):
     try:
         member=api("getChatMember",{"chat_id":cid,"user_id":uid})
-        return member.get("status")=="creator"
+        return member.get("status") in ("creator","administrator")
     except Exception:
         LOG.exception("Cannot verify group creator")
         return False
@@ -303,7 +303,13 @@ async def handle_callback(query):
             await call("answerCallbackQuery",callback_query_id=qid,text="Нет доступа к настройкам",show_alert=True)
             return
         if data=="admin:quiz":
-            await quiz_start(row[0])
+            try:
+                await quiz_start(row[0])
+                await call("answerCallbackQuery",callback_query_id=qid,text="Викторина отправлена в группу или уже идёт активная.",show_alert=True)
+            except Exception:
+                LOG.exception("Failed to post quiz in group")
+                await call("answerCallbackQuery",callback_query_id=qid,text="Не удалось отправить викторину. Проверь права бота в группе.",show_alert=True)
+                return
         elif data=="admin:event":
             start=int(time.time())+3600
             with db() as conn:
@@ -853,7 +859,7 @@ async def handle(msg):
         return
     if cmd=="/setup":
         if not await asyncio.to_thread(group_owner,cid,uid):
-            await send(cid,"🔒 Привязать чат может только его создатель.")
+            await send(cid,"🔒 Привязать чат может только администратор группы.")
             return
         with db() as conn:
             conn.execute("INSERT OR REPLACE INTO settings(chat_id,owner_id,enabled,interval_minutes,next_quiz) VALUES(?,?,1,30,?)",(cid,uid,int(time.time())+1800))
