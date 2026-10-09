@@ -292,14 +292,11 @@ async def handle(msg):
     if not bound:
         return
     if chat.get("type") in ("group","supergroup") and not text.startswith("/"):
-        reply=msg.get("reply_to_message") or {}
-        botname=(reply.get("from") or {}).get("username","").lower()
-        mentioned="@shrekchataibot" in text.lower()
-        question_words=("кто","что","где","когда","почему","зачем","как","сколько","какой","какая","какие","можно","нужно","стоит","подскажите","помогите","объясни","расскажи")
-        normalized=re.sub(r"@shrekchataibot","",text,flags=re.I).strip()
-        is_question="?" in normalized or normalized.lower().startswith(question_words)
-        if normalized and (botname=="shrekchataibot" or mentioned or is_question):
-            asyncio.create_task(reply_to_question(cid,msg["message_id"],normalized))
+        match=re.match(r"^шрек(?:[\\s,:.!?—-]+)(.+)$",text,flags=re.I|re.S)
+        if match:
+            question=match.group(1).strip()
+            if question:
+                asyncio.create_task(reply_to_question(cid,msg["message_id"],question))
         return
     if cmd in ("/start","/help","/menu"):
         await send(cid,home_text(),reply_markup=menu())
