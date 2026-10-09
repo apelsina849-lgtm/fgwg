@@ -3923,6 +3923,30 @@ input,textarea,select{background:#0a1625;border-color:#2c455e}
 {display:none!important}
 #app .farm-uc-need,#app .farm-uc-target,#app .case-odds-chip,#app .farm-upgrade-cost{display:revert}
 
+
+/* Level-scaled, profit-backed UC mining */
+.farm-uc-miner{margin:13px 0 17px;padding:16px;border-radius:21px;position:relative;overflow:hidden;
+background:radial-gradient(ellipse at 75% 0,#32a8d22d,transparent 58%),linear-gradient(140deg,#102a39,#0a1a2c 68%,#163244);
+border:1px solid #458caa;box-shadow:inset 0 1px #a3eaff2a,0 11px 31px #0007}
+.farm-uc-miner:before{content:"";position:absolute;right:-30px;top:-49px;width:170px;height:170px;border-radius:50%;
+background:radial-gradient(circle,#71e0ff1f,transparent 70%);pointer-events:none;animation:shxUcHalo 3.4s ease-in-out infinite alternate}
+@keyframes shxUcHalo{from{opacity:.55;transform:scale(.85)}to{opacity:1;transform:scale(1.08)}}
+.farm-uc-miner-head{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.farm-uc-miner-label{font-size:16px;font-weight:1000;color:#e2f7ff;line-height:1.25}
+.farm-uc-miner-head svg{width:44px;height:44px;flex:0 0 44px;filter:drop-shadow(0 0 8px #65d5f55e)}
+.farm-uc-miner-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:13px 0}
+.farm-uc-miner-stat{background:#092033c9;border:1px solid #315976;border-radius:12px;padding:9px 7px;min-width:0}
+.farm-uc-miner-stat small{display:block;color:#a0bfcc;font-size:9px;line-height:1.35;margin-bottom:5px}
+.farm-uc-miner-stat strong{font-size:13px;color:#e3f6fe;font-weight:1000;overflow-wrap:anywhere}
+.farm-uc-miner-track{height:9px;border-radius:20px;background:#092031;border:1px solid #37647b;overflow:hidden}
+.farm-uc-miner-track>span{height:100%;display:block;border-radius:20px;background:linear-gradient(90deg,#2f9ec7,#6de2f4,#c6f7ff);box-shadow:0 0 15px #7eeafcad;transition:width .2s linear}
+.farm-uc-miner-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#8db9d3;font-size:10px;margin:8px 0 13px}
+.farm-uc-miner-claim{width:100%;min-height:49px;font-size:13px;background:linear-gradient(120deg,#90f4ed,#36bdd1 60%,#2287b5);color:#09222b;border:1px solid #b3f5ef;box-shadow:0 7px 18px #189cbd49}
+.farm-uc-miner-claim:disabled{background:#163048;border-color:#37516a;color:#849db4;box-shadow:none}
+.farm-uc-miner .farm-uc-paused{font-size:11px;color:#f7c787;margin-top:9px;text-align:center}
+@media(max-width:360px){.farm-uc-miner-stats{gap:5px}.farm-uc-miner-stat{padding:8px 5px}.farm-uc-miner-stat strong{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.farm-uc-miner:before{animation:none}}
+
 </style>
 </head>
 <body>
@@ -5278,6 +5302,8 @@ async function farmHtml(){
  farmCachedData=d;
  const chanceOrder=FARM_TIER_ORDER_JS.map(t=>[t,Number((d.tier_weights||{})[t]||0)]);
  const chances=chanceOrder.filter(x=>x[1]>.0001).map(([t,p])=>'<span class="farm-chance '+tierClass(t)+'">'+tierLabel(t)+' '+Number(p).toFixed(p<1?2:1)+'%</span>').join('');
+ const ucm=d.uc_mining||{daily_rate:1,ready:0,next_seconds:86400,reserve_available:0,claimable:0};
+ const mineProgress=Number(ucm.ready||0)>0?100:Math.max(0,Math.min(100,100*(1-Number(ucm.next_seconds||0)*Number(ucm.daily_rate||1)/86400)));
  const items=(d.inventory||[]).slice().sort((a,b)=>FARM_TIER_ORDER_JS.indexOf(a.tier)-FARM_TIER_ORDER_JS.indexOf(b.tier)||Number(a.coins)-Number(b.coins)).map(x=>
   '<div class="farm-item"><div class="farm-item-head"><div class="farm-item-icon">'+farmItemSticker(x)+'</div><div><div class="farm-item-name">'+esc(x.name)+'</div><span class="farm-rarity-label '+esc(x.tier)+'">'+tierLabel(x.tier)+'</span><div class="farm-item-meta">В наличии: '+x.qty+' шт.</div></div></div><div class="farm-item-meta">За шт.: '+farmPrice(x.coins)+'<br>Итого: '+farmPrice(x.total_coins)+'</div><button class="secondary" data-farm-sell="'+esc(x.id)+'" data-farm-qty="'+x.qty+'">Продать '+x.qty+' шт.</button></div>'
  ).join('');
@@ -5299,6 +5325,15 @@ async function farmHtml(){
  '<div class="farm-wallet uc"><div class="farm-wallet-label">UC CREDITS</div><div class="farm-wallet-value">'+farmUcIcon()+'<span>'+d.uc_available+'</span></div></div></div>'+
  '<div class="farm-status"><div><span>Скорость добычи</span><b>1 предмет / '+Math.ceil(d.interval_seconds/60)+' мин</b></div><div><span>Склад</span><b>'+d.stored+' / '+d.capacity+' предметов</b></div><div><span>'+next+'</span><b>'+(d.available_cycles>0?d.available_cycles+' шт. можно забрать':'Ферма работает')+'</b></div><div><span>Редкость улучшается</span><b>с уровнем фермы</b></div><div class="farm-status-bar"><span style="width:'+progress.toFixed(1)+'%"></span></div></div>'+
  '<div class="farm-primary-actions"><button class="farm-primary" id="farmCollect" '+(d.available_cycles<=0?'disabled':'')+'>🧺 СОБРАТЬ • '+d.available_cycles+'</button><button class="secondary" id="farmUpgrade" '+(d.level>=d.max_level||d.shr<d.upgrade_cost?'disabled':'')+'>'+(d.level>=d.max_level?'МАКС. УРОВЕНЬ':'УЛУЧШИТЬ • '+d.upgrade_cost+' SHR')+'</button></div>'+
+
+ '<section class="farm-uc-miner"><div class="farm-uc-miner-head"><div><div class="farm-eyebrow">UC MINING</div><div class="farm-uc-miner-label">🎮 Добыча UC Credits</div></div>'+farmUcIcon()+'</div>'+
+ '<div class="farm-uc-miner-stats"><div class="farm-uc-miner-stat"><small>СКОРОСТЬ ФЕРМЫ</small><strong>+'+ucm.daily_rate+' UC/сутки</strong></div>'+
+ '<div class="farm-uc-miner-stat"><small>ДОБЫТО</small><strong>'+ucm.ready+' UC Credits</strong></div>'+
+ '<div class="farm-uc-miner-stat"><small>СЛЕДУЮЩИЙ UC</small><strong>'+(ucm.ready>=ucm.capacity?'ГОТОВО':formatReset(ucm.next_seconds))+'</strong></div></div>'+
+ '<div class="farm-uc-miner-track"><span style="width:'+mineProgress.toFixed(2)+'%"></span></div>'+
+ '<div class="farm-uc-miner-foot"><span>Уровень '+d.level+' / '+d.max_level+'</span><span>Фонд: '+ucm.reserve_available+' UC</span></div>'+
+ '<button class="farm-uc-miner-claim" id="farmUcMineClaim" '+(ucm.claimable>0?'':'disabled')+'>🎮 ЗАБРАТЬ '+ucm.claimable+' UC CREDITS</button>'+
+ (ucm.reserve_available<=0?'<div class="farm-uc-paused">Выдача приостановлена: фонд UC Credits не пополнен</div>':'')+'</section>'+
  '<div class="farm-section wood"><div class="farm-section-head"><h3>🪵 Развитие фермы</h3></div><div class="farm-aux"></div><div class="farm-modules">'+modules+'</div></div>'+
  '<div class="farm-section"><div class="farm-section-head"><h3>📚 Справочник ресурсов</h3><button class="farm-catalog-btn" id="farmCatalogToggle">'+(farmCatalogExpanded?'Скрыть':'Все предметы →')+'</button></div><div class="farm-aux">Все '+(d.resources||[]).length+' ресурсов, качество, цены продажи и реальные шансы для твоего уровня фермы.</div><div class="farm-tier-chances">'+chances+'</div>'+catalog+'</div>'+
  '<div class="farm-section"><div class="farm-section-head"><h3>📦 Склад добычи</h3><button class="secondary" id="farmSellAll" '+((d.inventory||[]).length?'':'disabled')+'>Продать всё</button></div><div class="farm-inventory">'+(items||'<div class="empty">Склад пуст</div>')+'</div></div>'+
@@ -5340,6 +5375,7 @@ function bindFarm(){
  const up=document.getElementById('farmUpgrade');if(up&&!up.disabled)up.addEventListener('click',async()=>{up.disabled=true;try{const d=await api('/api/farm/upgrade',{method:'POST'});alert('Ферма улучшена до '+d.level+' уровня');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);up.disabled=false}});
  document.querySelectorAll('[data-farm-sell]').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;try{const d=await api('/api/farm/sell',{method:'POST',body:JSON.stringify({resource_id:b.dataset.farmSell,qty:Number(b.dataset.farmQty||1)})});sfxSell();alert('+'+d.coins_added+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);b.disabled=false}}));
  const all=document.getElementById('farmSellAll');if(all&&!all.disabled)all.addEventListener('click',async()=>{if(!confirm('Продать весь склад за ShrekCOINS?'))return;all.disabled=true;try{const d=await api('/api/farm/sell-all',{method:'POST'});sfxSell();alert('Продано '+d.sold_qty+' предметов • +'+d.coins_added+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);all.disabled=false}});
+ const mineClaim=document.getElementById('farmUcMineClaim');if(mineClaim&&!mineClaim.disabled)mineClaim.addEventListener('click',async()=>{mineClaim.disabled=true;try{const result=await api('/api/farm/uc/claim',{method:'POST'});sfxSave();alert('🎮 +'+result.uc_credits_added+' UC Credits');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);mineClaim.disabled=false}});
  const act=document.getElementById('farmActivity');if(act&&!act.disabled)act.addEventListener('click',async()=>{act.disabled=true;try{const d=await api('/api/farm/activity',{method:'POST'});alert('+'+d.uc_credits_added+' UC Credits'+(d.case_ticket?' • бесплатный билет '+d.case_ticket:''));app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);act.disabled=false}});
  const wd=document.getElementById('farmWithdraw');if(wd&&!wd.disabled)wd.addEventListener('click',async()=>{wd.disabled=true;try{const d=await api('/api/farm/withdraw',{method:'POST',body:JSON.stringify({pubg_uid:document.getElementById('farmPubgUid').value,uc_amount:Number(document.getElementById('farmUcAmount').value)})});alert('Заявка #'+d.id+' создана');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);wd.disabled=false}})
 }
@@ -5453,12 +5489,12 @@ async function loadAdminData(){
  const r=await Promise.all([
   api('/api/admin/stats'),api('/api/admin/orders'),api('/api/admin/users'),api('/api/admin/products'),
   api('/api/admin/promos'),api('/api/admin/tickets'),api('/api/admin/spins'),api('/api/admin/upgrades'),api('/api/admin/referrals'),
-  api('/api/admin/cases'),api('/api/admin/farm-withdrawals')
+  api('/api/admin/cases'),api('/api/admin/farm-withdrawals'),api('/api/admin/uc-fund')
  ]);
- adminData={stats:r[0],orders:r[1],users:r[2],products:r[3],promos:r[4],tickets:r[5],spins:r[6],upgrades:r[7],referrals:r[8],cases:r[9],farmWithdrawals:r[10]}
+ adminData={stats:r[0],orders:r[1],users:r[2],products:r[3],promos:r[4],tickets:r[5],spins:r[6],upgrades:r[7],referrals:r[8],cases:r[9],farmWithdrawals:r[10],ucFund:r[11]}
 }
 function adminNav(){
- const items=[['overview','Обзор'],['orders','Заказы'],['users','Игроки'],['products','Товары'],['cases','Кейсы'],['promos','Промо'],['rewards','Награды'],['withdrawals','UC выводы'],['support','Поддержка'],['bot','Бот']];
+ const items=[['overview','Обзор'],['orders','Заказы'],['users','Игроки'],['products','Товары'],['cases','Кейсы'],['promos','Промо'],['rewards','Награды'],['withdrawals','UC выводы'],['ucfund','UC фонд'],['support','Поддержка'],['bot','Бот']];
  return '<div class="admin-nav">'+items.map(x=>'<button data-admin="'+x[0]+'" class="'+(adminSection===x[0]?'active':'')+'">'+x[1]+'</button>').join('')+'</div>'
 }
 function metric(label,val){return '<div class="metric"><span class="mini">'+label+'</span><b>'+val+'</b></div>'}
@@ -5516,11 +5552,37 @@ function adminSupport(){
 function adminBot(){
  return '<h2>Управление ботом</h2><div class="card"><h3>Сообщение пользователю</h3><input id="botUserToken" placeholder="Жетон SHX-..."><textarea id="botUserMsg" placeholder="Сообщение"></textarea><button class="buy" id="botSendBtn">Отправить</button></div><div class="card" style="margin-top:12px"><h3>Рассылка</h3><textarea id="broadcastMsg" placeholder="Сообщение всем зарегистрированным пользователям"></textarea><button class="danger" id="broadcastBtn">Запустить рассылку</button></div><div class="card" style="margin-top:12px"><div class="name">Команды бота</div><div class="muted">/start • /shop • /faq • /ref • /token • /help<br>Каждый пользователь имеет постоянный жетон SHX-.... Вся работа с пользователями идёт по жетонам.</div></div>'
 }
-function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='withdrawals')return adminWithdrawals();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
+
+function adminUcFunding(){
+ const d=adminData.ucFund||{};
+ return '<h2>🎮 Фонд добычи UC</h2>'+
+ '<div class="metrics">'+metric('ДОСТУПНО',Number(d.available||0)+' UC')+
+ metric('ВЫДЕЛЕНО',Number(d.funded||0)+' UC')+
+ metric('ВЫДАНО',Number(d.issued||0)+' UC')+
+ metric('ОПЛАТЫ ⭐ (ВАЛОВЫЕ)',Number(d.gross_stars||0)+' ⭐')+'</div>'+
+ '<div class="card" style="margin-top:12px;border-color:#3f8099"><h3>Пополнение из подтверждённой прибыли</h3>'+
+ '<div class="muted" style="line-height:1.6;margin-bottom:12px">Stars здесь показаны как валовая выручка. До пополнения вычти комиссии, возвраты, себестоимость выданного лута и покупки UC. Выделяй только UC Credits, которые уже покрыты реальной чистой прибылью. Пока фонд пуст, новые UC не выдаются.</div>'+
+ '<input id="ucFundAmount" type="number" min="1" max="100000" placeholder="Количество UC Credits">'+
+ '<input id="ucFundNote" maxlength="220" placeholder="Основание: чистая прибыль, период или заказ">'+
+ '<label class="mini" style="display:flex;gap:10px;align-items:center;margin:13px 0"><input id="ucFundVerified" type="checkbox" style="width:auto;flex:0 0 auto"><span>Я проверил прибыль и покрытие всех затрат на эти UC</span></label>'+
+ '<button class="buy" id="ucFundAdd" style="width:100%">Пополнить фонд UC</button></div>'+
+ '<h3>Журнал пополнений</h3>'+(d.history||[]).map(x=>'<div class="order"><b>+'+Number(x.credited_amount)+' UC Credits</b><div class="mini">'+esc(x.note)+'</div></div>').join('')
+}
+function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='withdrawals')return adminWithdrawals();if(adminSection==='ucfund')return adminUcFunding();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
 async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+adminSectionHtml()}
 async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">Обновляем…</div>';app.innerHTML=await adminHtml();bindAdmin()}
 function bindAdmin(){
  document.querySelectorAll('[data-admin]').forEach(b=>b.addEventListener('click',()=>{adminSection=b.dataset.admin;app.innerHTML=adminNav()+adminSectionHtml();bindAdmin()}));
+ const fundBtn=document.getElementById('ucFundAdd');if(fundBtn)fundBtn.addEventListener('click',async()=>{
+  const credits=Number(document.getElementById('ucFundAmount').value);
+  const note=document.getElementById('ucFundNote').value.trim();
+  const profit_verified=!!document.getElementById('ucFundVerified').checked;
+  if(!profit_verified){alert('Подтвердите, что UC покрыты чистой прибылью');return}
+  if(!Number.isInteger(credits)||credits<1||credits>100000||note.length<4){alert('Укажите количество UC и основание');return}
+  if(!confirm('Выделить '+credits+' UC Credits из подтверждённой чистой прибыли?'))return;
+  fundBtn.disabled=true;
+  try{await api('/api/admin/uc-fund',{method:'POST',body:JSON.stringify({credits,note,profit_verified})});await refreshAdmin()}catch(e){alert(e.message);fundBtn.disabled=false}
+ });
  document.querySelectorAll('[data-order-save]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.orderSave;try{await api('/api/admin/orders/'+id,{method:'PATCH',body:JSON.stringify({status:document.getElementById('os'+id).value})});alert('Статус сохранён')}catch(e){alert(e.message)}}));
  const gb=document.getElementById('grantBtn');if(gb)gb.addEventListener('click',async()=>{try{await api('/api/admin/rewards/grant',{method:'POST',body:JSON.stringify({token:document.getElementById('grantToken').value,tickets:Number(document.getElementById('grantTickets').value||0),donation_tickets:Number(document.getElementById('grantDonation').value||0),donation_case_id:document.getElementById('grantDonationCase').value,upgrade_points:Number(document.getElementById('grantPts').value||0)})});alert('Награда выдана');refreshAdmin()}catch(e){alert(e.message)}});
  document.querySelectorAll('[data-message-user]').forEach(b=>b.addEventListener('click',()=>{adminSection='bot';app.innerHTML=adminNav()+adminBot();document.getElementById('botUserToken').value=b.dataset.messageUser;bindAdmin()}));
