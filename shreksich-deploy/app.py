@@ -889,6 +889,11 @@ async def init_db():
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS farm_item_locks(
+      telegram_id INTEGER NOT NULL,
+      resource_id TEXT NOT NULL,
+      PRIMARY KEY(telegram_id,resource_id)
+    );
     CREATE TABLE IF NOT EXISTS farm_inventory(
       telegram_id INTEGER NOT NULL,
       resource_id TEXT NOT NULL,
@@ -2903,7 +2908,7 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
         state = await ensure_farm_state(conn,uid)
         await conn.commit()
         inv_rows = await (await conn.execute(
-            "SELECT resource_id,qty FROM farm_inventory WHERE telegram_id=? AND qty>0 ORDER BY updated_at DESC",
+            "SELECT i.resource_id,i.qty,CASE WHEN l.resource_id IS NULL THEN 0 ELSE 1 END AS locked FROM farm_inventory i LEFT JOIN farm_item_locks l ON l.telegram_id=i.telegram_id AND l.resource_id=i.resource_id WHERE i.telegram_id=? AND i.qty>0 ORDER BY i.updated_at DESC",
             (uid,)
         )).fetchall()
         spin = await (await conn.execute("SELECT upgrade_points FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
@@ -2928,7 +2933,7 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
     for r in inv_rows:
         item = FARM_RESOURCE_BY_ID.get(r["resource_id"])
         if item:
-            inventory.append({**item,"coins":farm_sale_price(item,trader_level),"qty":int(r["qty"] or 0),"total_coins":int(r["qty"] or 0)*farm_sale_price(item,trader_level)})
+            inventory.append({**item,"coins":farm_sale_price(item,trader_level),"qty":int(r["qty"] or 0),"total_coins":int(r["qty"] or 0)*farm_sale_price(item,trader_level),"locked":bool(r["locked"])})
     # UI must not show a claimable daily reward if the funded pool cannot pay it.
     activity_ready = bool(
         int(state["last_collect_at"] or 0) > int(state["last_activity_at"] or 0)
@@ -3074,6 +3079,31 @@ async def farm_collect(x_telegram_init_data: str | None = Header(default=None)):
     }
 
 
+class FarmLockIn(BaseModel):
+    resource_id: str = Field(min_length=1,max_length=64)
+    locked: bool
+
+@app.post("/api/farm/lock")
+async def farm_lock_resource(body:FarmLockIn,x_telegram_init_data:str|None=Header(default=None)):
+    u=await current_user(x_telegram_init_data)
+    uid=int(u["id"])
+    if body.resource_id not in FARM_RESOURCE_BY_ID:
+        raise HTTPException(404,"Ресурс не найден")
+    async with db_write_lock:
+        conn=await db()
+        try:
+            if body.locked:
+                row=await (await conn.execute("SELECT qty FROM farm_inventory WHERE telegram_id=? AND resource_id=?",(uid,body.resource_id))).fetchone()
+                if not row or int(row["qty"] or 0)<=0:
+                    raise HTTPException(409,"Предмет отсутствует на складе")
+                await conn.execute("INSERT OR IGNORE INTO farm_item_locks(telegram_id,resource_id) VALUES(?,?)",(uid,body.resource_id))
+            else:
+                await conn.execute("DELETE FROM farm_item_locks WHERE telegram_id=? AND resource_id=?",(uid,body.resource_id))
+            await conn.commit()
+        finally:
+            await conn.close()
+    return {"ok":True,"resource_id":body.resource_id,"locked":body.locked}
+
 @app.post("/api/farm/sell")
 async def farm_sell(body: FarmSellIn, x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
@@ -3091,6 +3121,10 @@ async def farm_sell(body: FarmSellIn, x_telegram_init_data: str | None = Header(
                 "SELECT qty FROM farm_inventory WHERE telegram_id=? AND resource_id=?",(uid,resource_id)
             )).fetchone()
             have = int(row["qty"] or 0) if row else 0
+            locked=await (await conn.execute("SELECT 1 FROM farm_item_locks WHERE telegram_id=? AND resource_id=?",(uid,resource_id))).fetchone()
+            if locked:
+                await conn.rollback()
+                raise HTTPException(409,"Предмет заблокирован. Сначала разблокируйте его.")
             qty = min(have,int(body.qty))
             if qty <= 0:
                 await conn.rollback()
@@ -3125,7 +3159,7 @@ async def farm_sell_all(x_telegram_init_data: str | None = Header(default=None))
             await conn.execute("BEGIN IMMEDIATE")
             state = await ensure_farm_state(conn,uid)
             rows = await (await conn.execute(
-                "SELECT resource_id,qty FROM farm_inventory WHERE telegram_id=? AND qty>0",(uid,)
+                "SELECT i.resource_id,i.qty FROM farm_inventory i LEFT JOIN farm_item_locks l ON l.telegram_id=i.telegram_id AND l.resource_id=i.resource_id WHERE i.telegram_id=? AND i.qty>0 AND l.resource_id IS NULL",(uid,)
             )).fetchall()
             total = 0
             sold = 0
@@ -3136,8 +3170,8 @@ async def farm_sell_all(x_telegram_init_data: str | None = Header(default=None))
                 total += qty * farm_sale_price(item,int(state["trader_level"] or 0)); sold += qty
             if sold <= 0:
                 await conn.rollback()
-                raise HTTPException(409,"Склад пуст")
-            await conn.execute("UPDATE farm_inventory SET qty=0,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(uid,))
+                raise HTTPException(409,"Нет незаблокированных предметов для продажи")
+            await conn.execute("UPDATE farm_inventory SET qty=0,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND resource_id NOT IN (SELECT resource_id FROM farm_item_locks WHERE telegram_id=?)",(uid,uid))
             await conn.execute("UPDATE farm_state SET shrek_coins=shrek_coins+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(total,uid))
             await conn.execute("INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",(uid,"sell_all",json.dumps({"qty":sold,"coins":total})))
             await conn.commit()
