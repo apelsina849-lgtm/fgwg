@@ -5502,6 +5502,8 @@ async function setSoundEnabled(on){
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function stars(n){return Number(n||0).toLocaleString('ru-RU')+' ⭐'}
 function compactCurrency(n){const v=Number(n||0);if(!Number.isFinite(v))return '0';const a=Math.abs(v);if(a<10000)return v.toLocaleString('ru-RU');const units=[[1e9,'млрд'],[1e6,'млн'],[1e3,'тыс.']];const unit=units.find(x=>a>=x[0]);if(!unit)return v.toLocaleString('ru-RU');const scaled=v/unit[0];return scaled.toLocaleString('ru-RU',{maximumFractionDigits:scaled>=100?0:scaled>=10?1:2})+' '+unit[1]}
+function shrAmount(n){return compactCurrency(n)}
+
 function tierClass(t){return 'tier-'+String(t||'COMMON').toLowerCase()}
 function rarityBar(t){const k=String(t||'COMMON').toLowerCase();return '<div class="rarity-row"><div class="rarity-label '+tierClass(t)+'">'+esc(t)+'</div><div class="rarity-bar rb-'+k+'"></div></div>'}
 function formatReset(sec){sec=Math.max(0,Number(sec||0));if(!sec)return'';const h=Math.floor(sec/3600),m=Math.ceil((sec%3600)/60);return(h?h+' ч ':'')+m+' мин'}
@@ -5863,7 +5865,7 @@ function showDropFx(reward){
  const top=reward.tier==='GOLD'||reward.tier==='LEGENDARY';
  try{if(tg&&tg.HapticFeedback){tg.HapticFeedback.notificationOccurred('success');tg.HapticFeedback.impactOccurred('heavy')}}catch(_){}
  const fx=document.createElement('div');fx.className='drop-fx '+reward.tier.toLowerCase();
- fx.innerHTML='<div class="drop-card"><div class="drop-content"><h2>'+(top?'GOLD DROP!':'RED DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div>'+rarityBar(reward.tier)+'<div class="muted" style="margin-top:12px">Продажа: '+reward.points+' SHR</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
+ fx.innerHTML='<div class="drop-card"><div class="drop-content"><h2>'+(top?'GOLD DROP!':'RED DROP!')+'</h2><div class="drop-name">'+esc(reward.name)+'</div>'+rarityBar(reward.tier)+'<div class="muted" style="margin-top:12px">Продажа: '+shrAmount(reward.points)+' SHR</div><button class="buy" id="closeDrop" style="margin-top:18px">ЗАБРАТЬ</button></div></div>';
  document.body.appendChild(fx);const card=fx.querySelector('.drop-card'),total=reward.tier==='MYTHIC'?30:20;
  for(let i=0;i<total;i++){const s=document.createElement('i');s.className='spark';const a=Math.PI*2*i/total,d=90+Math.random()*170;s.style.left=(45+Math.random()*10)+'%';s.style.top=(45+Math.random()*10)+'%';s.style.setProperty('--x',(Math.cos(a)*d)+'px');s.style.setProperty('--y',(Math.sin(a)*d)+'px');s.style.color=reward.tier==='MYTHIC'?(i%2?'#ff4bd8':'#8b62ff'):'#ffad25';card.appendChild(s)}
  fx.querySelector('#closeDrop').addEventListener('click',()=>fx.remove())
@@ -6265,7 +6267,7 @@ async function rouletteHtml(){
  return '<div class="roul-page"><section class="hero roul-hero"><div class="cat">МЕТРО · КОЛЕСО ФОРТУНЫ</div><h1>Бесплатная <span class="gold">рулетка</span></h1><div class="muted"></div></section>'+
  '<section class="roul-box"><div class="roul-stage"><div class="roul-wheel" id="roulWheel" style="background:'+wheel.bg+';transform:rotate('+(rouletteLastAngle%360)+'deg)">'+wheel.labels+'</div><button type="button" class="roul-hub roul-hub-action" id="roulSpin" aria-label="Крутить колесо фортуны" '+(ready?'':'disabled')+'><span class="roul-hub-title">ШРЕКСИЧ</span><strong class="roul-hub-main" id="roulHubMain">'+hubMain+'</strong><small class="roul-hub-sub" id="roulHubSub">'+hubSub+'</small></button><div class="roul-pointer"></div></div>'+
  '<div class="roul-legend">'+wheel.legend+'</div>'+
- '<div class="roul-stats"><div class="roul-stat"><small>БЕСПЛАТНО</small><b>'+free+' / '+Number(spinState.max_free_spins||0)+'</b></div><div class="roul-stat"><small>БИЛЕТЫ</small><b>🎟 '+ticket+'</b></div><div class="roul-stat"><small>SHR</small><b>'+Number(spinState.shr||0)+'</b></div></div>'+
+ '<div class="roul-stats"><div class="roul-stat"><small>БЕСПЛАТНО</small><b>'+free+' / '+Number(spinState.max_free_spins||0)+'</b></div><div class="roul-stat"><small>БИЛЕТЫ</small><b>🎟 '+ticket+'</b></div><div class="roul-stat"><small>SHR</small><b>'+shrAmount(spinState.shr||0)+'</b></div></div>'+
 
  '<div class="roul-options"><label class="roul-option"><input type="checkbox" id="roulSkipPref" '+(rouletteSkipDefault?'checked':'')+'><span>⏩ Пропускать анимацию</span></label><label class="roul-option"><input type="checkbox" id="roulMusicPref" '+(rouletteSoundEnabled?'checked':'')+'><span>🔊 Мелодия и щелчки</span></label></div>'+ 
  '<button type="button" class="roul-skip-now hide" id="roulSkipNow">⏭ Пропустить прокрутку</button><div class="roul-progress hide" id="roulProgress"><i id="roulProgressBar"></i></div><div class="roul-spin-status" id="roulStatus" role="status" aria-live="polite"></div>'+
@@ -6396,7 +6398,7 @@ async function spinHtml(){
  try{caseFarmData=await api('/api/farm');farmCachedData=caseFarmData}catch(_){}
  const paidReady=spinState.paid_case_opening||null;
  if(paidReady){selectedCaseId=paidReady.case_id;localStorage.setItem('shx_selected_case',selectedCaseId)}
- const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div></div>').join('');
+ const history=(spinState.history||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+shrAmount(x.points)+' SHR</div></div>').join('');
  const total=Number(spinState.remaining_spins||0),pending=spinState.pending_drop||null,cfg=selectedCase();
  const adminFree=!!(cfg&&cfg.is_free),donation=Number(cfg&&cfg.donation_tickets||0);
  const paidForSelected=!!(paidReady&&cfg&&paidReady.case_id===cfg.id);
@@ -6416,7 +6418,7 @@ async function spinHtml(){
  else modeNote='Стоимость открытия: '+Number(cfg&&cfg.stars_price||0)+' Telegram Stars.';
  return '<section class="hero"><div class="cat">МЕТРО-КЕЙСЫ</div><h1>Платные <span class="gold">кейсы</span></h1><div class="muted"></div></section>'+
  spinCasePickerHtml()+caseSelectedPreview(cfg)+
- '<div class="spin-stats"><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION TICKETS</div><div class="price blue-ticket">🎫 '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+spinState.shr+'</div></div></div>'+
+ '<div class="spin-stats"><div class="spin-stat donation-stat"><div class="mini blue-ticket">DONATION TICKETS</div><div class="price blue-ticket">🎫 '+Number(spinState.donation_tickets_total||0)+'</div></div><div class="spin-stat"><div class="mini">SHR</div><div class="price">'+shrAmount(spinState.shr)+'</div></div></div>'+
  '<div class="spin-shell"><div class="reel-window" id="reelWindow"><div class="reel-track" id="reelTrack">'+selectedCaseIdleStrip()+'</div><div class="reel-marker"></div></div><div class="spin-result" id="spinResult"></div><button class="buy" id="spinBtn" style="margin-top:12px" '+(canOpen?'':'disabled')+'>'+buttonText+'</button><div class="spin-lock-note" id="spinLockNote"></div>'+
  '<div class="spin-options-grid"><label class="spin-options"><input type="checkbox" id="skipSpinAnimation" '+(skip?'checked':'')+'><span>Пропустить анимацию</span></label></div>'+
  '<div class="muted" style="margin-top:10px">'+modeNote+'</div></div>'+
@@ -6553,7 +6555,7 @@ function revealReward(result,data){
  const reward=data.reward;
  result.innerHTML='<div class="reveal-name '+tierClass(reward.tier)+'">'+esc(reward.name)+'</div>'+
  caseLootSticker(reward)+'<div class="mini">Решите, что сделать с предметом</div>'+
- '<div class="drop-actions"><button class="save-drop" id="saveDropBtn">Сохранить</button><button class="sell-drop" id="sellDropBtn">Продать за '+data.sell_shr+' SHR</button></div>';
+ '<div class="drop-actions"><button class="save-drop" id="saveDropBtn">Сохранить</button><button class="sell-drop" id="sellDropBtn">Продать за '+shrAmount(data.sell_shr)+' SHR</button></div>';
  const save=document.getElementById('saveDropBtn'),sell=document.getElementById('sellDropBtn');
  if(save)save.addEventListener('click',()=>resolveDrop(data.inventory_item_id,'save',save));
  if(sell)sell.addEventListener('click',()=>resolveDrop(data.inventory_item_id,'sell',sell))
@@ -6566,7 +6568,7 @@ async function resolveDrop(itemId,action,btn){
   if(action==='save'){sfxSave();tab='inventory';await render()}
   else{
    sfxSell();
-   alert('Продано. Баланс: '+d.shr+' SHR');
+   alert('Продано. Баланс: '+shrAmount(d.shr)+' SHR');
    if(tab==='roulette'){app.innerHTML=await rouletteHtml();bindRoulette();addHomeExit()}
    else{app.innerHTML=await spinHtml();bindSpin();addHomeExit()}
    loadWinsFeed()
@@ -6638,11 +6640,11 @@ async function inventoryHtml(){
  const list=items.map(x=>{
   const pending=x.status==='pending';
   return '<div class="inventory-card"><div class="inventory-card-head">'+caseLootSticker({name:x.reward_name,tier:x.reward_tier},true)+'<div><div class="name">'+esc(x.reward_name)+'</div><div class="'+tierClass(x.reward_tier)+'">'+esc(x.reward_tier)+'</div></div></div>'+
-  '<div class="inventory-meta"><span>Продажа: '+x.sell_shr+' SHR</span><span>Оценка: 🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+'</span><span>'+(pending?'Новый дроп':'Сохранён')+'</span></div>'+
-  '<div class="inventory-actions">'+(pending?'<button class="secondary" data-inv-save="'+x.id+'">Сохранить</button>':'')+'<button class="buy" data-inv-sell="'+x.id+'">Продать за '+x.sell_shr+' SHR</button></div></div>'
+  '<div class="inventory-meta"><span>Продажа: '+shrAmount(x.sell_shr)+' SHR</span><span>Оценка: 🪙 '+Number(x.value_stars||0).toLocaleString('ru-RU')+'</span><span>'+(pending?'Новый дроп':'Сохранён')+'</span></div>'+
+  '<div class="inventory-actions">'+(pending?'<button class="secondary" data-inv-save="'+x.id+'">Сохранить</button>':'')+'<button class="buy" data-inv-sell="'+x.id+'">Продать за '+shrAmount(x.sell_shr)+' SHR</button></div></div>'
  }).join('');
  return '<section class="hero"><div class="cat">ИНВЕНТАРЬ</div><h1>Ваши предметы</h1><div class="muted">Сохраняйте дропы или продавайте их за SHR в любое время.</div></section>'+
- '<div class="inventory-balance"><div><div class="mini">БАЛАНС SHR</div><div class="muted">Внутренняя валюта Шрексича</div></div><b>'+d.shr+' SHR</b></div>'+
+ '<div class="inventory-balance"><div><div class="mini">БАЛАНС SHR</div><div class="muted">Внутренняя валюта Шрексича</div></div><b>'+shrAmount(d.shr)+' SHR</b></div>'+
  (list||'<div class="empty">Инвентарь пока пуст. Предметы появляются после SPIN.</div>')
 }
 function bindInventory(){
@@ -6653,7 +6655,7 @@ async function resolveInventory(id,action,btn){
  if(btn)btn.disabled=true;
  try{
   const d=await api('/api/inventory/'+id+'/resolve',{method:'POST',body:JSON.stringify({action})});
-  if(action==='sell'){sfxSell();alert('Предмет продан. Баланс: '+d.shr+' SHR')}else{sfxSave()}
+  if(action==='sell'){sfxSell();alert('Предмет продан. Баланс: '+shrAmount(d.shr)+' SHR')}else{sfxSave()}
   app.innerHTML=await inventoryHtml();bindInventory();addHomeExit()
  }catch(e){if(btn)btn.disabled=false;alert(e.message)}
 }
@@ -6984,7 +6986,7 @@ async function dropHistoryHtml(){
  if(period==='custom'&&from)q.set('from_at',from);
  if(period==='custom'&&to)q.set('to_at',to);
  const d=await api('/api/spin/history?'+q.toString());
- const items=(d.items||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+x.points+' SHR</div></div>').join('');
+ const items=(d.items||[]).map(x=>'<div class="order"><div class="name">'+esc(x.reward_name)+'</div>'+rarityBar(x.reward_tier)+'<div class="mini" style="margin-top:9px">'+spinSourceLabel(x.source)+' • продажа '+shrAmount(x.points)+' SHR</div></div>').join('');
  return '<section class="hero"><div class="cat">ИСТОРИЯ ДРОПОВ</div><h1>Все выпадения</h1><div class="muted">Фильтруйте историю по времени и качеству кубика.</div></section>'+
  '<div class="history-filters"><div class="history-filter-grid"><select id="historyTier"><option value="ALL">Все редкости</option><option value="GRAY">Серый</option><option value="CYAN">Голубой</option><option value="BLUE">Синий</option><option value="PURPLE">Фиолетовый</option><option value="PINK">Розовый</option><option value="RED">Красный</option><option value="GOLD">Золотой</option></select><button class="secondary" id="historyApply">Применить фильтр</button><input id="historyFrom" type="datetime-local" aria-label="С даты"><input id="historyTo" type="datetime-local" aria-label="По дату"></div>'+
  '<div class="history-periods"><button data-hperiod="all">Всё время</button><button data-hperiod="24h">24 часа</button><button data-hperiod="7d">7 дней</button><button data-hperiod="30d">30 дней</button><button data-hperiod="90d">90 дней</button><button data-hperiod="custom">Свой период</button></div></div>'+
