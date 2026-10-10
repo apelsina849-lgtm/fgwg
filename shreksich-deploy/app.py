@@ -5131,7 +5131,7 @@ function homeWinsHtml(){
 function home(){
  const u=me||{},f=homeFarmData||farmCachedData||{},display=String(u.username?'@'+u.username:u.first_name||'Игрок');
  return '<div class="shx-home">'+
- '<section class="shx-profile"><div class="shx-profile-top"><div class="shx-avatar">'+esc(display.replace(/^@/,'').charAt(0).toUpperCase()||'S')+'</div><div><div class="shx-username">'+esc(display)+'</div><div class="shx-user-sub">Жетон '+esc(u.token||'—')+'</div></div><button class="shx-profile-quick" data-go="profile" aria-label="Профиль">⚙</button></div>'+
+ '<section class="shx-profile"><div class="shx-profile-top"><div class="shx-avatar">'+esc(display.replace(/^@/,'').charAt(0).toUpperCase()||'S')+'</div><div><div class="shx-username">'+esc(display)+'</div><button type="button" class="shx-user-sub" data-copy-token="'+esc(u.token||'')+'" style="background:none;border:0;padding:4px 0;color:#91c9e8;cursor:pointer;text-align:left">Жетон '+esc(u.token||'—')+' 📋</button></div><button class="shx-profile-quick" data-go="profile" aria-label="Профиль">⚙</button></div>'+
  '<div class="shx-wallets"><div class="shx-wallet">'+farmCoinIcon()+'<div><div class="shx-wallet-count">'+Number(f.shrek_coins||0).toLocaleString('ru-RU')+'</div><div class="shx-wallet-name">ShrekCOIN</div></div></div>'+
  '<div class="shx-wallet">'+farmUcIcon()+'<div><div class="shx-wallet-count">'+Number(f.uc_available||0).toLocaleString('ru-RU')+'</div><div class="shx-wallet-name">UC Credits</div></div></div>'+
  '<div class="shx-wallet"><div class="shx-star">✦</div><div><div class="shx-wallet-count">'+Number(f.shr||0).toLocaleString('ru-RU')+'</div><div class="shx-wallet-name">SHR</div></div></div></div></section>'+
@@ -5266,11 +5266,20 @@ function bindSeller(){
 function profileHtml(){
  const u=me||{},f=homeFarmData||farmCachedData||{},display=String(u.username?'@'+u.username:u.first_name||'Игрок');
  return '<div class="shx-page-title"><button class="shx-back" data-go="home">← Главная</button><h1>Профиль</h1></div>'+
- '<section class="shx-profile"><div class="shx-profile-top"><div class="shx-avatar">'+esc(display.replace(/^@/,'').charAt(0).toUpperCase()||'S')+'</div><div><div class="shx-username">'+esc(display)+'</div><div class="shx-user-sub">Жетон: '+esc(u.token||'—')+'</div></div></div>'+
+ '<section class="shx-profile"><div class="shx-profile-top"><div class="shx-avatar">'+esc(display.replace(/^@/,'').charAt(0).toUpperCase()||'S')+'</div><div><div class="shx-username">'+esc(display)+'</div><button type="button" class="shx-user-sub" data-copy-token="'+esc(u.token||'')+'" style="background:none;border:0;padding:4px 0;color:#91c9e8;cursor:pointer;text-align:left">Жетон: '+esc(u.token||'—')+' 📋 Копировать</button></div></div>'+
  '<div class="shx-wallets"><div class="shx-wallet">'+farmCoinIcon()+'<div><div class="shx-wallet-count">'+Number(f.shrek_coins||0)+'</div><div class="shx-wallet-name">ShrekCOIN</div></div></div><div class="shx-wallet">'+farmUcIcon()+'<div><div class="shx-wallet-count">'+Number(f.uc_available||0)+'</div><div class="shx-wallet-name">UC Credits</div></div></div><div class="shx-wallet"><div class="shx-star">✦</div><div><div class="shx-wallet-count">'+Number(f.shr||0)+'</div><div class="shx-wallet-name">SHR</div></div></div></div></section>'+
  '<section class="shx-panel"><h3>Управление аккаунтом</h3><div class="shx-profile-actions"><button data-go="seller">🤝 Продавцам</button><button data-go="orders">📦 Мои заказы</button><button data-go="inventory">🎒 Инвентарь</button><button data-go="farm">🌾 Моя ферма</button><button data-go="referral">👥 Рефералы</button><button data-go="settings">⚙ Настройки</button><button data-go="support">💬 Поддержка</button></div></section>';
 }
-function bindProfile(){document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));}
+async function copyUserToken(value,button){
+ if(!value)return;
+ try{
+  if(navigator.clipboard&&window.isSecureContext)await navigator.clipboard.writeText(value);
+  else{const t=document.createElement('textarea');t.value=value;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();const ok=document.execCommand('copy');t.remove();if(!ok)throw Error('copy')}
+  const previous=button.textContent;button.textContent='✓ Жетон скопирован';setTimeout(()=>{if(button.isConnected)button.textContent=previous},1700);
+ }catch(e){prompt('Скопируйте жетон:',value)}
+}
+function bindUserTokenCopy(){document.querySelectorAll('[data-copy-token]').forEach(b=>{if(b.dataset.copyBound)return;b.dataset.copyBound='1';b.addEventListener('click',()=>copyUserToken(b.dataset.copyToken,b))})}
+function bindProfile(){document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));bindUserTokenCopy();}
 
 function orderForm(id){
  const p=products.find(x=>Number(x.id)===Number(id));if(!p)return;
