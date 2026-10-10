@@ -1585,6 +1585,14 @@ class AdminRewardIn(BaseModel):
     shrek_coins: int = Field(default=0, ge=0, le=1000000000000)
 
 
+class AdminSetBalanceIn(BaseModel):
+    token: str = Field(min_length=4,max_length=32)
+    asset: str
+    amount: int = Field(ge=0,le=1000000000000000)
+    resource_id: str = ""
+    case_id: str = "*"
+
+
 class BroadcastIn(BaseModel):
     message: str = Field(min_length=1, max_length=3000)
 
@@ -3849,6 +3857,40 @@ async def admin_player_details(token:str,x_telegram_init_data:str|None=Header(de
         return {"user":dict(user),"farm":dict(farm) if farm else {},"spin":dict(spin) if spin else {},"inventory":dict(inventory),"cases":dict(cases),"orders":dict(orders),"spins":dict(spins),"donation_tickets":donate["total"],"stars_spent":int(cases["stars"] or 0)+int(orders["stars"] or 0)}
     finally:
         await conn.close()
+
+
+@app.post("/api/admin/balances/set")
+async def admin_set_balance(body: AdminSetBalanceIn,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    limits={"tickets":1000000000,"donation_tickets":1000000000,"shr":1000000000,"shrek_coins":1000000000000000,"farm_item":1000000000}
+    if body.asset not in limits or body.amount>limits.get(body.asset,0): raise HTTPException(400,"Недопустимая валюта или количество")
+    async with db_write_lock:
+        conn=await db()
+        try:
+            user=await telegram_id_by_token(conn,body.token)
+            if not user: raise HTTPException(404,"Игрок не найден")
+            uid=int(user["telegram_id"])
+            if body.asset in ("tickets","shr"):
+                await conn.execute("INSERT OR IGNORE INTO spin_state(telegram_id,tickets,last_free_spin,upgrade_points) VALUES(?,0,0,0)",(uid,))
+                col="tickets" if body.asset=="tickets" else "upgrade_points"
+                await conn.execute(f"UPDATE spin_state SET {col}=? WHERE telegram_id=?",(body.amount,uid))
+            elif body.asset=="donation_tickets":
+                case=(body.case_id or "*").strip().upper()
+                if case!="*" and not await (await conn.execute("SELECT 1 FROM case_configs WHERE id=?",(case,))).fetchone(): raise HTTPException(404,"Кейс не найден")
+                await conn.execute("INSERT INTO donation_ticket_balances(telegram_id,case_id,tickets) VALUES(?,?,?) ON CONFLICT(telegram_id,case_id) DO UPDATE SET tickets=excluded.tickets",(uid,case,body.amount))
+            elif body.asset=="shrek_coins":
+                await ensure_farm_state(conn,uid)
+                await conn.execute("UPDATE farm_state SET shrek_coins=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(body.amount,uid))
+            else:
+                rid=body.resource_id.strip()
+                if not rid: raise HTTPException(400,"Укажите ID предмета")
+                cur=await conn.execute("UPDATE farm_inventory SET qty=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=? AND resource_id=?",(body.amount,uid,rid))
+                if cur.rowcount==0: raise HTTPException(404,"Предмет не найден на складе")
+            await conn.execute("INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",(uid,"admin_set_balance",json.dumps({"asset":body.asset,"amount":body.amount,"resource_id":body.resource_id,"case_id":body.case_id},ensure_ascii=False)))
+            await conn.commit()
+            return {"ok":True}
+        finally:
+            await conn.close()
 
 
 @app.post("/api/admin/rewards/grant")
@@ -6737,13 +6779,16 @@ function metric(label,val){return '<div class="metric"><span class="mini">'+labe
 function adminOverview(){
 const st=adminData.stats||{},orders=adminData.orders||[],users=adminData.users||[],products=adminData.products||[];
 const metrics=[['👤','ПОЛЬЗОВАТЕЛИ',st.users||0],['🛒','ЗАКАЗЫ',st.orders||0],['⭐','ВЫРУЧКА (Stars)',stars(st.stars_revenue||0)],['◈','UC ВЫВЕДЕНО',st.uc_withdrawn||0],['👥','АКТИВНЫЕ ПРОДАВЦЫ',Array.isArray(adminData.sellers)?adminData.sellers.length:0],['📦','ОТКРЫТО КЕЙСОВ',st.cases_opened||0]];
-const actions=[['🎁','Выдать награду','users'],['🔎','Найти игрока','users'],['📦','Создать товар','products'],['🎟️','Создать промокод','promos'],['➤','Сделать рассылку','bot']];
+const actions=[['🎁','Выдать награду','users'],['🔎','Найти игрока','users'],['📦','Создать товар','products'],['🎟️','Создать промокод','promos'],['➤','Сделать рассылку','bot'],['⚙️','Обнулить / изменить баланс','balance']];
 const orderRows=orders.slice(0,4).map(o=>'<details class="shx-order-detail"><summary><span>📦 #'+esc(String(o.number||o.id))+' · '+esc(o.product_name||'Заказ')+'</span><b>'+stars(o.stars_amount||0)+' ⭐</b><em>'+esc(o.status||'Новый')+'</em></summary><div class="shx-order-fields"><div>Создан: '+esc(o.created_at||'—')+'</div><div>Последнее изменение: '+esc(o.updated_at||'—')+'</div><div>Завершён: '+(o.status==='Выполнен'?esc(o.updated_at||'—'):'Не завершён')+'</div><div>Покупатель: '+esc(o.buyer_username?'@'+o.buyer_username:o.buyer_name||o.user_token||'—')+'</div><div>Продавец: '+esc(o.seller_name||o.seller_username||'Магазин SHREKSICH')+'</div><div>Исполнитель: '+(o.seller_id?'Продавец заказа':'Не указан отдельно')+'</div><div class="shx-order-links">'+(o.buyer_username?'<a href="https://t.me/'+encodeURIComponent(o.buyer_username.replace(/^@/,''))+'" target="_blank" rel="noopener">Написать покупателю ↗</a>':'')+(o.seller_username?'<a href="https://t.me/'+encodeURIComponent(o.seller_username.replace(/^@/,''))+'" target="_blank" rel="noopener">Написать продавцу ↗</a>':'')+'</div></div></details>').join('')||'<p>Пока нет заказов</p>';
 const userRows=users.slice(0,5).map((u,i)=>'<button type="button" class="shx-ref-user shx-player-detail-btn" data-player-details="'+esc(u.token||'')+'"><span>'+(i+1)+'</span><span class="shx-ref-avatar">👤</span><span class="shx-player-name"><b>'+esc(u.username?'@'+u.username:u.first_name||'Игрок')+'</b><small>'+esc(u.token||'—')+'</small></span><span class="shx-ref-bal">'+Number(u.upgrade_points||0)+' SHR</span><span>Подробнее ▾</span></button><div class="shx-player-detail-result" id="detail-'+esc(u.token||'')+'" hidden></div>').join('')||'<p>Пока нет игроков</p>';
 return '<div class="shx-v4-metrics">'+metrics.map((m,i)=>'<div class="shx-v4-metric tone'+i+'"><div><span class="shx-metric-icon">'+m[0]+'</span><small>'+m[1]+'</small></div><strong>'+m[2]+'</strong><i>⌁⌁⌁</i></div>').join('')+'</div><div class="shx-ref-topgrid"><div><section class="shx-v4-panel"><h2>◉ Быстрые действия</h2><div class="shx-v4-actions">'+actions.map((a,i)=>'<button data-admin="'+a[2]+'" class="tone'+i+'"><span>'+a[0]+'</span>'+a[1]+'</button>').join('')+'</div></section><section class="shx-v4-panel"><h2>👥 Последние игроки <button data-admin="users">Все игроки →</button></h2><div class="shx-ref-userlist">'+userRows+'</div></section></div><div><section class="shx-v4-panel"><h2>◉ Последние заказы <button data-admin="orders">Все заказы →</button></h2>'+orderRows+'</section><div class="shx-ref-art"><span>SHREKSICH<br>METRO SHOP</span><span>📦</span></div></div></div><div class="shx-ref-bottom"><section class="shx-v4-panel"><h2>🎁 Выдача наград</h2><p>Быстрая выдача валют, билетов и предметов</p><button class="buy" data-admin="users">Выдать награду →</button></section><section class="shx-v4-panel"><h2>🛒 Управление товарами</h2><p>Товары в каталоге: '+products.length+'</p><button class="buy" data-admin="products">Открыть товары →</button></section><section class="shx-v4-panel"><h2>🎟️ Создание промокода</h2><p>Настройка наград и ограничений</p><button class="buy" data-admin="promos">Создать промокод →</button></section></div>';
 }
 function adminOrders(){
  return '<h2>Заказы</h2>'+adminData.orders.map(o=>{const st=['Ожидает оплаты','Истёк','Проверка оплаты','Оплачен','Принят','В работе','Ожидает клиента','Проверка выдачи','Выполнен','Отменён','Возврат'];return '<div class="admin-card"><div class="cat">#'+o.number+' • '+esc(o.user_token||'Без жетона')+'</div><div class="name">'+esc(o.product_name)+'</div><div>'+stars(o.stars_amount)+' • PUBG UID '+esc(o.uid)+(o.promo_code?' • '+esc(o.promo_code):'')+'</div><div class="adminline"><select id="os'+o.id+'">'+st.map(s=>'<option '+(s===o.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-order-save="'+o.id+'">Сохранить</button></div></div>'}).join('')
+}
+function adminBalance(){
+ return '<section class="shx-admin-grant"><div class="shx-admin-kicker">SHREKSICH · БЫСТРЫЕ ДЕЙСТВИЯ</div><h2>⚙️ Обнулить / изменить баланс</h2><p>По жетону игрока. Установка 0 обнуляет выбранную валюту или предмет. Новое значение заменяет старое, а не прибавляется.</p><label class="shx-grant-field">Жетон игрока<input id="setBalanceToken" placeholder="SHX-..."></label><label class="shx-grant-field">Что изменить<select id="setBalanceAsset"><option value="shrek_coins">ShrekCOINS</option><option value="shr">SHR</option><option value="tickets">Обычные билеты</option><option value="donation_tickets">Донат-билеты</option><option value="farm_item">Предмет фермы</option></select></label><label class="shx-grant-field">Установить количество<input id="setBalanceAmount" type="number" min="0" step="1" placeholder="0 = обнулить"></label><label class="shx-grant-field">ID предмета (только для предмета)<input id="setBalanceResource" placeholder="ID предмета"></label><label class="shx-grant-field">Донат-кейс (только для билетов)<input id="setBalanceCase" value="*" placeholder="* = общие билеты"></label><p>UC Credits защищены финансовым резервом и здесь не изменяются.</p><button class="buy" id="setBalanceBtn">Применить изменение</button></section>';
 }
 function adminUsers(){
  const cases=(adminData.cases&&adminData.cases.cases)||[];
