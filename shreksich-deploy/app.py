@@ -6344,7 +6344,7 @@ async function farmHtml(){
  '<div class="farm-primary-actions"><button class="farm-primary" id="farmCollect" '+(d.available_cycles<=0?'disabled':'')+'>🧺 СОБРАТЬ • '+d.available_cycles+'</button><button class="secondary" id="farmUpgrade" '+(d.level>=d.max_level||d.shr<d.upgrade_cost?'disabled':'')+'>'+(d.level>=d.max_level?'МАКС. УРОВЕНЬ':'УЛУЧШИТЬ • '+d.upgrade_cost+' SHR')+'</button></div>'+
 
  '<section class="farm-uc-miner"><div class="farm-uc-miner-head"><div><div class="farm-eyebrow">UC MINING</div><div class="farm-uc-miner-label">🎮 Добыча UC Credits</div></div>'+farmUcIcon()+'</div>'+
- '<div class="farm-uc-miner-stats"><div class="farm-uc-miner-stat"><small>СКОРОСТЬ ФЕРМЫ</small><strong>+'+ucm.daily_rate+' UC/сутки</strong></div>'+
+ '<div class="farm-uc-miner-stats"><div class="farm-uc-miner-stat"><small>СКОРОСТЬ ФЕРМЫ</small><strong>+'+(Number(ucm.daily_rate||0)*86400/Number(ucm.period_seconds||86400)).toLocaleString('ru-RU',{maximumFractionDigits:2})+' UC/сутки</strong></div>'+
  '<div class="farm-uc-miner-stat"><small>ДОБЫТО</small><strong id="farmUcMineReady">'+ucm.ready+' UC Credits</strong></div>'+
  '<div class="farm-uc-miner-stat"><small>СЛЕДУЮЩИЙ UC</small><strong id="farmUcMineNext">'+(ucm.ready>=ucm.capacity?'ГОТОВО':formatReset(ucm.next_seconds))+'</strong></div></div>'+
  '<div class="farm-uc-miner-track"><span id="farmUcMineFill" style="width:'+mineProgress.toFixed(2)+'%"></span></div>'+
