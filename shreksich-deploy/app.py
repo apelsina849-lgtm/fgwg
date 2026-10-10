@@ -5542,7 +5542,7 @@ function setSpinNavigationLocked(on){
  const home=document.getElementById('pageHomeBtn');if(home)home.disabled=spinNavigationLocked;
  const note=document.getElementById('spinLockNote');if(note)note.classList.toggle('show',spinNavigationLocked)
 }
-let ucUnreadCount=0;async function refreshUCUnread(){if(ADMIN)return;try{const d=await api('/api/uc-chats/unread');ucUnreadCount=Number(d.unread||0);document.querySelectorAll('[data-tab="support"]').forEach(b=>{let badge=b.querySelector('.shx-unread-badge');if(ucUnreadCount){if(!badge){badge=document.createElement('span');badge.className='shx-unread-badge';b.appendChild(badge)}badge.textContent=String(ucUnreadCount)}else badge?.remove()});const h=document.getElementById('ucSupportUnread');if(h)h.textContent=ucUnreadCount?String(ucUnreadCount):''}catch(_){}}
+let ucUnreadCount=0;async function refreshUCUnread(){if(ADMIN)return;try{const d=await api('/api/uc-chats/unread');ucUnreadCount=Number(d.unread||0);document.querySelectorAll('[data-tab="support"],.shx-profile-support').forEach(b=>{let badge=b.querySelector('.shx-unread-badge');if(ucUnreadCount){if(!badge){badge=document.createElement('span');badge.className='shx-unread-badge';b.appendChild(badge)}badge.textContent=String(ucUnreadCount)}else badge?.remove()});const h=document.getElementById('ucSupportUnread');if(h)h.textContent=ucUnreadCount?String(ucUnreadCount):''}catch(_){}}
 function go(t){
  if(spinNavigationLocked){
   try{if(tg&&tg.HapticFeedback)tg.HapticFeedback.impactOccurred('light')}catch(_){}
@@ -5666,7 +5666,7 @@ function home(){
  homeTile('Промокоды','Бонусные билеты','promo','spin')+
  homeTile('Вывод UC','Обмен UC Credits','uc','farm','uc')+
  homeTile('Продавцам','Стань поставщиком','catalog','seller')+
- homeTile('Поддержка','Помощь и вопросы','help','support')+
+ 
  '</div>'+
  '<section class="shx-live"><div class="shx-live-head"><span>LIVE ДРОПЫ</span><small><span class="shx-online"></span>Реальные находки игроков</small></div><div id="homeLiveCards">'+homeWinsHtml()+'</div></section>'+
  '<div class="shx-panel"><h3>Другие разделы</h3><div class="shx-profile-actions"><button data-go="inventory">🎒 Инвентарь</button><button data-go="orders">📦 Мои заказы</button><button data-go="referral">👥 Пригласить друзей</button><button data-go="settings">⚙ Настройки</button></div></div>'+
@@ -5790,7 +5790,7 @@ function profileHtml(){
  return '<div class="shx-page-title"><button class="shx-back" data-go="home">← Главная</button><h1>Профиль</h1></div>'+
  '<section class="shx-profile"><div class="shx-profile-top"><div class="shx-avatar">'+esc(display.replace(/^@/,'').charAt(0).toUpperCase()||'S')+'</div><div><div class="shx-username">'+esc(display)+'</div><button type="button" class="shx-user-sub" data-copy-token="'+esc(u.token||'')+'" style="background:none;border:0;padding:4px 0;color:#91c9e8;cursor:pointer;text-align:left">Жетон: '+esc(u.token||'—')+' 📋 Копировать</button></div></div>'+
  '<div class="shx-wallets"><div class="shx-wallet">'+farmCoinIcon()+'<div><div class="shx-wallet-count">'+compactCurrency(f.shrek_coins||0)+'</div><div class="shx-wallet-name">ShrekCOIN</div></div></div><div class="shx-wallet">'+farmUcIcon()+'<div><div class="shx-wallet-count">'+Number(f.uc_available||0)+'</div><div class="shx-wallet-name">UC Credits</div></div></div><div class="shx-wallet"><div class="shx-star">✦</div><div><div class="shx-wallet-count">'+Number(f.shr||0)+'</div><div class="shx-wallet-name">SHR</div></div></div></div></section>'+
- '<section class="shx-panel"><h3>Управление аккаунтом</h3><div class="shx-profile-actions"><button data-go="seller">🤝 Продавцам</button><button data-go="orders">📦 Мои заказы</button><button data-go="inventory">🎒 Инвентарь</button><button data-go="farm">🌾 Моя ферма</button><button data-go="referral">👥 Рефералы</button><button data-go="settings">⚙ Настройки</button><button data-go="support">💬 Поддержка</button></div></section>';
+ '<section class="shx-panel"><h3>Управление аккаунтом</h3><div class="shx-profile-actions"><button data-go="seller">🤝 Продавцам</button><button data-go="orders">📦 Мои заказы</button><button data-go="inventory">🎒 Инвентарь</button><button data-go="farm">🌾 Моя ферма</button><button data-go="referral">👥 Рефералы</button><button data-go="settings">⚙ Настройки</button><button data-go="support" class="shx-profile-support">💬 Поддержка'+(ucUnreadCount?'<span class="shx-unread-badge">'+ucUnreadCount+'</span>':'')+'</button></div></section>';
 }
 async function copyUserToken(value,button){
  if(!value)return;
@@ -7403,7 +7403,7 @@ async function render(){
   else if(tab==='inventory'){app.innerHTML=await inventoryHtml();bindInventory()}
   else if(tab==='farm'){app.innerHTML=await farmHtml();bindFarm()}
   else if(tab==='farm-catalog'){app.innerHTML=await farmCatalogPage();bindFarmCatalogPage()}
-  else if(tab==='profile'){try{homeFarmData=await api('/api/farm')}catch(_){} app.innerHTML=profileHtml();bindProfile()}
+  else if(tab==='profile'){try{homeFarmData=await api('/api/farm')}catch(_){} try{const unread=await api('/api/uc-chats/unread');ucUnreadCount=Number(unread.unread||0)}catch(_){} app.innerHTML=profileHtml();bindProfile()}
   else if(tab==='referral'){app.innerHTML=await referralHtml();bindReferral()}
   else if(tab==='support'){app.innerHTML=await supportHtml();bindSupport()}
   else if(tab==='settings'){app.innerHTML=settingsHtml();bindSettings()}
