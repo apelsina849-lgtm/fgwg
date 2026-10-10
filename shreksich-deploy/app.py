@@ -4432,7 +4432,7 @@ async def admin_uc_chat_send(withdrawal_id:int,body:UCChatMessageIn,x_telegram_i
     async with db_write_lock:
         conn=await db()
         try:
-            w=await (await conn.execute("SELECT id,telegram_id FROM farm_withdrawals WHERE id=?",(withdrawal_id,))).fetchone()
+            w=await (await conn.execute("SELECT id,telegram_id FROM uc_withdrawals WHERE id=?",(withdrawal_id,))).fetchone()
             if not w:raise HTTPException(404,"Заявка не найдена")
             await conn.execute("INSERT OR IGNORE INTO uc_support_chats(withdrawal_id,telegram_id) VALUES(?,?)",(withdrawal_id,int(w["telegram_id"])))
             chat=await (await conn.execute("SELECT id,status FROM uc_support_chats WHERE withdrawal_id=?",(withdrawal_id,))).fetchone()
@@ -4452,7 +4452,7 @@ async def admin_uc_chat_status(withdrawal_id:int,body:UCChatStatusIn,x_telegram_
     async with db_write_lock:
         conn=await db()
         try:
-            w=await (await conn.execute("SELECT telegram_id FROM farm_withdrawals WHERE id=?",(withdrawal_id,))).fetchone()
+            w=await (await conn.execute("SELECT telegram_id FROM uc_withdrawals WHERE id=?",(withdrawal_id,))).fetchone()
             if not w:raise HTTPException(404,"Заявка не найдена")
             await conn.execute("INSERT OR IGNORE INTO uc_support_chats(withdrawal_id,telegram_id) VALUES(?,?)",(withdrawal_id,int(w["telegram_id"])))
             await conn.execute("UPDATE uc_support_chats SET status=? WHERE withdrawal_id=?",(body.status,withdrawal_id))
@@ -7327,7 +7327,7 @@ async function render(){
   else if(tab==='farm-catalog'){app.innerHTML=await farmCatalogPage();bindFarmCatalogPage()}
   else if(tab==='profile'){try{homeFarmData=await api('/api/farm')}catch(_){} app.innerHTML=profileHtml();bindProfile()}
   else if(tab==='referral'){app.innerHTML=await referralHtml();bindReferral()}
-  else if(tab==='support'){app.innerHTML=supportHtml();bindSupport()}
+  else if(tab==='support'){app.innerHTML=await supportHtml();bindSupport()}
   else if(tab==='settings'){app.innerHTML=settingsHtml();bindSettings()}
   else if(tab==='case-catalog'){app.innerHTML=await caseCatalogHtml();bindCaseCatalog()}
   else if(tab==='drop-history'){app.innerHTML=await dropHistoryHtml();bindDropHistory()}
