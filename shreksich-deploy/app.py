@@ -1600,6 +1600,8 @@ class FarmSellIn(BaseModel):
 
 class FarmCoinUpgradeIn(BaseModel):
     module: str = Field(min_length=3, max_length=20)
+    levels: int = Field(default=1, ge=1, le=100)
+    max_upgrade: bool = False
 
 
 class FarmWithdrawIn(BaseModel):
@@ -3152,30 +3154,40 @@ async def farm_coin_upgrade(body: FarmCoinUpgradeIn, x_telegram_init_data: str |
             if old_level >= FARM_MODULE_LIMITS[module]:
                 await conn.rollback()
                 raise HTTPException(409,"Модуль уже максимально улучшен")
-            cost = farm_coin_upgrade_cost(module,old_level)
-            if int(state["shrek_coins"] or 0) < cost:
+            available = int(state["shrek_coins"] or 0)
+            remaining = FARM_MODULE_LIMITS[module] - old_level
+            requested = remaining if body.max_upgrade else min(body.levels, remaining)
+            count = 0
+            cost = 0
+            for offset in range(requested):
+                next_cost = farm_coin_upgrade_cost(module,old_level+offset)
+                if cost + next_cost > available:
+                    break
+                cost += next_cost
+                count += 1
+            if count == 0:
                 await conn.rollback()
                 raise HTTPException(409,f"Нужно {cost} ShrekCOINS")
             if module == "drill":
                 now = int(time.time())
                 base_level = int(state["level"] or 1)
                 previous_interval = farm_mining_interval(base_level,old_level)
-                improved_interval = farm_mining_interval(base_level,old_level+1)
+                improved_interval = farm_mining_interval(base_level,old_level+count)
                 elapsed = max(0,now-int(state["last_mine_at"] or now))
                 complete_cycles, part_seconds = divmod(elapsed,previous_interval)
                 adjusted_elapsed = complete_cycles*improved_interval + part_seconds*improved_interval//previous_interval
                 await conn.execute("UPDATE farm_state SET last_mine_at=? WHERE telegram_id=?",(now-adjusted_elapsed,uid))
             column = spec["column"]  # Только фиксированные серверные имена, не данные запроса.
             await conn.execute(
-                f"UPDATE farm_state SET shrek_coins=shrek_coins-?,{column}={column}+1,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",
-                (cost,uid)
+                f"UPDATE farm_state SET shrek_coins=shrek_coins-?,{column}={column}+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",
+                (cost,count,uid)
             )
             await conn.execute("INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",
-                               (uid,"coin_upgrade",json.dumps({"module":module,"from":old_level,"to":old_level+1,"coins":cost})))
+                               (uid,"coin_upgrade",json.dumps({"module":module,"from":old_level,"to":old_level+count,"coins":cost})))
             await conn.commit()
         finally:
             await conn.close()
-    return {"ok":True,"module":module,"level":old_level+1,"spent":cost}
+    return {"ok":True,"module":module,"level":old_level+count,"levels_added":count,"spent":cost}
 
 
 @app.post("/api/farm/activity")
@@ -4232,6 +4244,7 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .shx-player-detail-btn{width:100%;text-align:left;cursor:pointer;color:#eaf4ff;background:transparent;border:0}.shx-player-name{min-width:0}.shx-player-name b,.shx-player-name small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.shx-player-name small{color:#91add0}.shx-player-detail-result{background:#061c35;border:1px solid #24629b;border-radius:12px;padding:12px;margin:6px 0 12px}.shx-player-detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.shx-player-detail-grid>div{background:#0b2948;border:1px solid #204e7c;border-radius:9px;padding:9px;min-width:0}.shx-player-detail-grid small{display:block;color:#9bbbd6;font-size:10px}.shx-player-detail-grid b{display:block;font-size:17px;margin-top:5px}.shx-order-detail{border-top:1px solid #21486d;padding:10px 2px}.shx-order-detail summary{display:flex;align-items:center;justify-content:space-between;gap:7px;cursor:pointer;font-size:12px}.shx-order-detail summary span{flex:1}.shx-order-detail summary em{color:#5ce2b3;font-size:10px}.shx-order-fields{display:grid;gap:7px;padding:12px 6px;font-size:12px;color:#bcd7ed}.shx-order-links{display:flex;flex-wrap:wrap;gap:10px}.shx-order-links a{color:#69c2ff;text-decoration:underline}@media(max-width:760px){.shx-player-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.shx-player-detail-btn{grid-template-columns:12px 25px minmax(0,1fr) 55px}.shx-player-detail-btn>span:last-child{display:none}}
 .shx-product-actions{display:flex;gap:10px;margin-top:12px}.shx-product-actions .secondary{flex:1}.shx-product-delete{background:#571a2b!important;border:1px solid #df5c78!important;color:#ffdce5!important;border-radius:12px!important;padding:10px 13px!important;font-weight:800;min-height:43px}.shx-product-delete:disabled{opacity:.55}@media(max-width:420px){.shx-product-actions{flex-wrap:wrap}.shx-product-actions button{flex:1 1 100%}}
 .farm-overview .farm-wallet-value,.shx-wallet-count{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}.farm-overview .farm-wallet-value{font-size:clamp(15px,3.5vw,28px)!important;gap:3px}.farm-overview .farm-wallet-value svg{flex-shrink:0;max-width:28px}.farm-upgrade-explainer{font-size:12px;line-height:1.5;color:#a9c7df;padding:9px 12px;margin:5px 0 13px;background:#091e34;border:1px solid #235276;border-radius:10px}.farm-upgrade-explainer b{color:#f8cf76}@media(max-width:420px){.farm-overview .farm-wallet-value{font-size:16px!important}.farm-overview .farm-wallet-value svg{max-width:23px}}
+.farm-bulk-selector{margin:8px 0}.farm-bulk-selector select{width:100%;min-height:40px;border:1px solid #477caa;border-radius:10px;background:#0c2741;color:#eaf5ff;padding:6px;font-weight:800}.farm-module .farm-bulk-selector+button{width:100%}
 /* Exact reference layout structure: PUBG owner console */
 .shx-reference{grid-template-columns:220px minmax(0,1fr);background:#020b1b;border-color:#143a70;border-radius:15px}.shx-reference .shx-v4-sidebar{background:linear-gradient(180deg,#071d3b,#031027);padding:14px 12px}.shx-reference .shx-v4-brand{display:flex;align-items:center;gap:8px;padding:3px 4px 16px}.shx-reference .shx-v4-brand b{font-size:15px;white-space:nowrap}.shx-reference .shx-v4-brand small{margin:4px 0 0;font-size:10px}.shx-crown{font-size:29px}.shx-reference .shx-v4-sidebar nav button{display:flex;align-items:center;gap:12px;padding:10px 11px;font-size:13px}.shx-menu-icon{font-size:19px;width:22px;text-align:center;color:#a7d3ff}.shx-reference .shx-v4-main{background:radial-gradient(ellipse at 65% -15%,#1e375e,#06162d 40%,#020b1b 100%);padding:15px 12px 24px}.shx-reference .shx-v4-header{min-height:60px;padding:2px 8px 17px}.shx-reference .shx-v4-header h1{font-size:24px;font-weight:900}.shx-header-pills{display:flex;gap:9px}.shx-header-pills b{border:1px solid #224c7d;background:#061b35;border-radius:12px;padding:11px 13px;font-size:11px;white-space:nowrap}.shx-reference .shx-v4-metrics{grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}.shx-reference .shx-v4-metric{min-height:66px;padding:10px 8px}.shx-reference .shx-v4-metric>div{display:flex;align-items:center;gap:6px}.shx-reference .shx-v4-metric small{font-size:9px}.shx-reference .shx-v4-metric strong{font-size:19px;margin:8px 0}.shx-metric-icon{font-size:23px}.shx-ref-topgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:10px}.shx-reference .shx-v4-panel{padding:12px;margin-bottom:10px}.shx-reference .shx-v4-panel h2{font-size:15px!important}.shx-reference .shx-v4-actions{grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}.shx-reference .shx-v4-actions button{font-size:11px;min-height:91px}.shx-ref-user{display:grid;grid-template-columns:14px 29px minmax(0,1fr) 72px 67px;align-items:center;gap:8px;border-top:1px solid #173b64;padding:6px 4px;font-size:11px}.shx-ref-user>div{min-width:0}.shx-ref-user b,.shx-ref-user small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.shx-ref-user small{color:#91add0;margin-top:3px}.shx-ref-user button{border:1px solid #197dd1;border-radius:7px;background:#0a4c93;color:#e9f5ff;padding:7px 3px;font-size:11px}.shx-ref-avatar{font-size:22px}.shx-ref-bal{font-size:10px;color:#ffd274}.shx-ref-art{height:106px;border:1px solid #1d4c80;border-radius:12px;background:linear-gradient(110deg,#06142a 5%,#122d53 60%,#533e31);display:flex;align-items:center;justify-content:space-around;overflow:hidden;color:#bcd7f5;font-weight:900;letter-spacing:2px}.shx-ref-art span:last-child{font-size:70px}.shx-ref-bottom{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.shx-ref-bottom .shx-v4-panel{min-height:135px}.shx-ref-bottom .buy{width:100%}
 @media(max-width:1100px){.shx-reference .shx-v4-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.shx-ref-topgrid{grid-template-columns:1fr}.shx-ref-bottom{grid-template-columns:1fr 1fr}.shx-header-pills{display:none}}
@@ -6428,7 +6441,7 @@ async function farmHtml(){
   '<div class="farm-item"><div class="farm-item-head"><div class="farm-item-icon">'+farmItemSticker(x)+'</div><div><div class="farm-item-name">'+esc(x.name)+'</div><span class="farm-rarity-label '+esc(x.tier)+'">'+tierLabel(x.tier)+'</span><div class="farm-item-meta">В наличии: '+x.qty+' шт.</div></div></div><div class="farm-item-meta">За шт.: '+farmPrice(x.coins)+'<br>Итого: '+farmPrice(x.total_coins)+'</div><button class="secondary" data-farm-sell="'+esc(x.id)+'" data-farm-qty="'+x.qty+'">Продать '+x.qty+' шт.</button></div>'
  ).join('');
  const withdrawals=(d.withdrawals||[]).map(w=>'<div class="order"><div class="name">'+w.uc_amount+' UC • '+esc(w.status)+'</div><div class="mini">PUBG UID: '+esc(w.pubg_uid)+'</div></div>').join('');
- const modules=(d.coin_upgrades||[]).map(m=>'<div class="farm-module"><div class="farm-module-header"><span class="farm-module-icon">'+esc(m.icon)+'</span>'+esc(m.name)+'</div><div class="farm-module-desc">'+esc(m.description)+'</div><div class="mini">Уровень '+m.level+' / '+m.max_level+'</div><div class="farm-module-progress"><span style="width:'+(100*m.level/m.max_level)+'%"></span></div><button class="secondary farm-upgrade-btn" data-farm-module="'+esc(m.id)+'" '+(m.level>=m.max_level||d.shrek_coins<m.cost?'disabled':'')+'>'+(m.level>=m.max_level?'МАКС. УРОВЕНЬ':d.shrek_coins<m.cost?'НЕ ХВАТАЕТ '+compactCurrency(m.cost-d.shrek_coins)+' ShrekCOIN':'<span>УЛУЧШИТЬ</span><span class="farm-upgrade-cost">🪙 '+compactCurrency(m.cost)+' ShrekCOIN</span>')+'</button></div>').join('');
+ const modules=(d.coin_upgrades||[]).map(m=>'<div class="farm-module"><div class="farm-module-header"><span class="farm-module-icon">'+esc(m.icon)+'</span>'+esc(m.name)+'</div><div class="farm-module-desc">'+esc(m.description)+'</div><div class="mini">Уровень '+m.level+' / '+m.max_level+'</div><div class="farm-module-progress"><span style="width:'+(100*m.level/m.max_level)+'%"></span></div><div class="farm-bulk-selector"><select data-farm-qty="'+esc(m.id)+'" aria-label="Количество уровней">'+[1,2,5,10,20,50,100].map(n=>'<option value="'+n+'">+'+n+' ур.</option>').join('')+'<option value="max">МАКС</option></select></div><button class="secondary farm-upgrade-btn" data-farm-module="'+esc(m.id)+'" '+(m.level>=m.max_level||d.shrek_coins<m.cost?'disabled':'')+'>'+(m.level>=m.max_level?'МАКС. УРОВЕНЬ':d.shrek_coins<m.cost?'НЕ ХВАТАЕТ '+compactCurrency(m.cost-d.shrek_coins)+' ShrekCOIN':'<span>УЛУЧШИТЬ</span><span class="farm-upgrade-cost">🪙 '+compactCurrency(m.cost)+' ShrekCOIN</span>')+'</button></div>').join('');
  const targets=(d.uc_targets||[]).map(t=>'<div class="farm-uc-target '+(t.need_more<=0?'farm-uc-complete':'')+'"><b>'+t.uc+' UC</b><span>Требуется '+t.required_credits+' UC Credits<br>'+(t.need_more<=0?'Можно подать заявку':('Не хватает '+t.need_more+' UC Credits'))+'</span></div>').join('');
  const ucMin=(d.uc_targets||[]).reduce((m,t)=>Math.min(m,Number(t.required_credits||t.uc)),Infinity);
  const minCredits=Number.isFinite(ucMin)?ucMin:120;
@@ -6514,7 +6527,7 @@ function bindFarm(){
  if(ucSelect)ucSelect.addEventListener('change',()=>{
   refreshFarmUcNeed();
  });
- document.querySelectorAll('[data-farm-module]').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;try{const d=await api('/api/farm/coin-upgrade',{method:'POST',body:JSON.stringify({module:b.dataset.farmModule})});alert('Модуль улучшен до '+d.level+' уровня • -'+d.spent+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);b.disabled=false}}));
+ document.querySelectorAll('[data-farm-module]').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;try{const d=await api('/api/farm/coin-upgrade',{method:'POST',body:JSON.stringify({module:b.dataset.farmModule,levels:Number(document.querySelector('[data-farm-qty="'+b.dataset.farmModule+'"]')?.value)||1,max_upgrade:document.querySelector('[data-farm-qty="'+b.dataset.farmModule+'"]')?.value==='max'})});alert('Улучшено на '+d.levels_added+' ур. · Уровень '+d.level+' · -'+compactCurrency(d.spent)+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);b.disabled=false}}));
  const collect=document.getElementById('farmCollect');if(collect&&!collect.disabled)collect.addEventListener('click',async()=>{collect.disabled=true;try{const d=await api('/api/farm/collect',{method:'POST'});alert('Ферма добыла '+d.count+' предмет(ов)');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);collect.disabled=false}});
  const up=document.getElementById('farmUpgrade');if(up&&!up.disabled)up.addEventListener('click',async()=>{up.disabled=true;try{const d=await api('/api/farm/upgrade',{method:'POST'});alert('Ферма улучшена до '+d.level+' уровня');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);up.disabled=false}});
  document.querySelectorAll('[data-farm-sell]').forEach(b=>b.addEventListener('click',async()=>{b.disabled=true;try{const d=await api('/api/farm/sell',{method:'POST',body:JSON.stringify({resource_id:b.dataset.farmSell,qty:Number(b.dataset.farmQty||1)})});sfxSell();alert('+'+d.coins_added+' ShrekCOINS');app.innerHTML=await farmHtml();bindFarm();addHomeExit()}catch(e){alert(e.message);b.disabled=false}}));
