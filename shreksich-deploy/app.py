@@ -346,7 +346,7 @@ def uc_mine_daily_rate(level: int) -> int:
     return max(1,min(5,1+max(1,min(FARM_MAX_LEVEL,int(level)))//5))
 
 def farm_uc_progress(state, now: int):
-    rate = uc_mine_daily_rate(int(state["level"] or 1))
+    rate = min(5, uc_mine_daily_rate(int(state["level"] or 1)) + int(state["uc_generator_level"] or 0)//10)
     last = int(state["uc_mine_last_at"] or now)
     elapsed = min(86400,max(0,now-last))
     progress = min(86400*rate,max(0,int(state["uc_mine_progress"] or 0))+elapsed*rate)
