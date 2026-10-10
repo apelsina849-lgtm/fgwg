@@ -3625,6 +3625,19 @@ async def owner(init_data: str | None):
         raise HTTPException(403,"Нет доступа")
     return u
 
+async def ensure_shop_staff_schema(conn):
+    await conn.execute("CREATE TABLE IF NOT EXISTS shop_admins (telegram_id INTEGER PRIMARY KEY, role TEXT NOT NULL DEFAULT 'admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+    await conn.execute("""CREATE TABLE IF NOT EXISTS shop_admin_warnings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_id INTEGER NOT NULL,
+      issued_by INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+
+class ShopWarningIn(BaseModel):
+    reason: str = Field(min_length=5, max_length=500)
+
 class ShopAdminIn(BaseModel):
     telegram_id: int = Field(gt=0)
     role: str = "admin"
@@ -3633,9 +3646,53 @@ class ShopAdminIn(BaseModel):
 async def shop_staff_list(x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
     async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute("CREATE TABLE IF NOT EXISTS shop_admins (telegram_id INTEGER PRIMARY KEY, role TEXT NOT NULL DEFAULT 'admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
-        rows = await (await conn.execute("SELECT telegram_id,role,created_at FROM shop_admins ORDER BY created_at DESC")).fetchall()
-    return [{"telegram_id": OWNER_ID, "role": "owner"}] + [{"telegram_id": r[0], "role": r[1], "created_at": r[2]} for r in rows]
+        conn.row_factory = aiosqlite.Row
+        await ensure_shop_staff_schema(conn)
+        rows = await (await conn.execute("""
+          SELECT a.telegram_id,a.role,a.created_at,u.first_name,u.username,
+          (SELECT COUNT(*) FROM shop_admin_warnings w WHERE w.telegram_id=a.telegram_id) AS warnings
+          FROM shop_admins a LEFT JOIN users u ON u.telegram_id=a.telegram_id
+          ORDER BY a.created_at DESC""")).fetchall()
+        own = await (await conn.execute("SELECT first_name,username FROM users WHERE telegram_id=?", (OWNER_ID,))).fetchone()
+    result = [{"telegram_id":OWNER_ID,"role":"owner","first_name":own["first_name"] if own else None,"username":own["username"] if own else None,"created_at":None,"warnings":0}]
+    result.extend(dict(r) for r in rows)
+    return result
+
+@app.get("/api/admin/staff/{staff_id}/warnings")
+async def shop_staff_warnings(staff_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        await ensure_shop_staff_schema(conn)
+        rows = await (await conn.execute("SELECT id,reason,issued_by,created_at FROM shop_admin_warnings WHERE telegram_id=? ORDER BY id DESC", (staff_id,))).fetchall()
+    return [dict(r) for r in rows]
+
+@app.post("/api/admin/staff/{staff_id}/warnings")
+async def shop_staff_warn(staff_id: int, body: ShopWarningIn, x_telegram_init_data: str | None = Header(default=None)):
+    actor = await owner(x_telegram_init_data)
+    if int(actor["id"]) != OWNER_ID:
+        raise HTTPException(403,"Только владелец может выдавать выговоры")
+    if staff_id == OWNER_ID:
+        raise HTTPException(400,"Владельцу нельзя выдать выговор")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await ensure_shop_staff_schema(conn)
+        exists = await (await conn.execute("SELECT 1 FROM shop_admins WHERE telegram_id=?", (staff_id,))).fetchone()
+        if not exists:
+            raise HTTPException(404,"Администратор не найден")
+        await conn.execute("INSERT INTO shop_admin_warnings(telegram_id,issued_by,reason) VALUES(?,?,?)", (staff_id,int(actor["id"]),body.reason.strip()))
+        await conn.commit()
+    return {"ok":True}
+
+@app.delete("/api/admin/staff/{staff_id}/warnings/{warning_id}")
+async def shop_staff_unwarn(staff_id: int, warning_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    actor = await owner(x_telegram_init_data)
+    if int(actor["id"]) != OWNER_ID:
+        raise HTTPException(403,"Только владелец может снимать выговоры")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await ensure_shop_staff_schema(conn)
+        await conn.execute("DELETE FROM shop_admin_warnings WHERE id=? AND telegram_id=?", (warning_id,staff_id))
+        await conn.commit()
+    return {"ok":True}
 
 @app.post("/api/admin/staff")
 async def shop_staff_add(body: ShopAdminIn, x_telegram_init_data: str | None = Header(default=None)):
@@ -6973,7 +7030,20 @@ async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">�
 function bindAdmin(){
  if(adminSection==='staff'){
   const list=document.getElementById('shopStaffList');
-  api('/api/admin/staff').then(rows=>{if(list)list.innerHTML=rows.map(x=>'<div class="order"><b>'+esc(String(x.telegram_id))+'</b> · '+esc(x.role)+(x.role==='owner'?' · защищён':' <button class="danger" data-staff-remove="'+x.telegram_id+'">Удалить</button>')+'</div>').join('');document.querySelectorAll('[data-staff-remove]').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить администратора?'))return;try{await api('/api/admin/staff/'+b.dataset.staffRemove,{method:'DELETE'});await refreshAdmin()}catch(e){alert(e.message)}})}).catch(e=>{if(list)list.textContent=e.message});
+  api('/api/admin/staff').then(rows=>{if(list)list.innerHTML=rows.map(x=>{
+   const name=esc(x.first_name||'Имя не указано'),user=x.username?'@'+esc(x.username):'Юзернейм не указан';
+   const date=x.created_at?new Date(x.created_at.replace(' ','T')+'Z').toLocaleString('ru-RU',{dateStyle:'medium',timeStyle:'short'}):'Дата назначения владельца не фиксируется';
+   return '<div class="order"><b>'+name+'</b><div class="muted">'+user+'</div><div>ID: '+esc(String(x.telegram_id))+' · '+esc(x.role)+'</div><div class="muted">Добавлен: '+date+'</div><div>⚠️ Выговоры: '+Number(x.warnings||0)+'</div>'+(x.role==='owner'?'<b>🔒 Владелец защищён</b>':'<div class="row" style="margin-top:10px"><button class="secondary" data-staff-warnings="'+x.telegram_id+'">Выговоры</button><button class="danger" data-staff-remove="'+x.telegram_id+'">Удалить</button></div><div id="staffWarnings'+x.telegram_id+'"></div>')+'</div>'
+  }).join('');
+  document.querySelectorAll('[data-staff-remove]').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить администратора?'))return;try{await api('/api/admin/staff/'+b.dataset.staffRemove,{method:'DELETE'});await refreshAdmin()}catch(e){alert(e.message)}});
+  document.querySelectorAll('[data-staff-warnings]').forEach(b=>b.onclick=async()=>{
+   const id=b.dataset.staffWarnings,box=document.getElementById('staffWarnings'+id);if(!box)return;
+   try{const warnings=await api('/api/admin/staff/'+id+'/warnings');box.innerHTML='<div class="muted">История выговоров</div>'+warnings.map(w=>'<div class="order">'+esc(w.reason)+'<div class="muted">'+esc(w.created_at)+' · выдал '+w.issued_by+'</div><button class="secondary" data-staff-unwarn="'+w.id+'">Снять</button></div>').join('')+'<button class="buy" id="staffWarnAdd">Выдать выговор</button>';
+   box.querySelectorAll('[data-staff-unwarn]').forEach(el=>el.onclick=async()=>{try{await api('/api/admin/staff/'+id+'/warnings/'+el.dataset.staffUnwarn,{method:'DELETE'});await refreshAdmin()}catch(e){alert(e.message)}});
+   box.querySelector('#staffWarnAdd').onclick=async()=>{const reason=prompt('Причина выговора (от 5 символов):');if(reason===null)return;try{await api('/api/admin/staff/'+id+'/warnings',{method:'POST',body:JSON.stringify({reason})});await refreshAdmin()}catch(e){alert(e.message)}};
+   }catch(e){alert(e.message)}
+  });
+  }).catch(e=>{if(list)list.textContent=e.message});
   const add=document.getElementById('shopStaffAdd');if(add)add.onclick=async()=>{const telegram_id=Number(document.getElementById('shopStaffId').value),role=document.getElementById('shopStaffRole').value;if(!Number.isSafeInteger(telegram_id)||telegram_id<=0){alert('Введите корректный Telegram ID');return}try{await api('/api/admin/staff',{method:'POST',body:JSON.stringify({telegram_id,role})});await refreshAdmin()}catch(e){alert(e.message)}};
  }
 
