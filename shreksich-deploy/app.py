@@ -1547,10 +1547,11 @@ class AdminGrantIn(BaseModel):
 
 class AdminRewardIn(BaseModel):
     token: str = Field(min_length=4, max_length=32)
-    tickets: int = Field(default=0, ge=0, le=100)
-    donation_tickets: int = Field(default=0, ge=0, le=100)
+    tickets: int = Field(default=0, ge=0, le=1000000000)
+    donation_tickets: int = Field(default=0, ge=0, le=1000000000)
     donation_case_id: str = Field(default="*", max_length=32)
-    upgrade_points: int = Field(default=0, ge=0, le=10000)
+    upgrade_points: int = Field(default=0, ge=0, le=1000000000)
+    shrek_coins: int = Field(default=0, ge=0, le=1000000000)
 
 
 class BroadcastIn(BaseModel):
@@ -3763,7 +3764,7 @@ async def admin_users(x_telegram_init_data: str | None = Header(default=None)):
 @app.post("/api/admin/rewards/grant")
 async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
-    if body.tickets <= 0 and body.donation_tickets <= 0 and body.upgrade_points <= 0:
+    if body.tickets <= 0 and body.donation_tickets <= 0 and body.upgrade_points <= 0 and body.shrek_coins <= 0:
         raise HTTPException(400,"Укажите обычные билеты, Donation Tickets или SHR")
     target_case = (body.donation_case_id or "*").strip().upper() or "*"
     async with db_write_lock:
@@ -3785,6 +3786,9 @@ async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | N
                 "UPDATE spin_state SET tickets=tickets+?,upgrade_points=upgrade_points+? WHERE telegram_id=?",
                 (body.tickets,body.upgrade_points,uid)
             )
+            if body.shrek_coins > 0:
+                await ensure_farm_state(conn,uid)
+                await conn.execute("UPDATE farm_state SET shrek_coins=shrek_coins+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(body.shrek_coins,uid))
             if body.donation_tickets > 0:
                 await conn.execute(
                     "INSERT INTO donation_ticket_balances(telegram_id,case_id,tickets) VALUES(?,?,?) "
@@ -3797,7 +3801,7 @@ async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | N
     return {
         "ok":True,"token":body.token.strip().upper(),
         "tickets_added":body.tickets,"donation_tickets_added":body.donation_tickets,
-        "donation_case_id":target_case,"upgrade_points_added":body.upgrade_points
+        "donation_case_id":target_case,"upgrade_points_added":body.upgrade_points,"shrek_coins_added":body.shrek_coins
     }
 
 
@@ -6542,7 +6546,7 @@ function adminNav(){
 function metric(label,val){return '<div class="metric"><span class="mini">'+label+'</span><b>'+val+'</b></div>'}
 function adminOverview(){
  const s=adminData.stats;
- return '<section class="hero"><div class="cat">OWNER PANEL</div><h1>Управление проектом</h1><div class="muted">Все основные функции бота и Mini App из одной панели.</div></section><div class="metrics">'+
+ return '<section class="hero" style="background:linear-gradient(130deg,#112c48,#0a192c 55%,#283d45);border:1px solid #38658a;border-radius:26px;padding:28px 22px"><div class="cat">SHREKSICH · CONTROL CENTER</div><h1>Панель управления</h1><div class="muted">Заказы, игроки, награды и экономика — в одном месте.</div><button class="buy" type="button" id="adminQuickGrant" style="margin-top:18px;width:100%">🎁 Выдать награды игроку</button></section><div class="metrics">'+
  metric('ПОЛЬЗОВАТЕЛИ',s.users)+metric('ЗАКАЗЫ',s.orders)+metric('ОПЛАЧЕНО',s.paid_orders)+metric('ВЫРУЧКА',stars(s.stars_revenue))+metric('СЕГОДНЯ',s.orders_today)+metric('ТИКЕТЫ',s.open_tickets)+metric('ПРОМО',s.active_promos)+metric('РЕФЕРАЛЫ',s.rewarded_referrals+'/'+s.referrals)+'</div>'+
  (s.top_product?'<div class="card" style="margin-top:12px"><div class="mini">ТОП ТОВАР</div><div class="name">'+esc(s.top_product)+'</div></div>':'')
 }
@@ -6551,7 +6555,7 @@ function adminOrders(){
 }
 function adminUsers(){
  const cases=(adminData.cases&&adminData.cases.cases)||[];
- return '<h2>Игроки и бонусы</h2><div class="card"><input id="userSearch" placeholder="Поиск по жетону, нику или имени"><div class="adminline"><input id="grantToken" placeholder="Жетон SHX-..."><input id="grantTickets" type="number" min="0" value="0" placeholder="Обычные билеты"><input id="grantDonation" type="number" min="0" value="0" placeholder="Синие Donation Tickets"><input id="grantPts" type="number" min="0" value="0" placeholder="SHR"></div><select id="grantDonationCase"><option value="*">Donation Ticket: любой донат-кейс</option>'+cases.filter(c=>c.id!=='FREE').map(c=>'<option value="'+esc(c.id)+'">Только '+esc(c.name)+'</option>').join('')+'</select><button class="buy" id="grantBtn">Выдать</button></div>'+
+ return '<h2>Игроки и бонусы</h2><div class="card"><div class="name">🎁 Центр выдачи наград</div><p class="mini">Выберите игрока по жетону и укажите количество. Выдача UC Credits ограничена финансовым резервом и здесь недоступна.</p><input id="userSearch" placeholder="🔎 Поиск по жетону, нику или имени"><div class="adminline"><input id="grantToken" placeholder="Жетон SHX-..."><input id="grantTickets" type="number" min="0" value="0" placeholder="Обычные билеты"><input id="grantDonation" type="number" min="0" value="0" placeholder="Синие Donation Tickets"><input id="grantPts" type="number" min="0" value="0" placeholder="SHR"><input id="grantCoins" type="number" min="0" value="0" placeholder="ShrekCOINS"></div><select id="grantDonationCase"><option value="*">Donation Ticket: любой донат-кейс</option>'+cases.filter(c=>c.id!=='FREE').map(c=>'<option value="'+esc(c.id)+'">Только '+esc(c.name)+'</option>').join('')+'</select><button class="buy" id="grantBtn">Выдать</button></div>'+
  adminData.users.map(u=>'<div class="admin-card user-row" data-search="'+esc(((u.token||'')+' '+(u.username||'')+' '+(u.first_name||'')).toLowerCase())+'"><div class="name">'+esc(u.first_name||u.username||'Игрок')+' '+(u.username?'@'+esc(u.username):'')+'</div><div class="token-code">'+esc(u.token||'Без жетона')+'</div><div class="mini">заказов '+u.orders_count+' • рефералов '+u.referrals_count+' • 🎟 '+u.tickets+' • <span class="blue-ticket">🎟️ Donation '+Number(u.donation_tickets||0)+'</span> • SHR '+u.upgrade_points+'</div><button class="secondary" data-message-user="'+esc(u.token||'')+'" style="margin-top:8px">Написать по жетону</button></div>').join('')
 }
 function adminProducts(){
@@ -6714,7 +6718,8 @@ function bindAdmin(){
   try{await api('/api/admin/seller-orders/'+id+'/settle',{method:'POST',body:JSON.stringify({note})});await refreshAdmin()}catch(e){alert(e.message)}
  }));
  document.querySelectorAll('[data-order-save]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.orderSave;try{await api('/api/admin/orders/'+id,{method:'PATCH',body:JSON.stringify({status:document.getElementById('os'+id).value})});alert('Статус сохранён')}catch(e){alert(e.message)}}));
- const gb=document.getElementById('grantBtn');if(gb)gb.addEventListener('click',async()=>{try{await api('/api/admin/rewards/grant',{method:'POST',body:JSON.stringify({token:document.getElementById('grantToken').value,tickets:Number(document.getElementById('grantTickets').value||0),donation_tickets:Number(document.getElementById('grantDonation').value||0),donation_case_id:document.getElementById('grantDonationCase').value,upgrade_points:Number(document.getElementById('grantPts').value||0)})});alert('Награда выдана');refreshAdmin()}catch(e){alert(e.message)}});
+ const qg=document.getElementById('adminQuickGrant');if(qg)qg.addEventListener('click',()=>{adminSection='users';app.innerHTML=adminNav()+adminUsers();bindAdmin()});
+ const gb=document.getElementById('grantBtn');if(gb)gb.addEventListener('click',async()=>{if(!confirm('Подтвердить выдачу награды выбранному игроку?'))return;gb.disabled=true;try{await api('/api/admin/rewards/grant',{method:'POST',body:JSON.stringify({token:document.getElementById('grantToken').value,tickets:Number(document.getElementById('grantTickets').value||0),donation_tickets:Number(document.getElementById('grantDonation').value||0),donation_case_id:document.getElementById('grantDonationCase').value,upgrade_points:Number(document.getElementById('grantPts').value||0),shrek_coins:Number(document.getElementById('grantCoins').value||0)})});alert('Награда выдана');refreshAdmin()}catch(e){alert(e.message);gb.disabled=false}});
  document.querySelectorAll('[data-message-user]').forEach(b=>b.addEventListener('click',()=>{adminSection='bot';app.innerHTML=adminNav()+adminBot();document.getElementById('botUserToken').value=b.dataset.messageUser;bindAdmin()}));
  const np=document.getElementById('newPBtn');if(np)np.addEventListener('click',async()=>{try{await api('/api/admin/products',{method:'POST',body:JSON.stringify({name:document.getElementById('newPName').value,category:document.getElementById('newPCat').value,description:document.getElementById('newPDesc').value,stars_price:Number(document.getElementById('newPStars').value),sort_order:Number(document.getElementById('newPSort').value||0),active:true})});alert('Товар добавлен');refreshAdmin()}catch(e){alert(e.message)}});
  document.querySelectorAll('[data-product-save]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.productSave,card=document.querySelector('[data-product-card="'+id+'"]'),v=n=>card.querySelector('[data-p="'+n+'"]');try{await api('/api/admin/products/'+id,{method:'PATCH',body:JSON.stringify({name:v('name').value,category:v('category').value,description:v('description').value,stars_price:Number(v('stars_price').value),sort_order:Number(v('sort_order').value||0),active:v('active').checked})});alert('Товар сохранён')}catch(e){alert(e.message)}}));
