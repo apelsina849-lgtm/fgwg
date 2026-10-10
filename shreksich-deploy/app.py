@@ -4441,7 +4441,7 @@ async def admin_uc_chat_send(withdrawal_id:int,body:UCChatMessageIn,x_telegram_i
             await conn.commit()
             uid=int(w["telegram_id"])
         finally:await conn.close()
-    try:await tg("sendMessage",{"chat_id":uid,"text":f"💬 Сообщение по выдаче UC #{withdrawal_id}:\\n\\n{body.message.strip()}\\n\\nОтветить можно в разделе «Поддержка» мини-приложения."})
+    try:await tg("sendMessage",{"chat_id":uid,"text":f"💬 Сообщение по выдаче UC #{withdrawal_id}:\n\n{body.message.strip()}\n\nОтветить можно в разделе «Поддержка» мини-приложения."})
     except Exception:pass
     return {"ok":True}
 
