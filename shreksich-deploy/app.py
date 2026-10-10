@@ -431,10 +431,10 @@ def farm_coin_upgrade_cost(module: str, level: int) -> int:
     return int(round(spec["base"] * (1.34 ** min(level,40) * 1.20 ** max(0,level-40) * (1+level/18))))
 
 def farm_mining_interval(level: int, drill_level: int = 0) -> int:
-    # Economy v2: all farms mine items twice as slowly. Drill improvements
-    # still reduce the interval by 9% per level, as before.
+    # Economy v3: slower resource production, including fully upgraded farms.
+    # The base mining interval is tripled; bonuses remain capped.
     old_interval = max(90, farm_interval_seconds(level) * (max(35,100 - 9*min(5,int(drill_level)) - int(1.5*max(0,int(drill_level)-5)**0.8))) // 100)
-    return old_interval * 2
+    return old_interval * 3
 
 def farm_total_capacity(level: int, warehouse_level: int = 0) -> int:
     return farm_capacity(level) + 24*min(5,max(0,int(warehouse_level))) + int(8*max(0,int(warehouse_level)-5)**1.3)
