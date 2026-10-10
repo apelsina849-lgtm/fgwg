@@ -1551,7 +1551,7 @@ class AdminRewardIn(BaseModel):
     donation_tickets: int = Field(default=0, ge=0, le=1000000000)
     donation_case_id: str = Field(default="*", max_length=32)
     upgrade_points: int = Field(default=0, ge=0, le=1000000000)
-    shrek_coins: int = Field(default=0, ge=0, le=1000000000)
+    shrek_coins: int = Field(default=0, ge=0, le=1000000000000)
 
 
 class BroadcastIn(BaseModel):
@@ -3810,7 +3810,9 @@ async def admin_grant_rewards(body: AdminRewardIn, x_telegram_init_data: str | N
                 (body.tickets,body.upgrade_points,uid)
             )
             if body.shrek_coins > 0:
-                await ensure_farm_state(conn,uid)
+                farm = await ensure_farm_state(conn,uid)
+                if int(farm["shrek_coins"] or 0) + body.shrek_coins > 1000000000000000:
+                    raise HTTPException(409,"Баланс ShrekCOINS превысит безопасный лимит 1 квадриллион")
                 await conn.execute("UPDATE farm_state SET shrek_coins=shrek_coins+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(body.shrek_coins,uid))
             if body.donation_tickets > 0:
                 await conn.execute(
@@ -6832,6 +6834,7 @@ function bindAdmin(){
  document.querySelectorAll('[data-order-save]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.orderSave;try{await api('/api/admin/orders/'+id,{method:'PATCH',body:JSON.stringify({status:document.getElementById('os'+id).value})});alert('Статус сохранён')}catch(e){alert(e.message)}}));
  const qg=document.getElementById('adminQuickGrant');if(qg)qg.addEventListener('click',()=>{adminSection='users';app.innerHTML=adminNav()+'<main class="shx-owner-content">'+adminUsers()+'</main>';bindAdmin()});
  document.querySelectorAll('[data-grant-player]').forEach(b=>b.addEventListener('click',()=>{const field=document.getElementById('grantToken');if(!field)return;field.value=b.dataset.grantPlayer;document.querySelector('.shx-admin-grant')?.scrollIntoView({behavior:'smooth',block:'start'});field.style.borderColor='#f1bd55';field.blur()}));
+ const coinField=document.getElementById('grantCoins');if(coinField){coinField.max='1000000000000';coinField.title='До 1 триллиона ShrekCOINS за одну выдачу';}
  const gb=document.getElementById('grantBtn');if(gb)gb.addEventListener('click',async()=>{const token=document.getElementById('grantToken').value.trim();const values=[['Обычные билеты','grantTickets'],['Донат-билеты','grantDonation'],['SHR','grantPts'],['ShrekCOINS','grantCoins']].map(x=>[x[0],Number(document.getElementById(x[1]).value||0)]).filter(x=>x[1]>0);if(!token){alert('Сначала выберите игрока');return}if(!values.length){alert('Укажите количество хотя бы одной награды');return}if(!confirm('Получатель: '+token+'\\n'+values.map(x=>x[0]+': '+x[1].toLocaleString('ru-RU')).join('\\n')+'\\n\\nПодтвердить начисление?'))return;gb.disabled=true;try{await api('/api/admin/rewards/grant',{method:'POST',body:JSON.stringify({token:document.getElementById('grantToken').value,tickets:Number(document.getElementById('grantTickets').value||0),donation_tickets:Number(document.getElementById('grantDonation').value||0),donation_case_id:document.getElementById('grantDonationCase').value,upgrade_points:Number(document.getElementById('grantPts').value||0),shrek_coins:Number(document.getElementById('grantCoins').value||0)})});alert('Награда выдана');refreshAdmin()}catch(e){alert(e.message);gb.disabled=false}});
  document.querySelectorAll('[data-message-user]').forEach(b=>b.addEventListener('click',()=>{adminSection='bot';app.innerHTML=adminNav()+'<main class="shx-owner-content">'+adminBot()+'</main>';document.getElementById('botUserToken').value=b.dataset.messageUser;bindAdmin()}));
  const np=document.getElementById('newPBtn');if(np)np.addEventListener('click',async()=>{try{await api('/api/admin/products',{method:'POST',body:JSON.stringify({name:document.getElementById('newPName').value,category:document.getElementById('newPCat').value,description:document.getElementById('newPDesc').value,stars_price:Number(document.getElementById('newPStars').value),sort_order:Number(document.getElementById('newPSort').value||0),active:true})});alert('Товар добавлен');refreshAdmin()}catch(e){alert(e.message)}});
