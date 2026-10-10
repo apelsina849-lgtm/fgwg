@@ -489,11 +489,11 @@ def farm_stage(level: int) -> int:
 
 def farm_tier_weights(level: int) -> dict[str,float]:
     p = (max(1,min(FARM_MAX_LEVEL,int(level))) - 1) / max(1,FARM_MAX_LEVEL - 1)
-    # Редкие ресурсы действительно редкие. Веса меняются с уровнем, сумма всегда 100%.
-    # lvl 1: 78 / 16 / 5 / 1 / 0 / 0 / 0
-    # lvl 20: 65 / 20 / 9 / 4 / 1.2 / 0.5 / 0.3
-    starting = {"GRAY":78, "CYAN":16, "BLUE":5, "PURPLE":1, "PINK":0, "RED":0, "GOLD":0, "RAINBOW":0}
-    ending = {"GRAY":64.985, "CYAN":20, "BLUE":9, "PURPLE":4, "PINK":1.2, "RED":0.5, "GOLD":0.3, "RAINBOW":0.015}
+    # Повышенные шансы редкой добычи; доли нормализуются до 100%.
+    # Начальная ферма: 72 / 18 / 7 / 2.5 / 0.45 / 0.045 / 0.0045 / 0.0005
+    # Максимальная ферма: 55 / 22 / 12 / 7 / 2.8 / 0.9 / 0.28 / 0.02
+    starting = {"GRAY":72, "CYAN":18, "BLUE":7, "PURPLE":2.5, "PINK":0.45, "RED":0.045, "GOLD":0.0045, "RAINBOW":0.0005}
+    ending = {"GRAY":55, "CYAN":22, "BLUE":12, "PURPLE":7, "PINK":2.8, "RED":0.9, "GOLD":0.28, "RAINBOW":0.02}
     weights = {tier:starting[tier] + (ending[tier] - starting[tier])*p for tier in FARM_TIER_ORDER}
     total = sum(weights.values()) or 1
     return {k:round(v*100/total,3) for k,v in weights.items()}
