@@ -634,6 +634,7 @@ async def init_db():
     );
     CREATE TABLE IF NOT EXISTS uc_support_chats(id INTEGER PRIMARY KEY AUTOINCREMENT,withdrawal_id INTEGER NOT NULL UNIQUE,telegram_id INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'Открыт',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS uc_support_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id INTEGER NOT NULL,sender TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE IF NOT EXISTS uc_chat_reads(chat_id INTEGER NOT NULL,reader TEXT NOT NULL,last_read_id INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(chat_id,reader));
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS spin_state(
       telegram_id INTEGER PRIMARY KEY,
@@ -4393,7 +4394,7 @@ async def user_uc_chats(x_telegram_init_data: str | None = Header(default=None))
     u=await current_user(x_telegram_init_data)
     conn=await db()
     try:
-        rows=await (await conn.execute("SELECT c.id,c.withdrawal_id,c.status,c.created_at,w.uc_amount FROM uc_support_chats c LEFT JOIN farm_withdrawals w ON w.id=c.withdrawal_id WHERE c.telegram_id=? ORDER BY c.id DESC",(int(u["id"]),))).fetchall()
+        rows=await (await conn.execute("SELECT c.id,c.withdrawal_id,c.status,c.created_at,w.uc_amount,(SELECT COUNT(*) FROM uc_support_messages m WHERE m.chat_id=c.id AND m.sender='admin' AND m.id>COALESCE((SELECT last_read_id FROM uc_chat_reads WHERE chat_id=c.id AND reader='user'),0)) unread FROM uc_support_chats c LEFT JOIN uc_withdrawals w ON w.id=c.withdrawal_id WHERE c.telegram_id=? ORDER BY c.id DESC",(int(u["id"]),))).fetchall()
         result=[]
         for r in rows:
             messages=await (await conn.execute("SELECT sender,message,created_at FROM uc_support_messages WHERE chat_id=? ORDER BY id ASC LIMIT 300",(r["id"],))).fetchall()
@@ -4459,6 +4460,66 @@ async def admin_uc_chat_status(withdrawal_id:int,body:UCChatStatusIn,x_telegram_
             await conn.commit()
         finally:await conn.close()
     return {"ok":True,"status":body.status}
+
+
+async def uc_chat_mark(conn,chat_id,reader):
+    await conn.execute("INSERT INTO uc_chat_reads(chat_id,reader,last_read_id) VALUES(?,?,COALESCE((SELECT MAX(id) FROM uc_support_messages WHERE chat_id=?),0)) ON CONFLICT(chat_id,reader) DO UPDATE SET last_read_id=excluded.last_read_id",(chat_id,reader,chat_id))
+
+@app.get("/api/uc-chats/unread")
+async def user_uc_unread(x_telegram_init_data:str|None=Header(default=None)):
+    u=await current_user(x_telegram_init_data)
+    conn=await db()
+    try:
+        row=await (await conn.execute("SELECT COUNT(*) n FROM uc_support_messages m JOIN uc_support_chats c ON c.id=m.chat_id WHERE c.telegram_id=? AND m.sender='admin' AND m.id>COALESCE((SELECT last_read_id FROM uc_chat_reads WHERE chat_id=c.id AND reader='user'),0)",(int(u["id"]),))).fetchone()
+        return {"unread":int(row["n"])}
+    finally:await conn.close()
+
+@app.post("/api/uc-chats/read-all")
+async def user_uc_read_all(x_telegram_init_data:str|None=Header(default=None)):
+    u=await current_user(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            rows=await (await conn.execute("SELECT id FROM uc_support_chats WHERE telegram_id=?",(int(u["id"]),))).fetchall()
+            for row in rows:await uc_chat_mark(conn,int(row["id"]),"user")
+            await conn.commit()
+        finally:await conn.close()
+    return {"ok":True}
+
+@app.post("/api/uc-chats/{chat_id}/read")
+async def user_uc_read(chat_id:int,x_telegram_init_data:str|None=Header(default=None)):
+    u=await current_user(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            row=await (await conn.execute("SELECT id FROM uc_support_chats WHERE id=? AND telegram_id=?",(chat_id,int(u["id"])))).fetchone()
+            if not row:raise HTTPException(404,"Чат не найден")
+            await uc_chat_mark(conn,chat_id,"user")
+            await conn.commit()
+        finally:await conn.close()
+    return {"ok":True}
+
+@app.get("/api/admin/uc-chats/unread")
+async def admin_uc_unread(x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        rows=await (await conn.execute("SELECT c.withdrawal_id,COUNT(m.id) unread FROM uc_support_chats c JOIN uc_support_messages m ON m.chat_id=c.id AND m.sender='user' AND m.id>COALESCE((SELECT last_read_id FROM uc_chat_reads WHERE chat_id=c.id AND reader='admin'),0) GROUP BY c.id")).fetchall()
+        return {"unread":sum(int(r["unread"]) for r in rows),"chats":[dict(r) for r in rows]}
+    finally:await conn.close()
+
+@app.post("/api/admin/uc-chats/{withdrawal_id}/read")
+async def admin_uc_read(withdrawal_id:int,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            row=await (await conn.execute("SELECT id FROM uc_support_chats WHERE withdrawal_id=?",(withdrawal_id,))).fetchone()
+            if not row:raise HTTPException(404,"Чат не найден")
+            await uc_chat_mark(conn,int(row["id"]),"admin")
+            await conn.commit()
+        finally:await conn.close()
+    return {"ok":True}
 
 @app.post("/api/admin/message")
 async def admin_message(body:AdminMessageIn, x_telegram_init_data: str | None = Header(default=None)):
