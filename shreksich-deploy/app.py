@@ -485,7 +485,7 @@ def farm_capacity(level: int) -> int:
     return 36 + level * 12
 
 def farm_stage(level: int) -> int:
-    return min(10, 1 + (max(1,int(level)) - 1)//5)
+    return min(10, 1 + (max(1,min(FARM_MAX_LEVEL,int(level))) - 1)//5)
 
 def farm_tier_weights(level: int) -> dict[str,float]:
     p = (max(1,min(FARM_MAX_LEVEL,int(level))) - 1) / max(1,FARM_MAX_LEVEL - 1)
@@ -6454,7 +6454,7 @@ function farmScene(d){
  '<path d="M44 26L70 12 138 24 106 43Z" fill="#e5bc73"/><circle cx="46" cy="73" r="16" fill="#493626" stroke="#c39f67" stroke-width="5"/><circle cx="117" cy="78" r="16" fill="#493626" stroke="#c39f67" stroke-width="5"/></g>'+
  '<g fill="#86a45c" stroke="#385b27" stroke-width="3"><path d="M229 318Q211 274 200 292M233 317Q249 278 265 287M247 334Q255 294 281 305M670 339Q662 284 638 294M690 340Q700 296 722 312"/></g>'+
  '<g transform="translate(565 296)"><rect width="55" height="31" rx="5" fill="#c8a36e" stroke="#755236" stroke-width="3"/><path d="M0 12H55M17 0V30M37 0V30" stroke="#ad8455" stroke-width="2"/></g>'+
- '</svg><div class="farm-landscape-title"><span>Твоя деревенская ферма</span><span class="farm-stage-pill">ЭТАП '+d.stage+' / 5</span></div></div>';
+ '</svg><div class="farm-landscape-title"><span>Твоя деревенская ферма</span><span class="farm-stage-pill">УРОВЕНЬ '+d.level+' / '+d.max_level+' · ЭТАП '+d.stage+' / 10</span></div></div>';
 }
 function farmCatalogCards(d){
  const data=d||farmCachedData;
