@@ -335,7 +335,7 @@ async def complete_case_opening(conn, opening) -> dict:
         "reward":reward
     }
 
-FARM_MAX_LEVEL = 20
+FARM_MAX_LEVEL = 50
 FARM_WITHDRAW_MIN_UC = 120
 FARM_DAILY_UC_CREDITS = 2
 
@@ -408,7 +408,8 @@ FARM_RESOURCES = [
 FARM_RESOURCE_BY_ID = {x["id"]:x for x in FARM_RESOURCES}
 
 # Улучшения фермы за ShrekCOINS. Эти монеты нельзя обменять на Stars/UC.
-FARM_COIN_MAX_LEVEL = 5
+FARM_COIN_MAX_LEVEL = 60
+FARM_MODULE_LIMITS = {'drill':50,'warehouse':60,'trader':50,'quality':40,'automation':35,'uc_generator':40,'research':30}
 FARM_COIN_MODULES = {
     "drill": {"column":"drill_level", "name":"Фермерские инструменты", "icon":"🪓", "base":55,
               "description":"Качественные инструменты ускоряют сбор ресурсов на 9% за уровень."},
@@ -418,34 +419,41 @@ FARM_COIN_MODULES = {
                "description":"Цена продажи добычи повышается на 15% за уровень."},
 }
 
+FARM_COIN_MODULES.update({
+    "quality":{"column":"quality_level","name":"Качество добычи","icon":"💎","base":175,"description":"Повышает шанс редких ресурсов."},
+    "automation":{"column":"automation_level","name":"Автоматизация","icon":"🤖","base":230,"description":"Увеличивает вместимость склада."},
+    "uc_generator":{"column":"uc_generator_level","name":"UC-генератор","icon":"⚡","base":290,"description":"Развитие UC-майнинга в пределах фонда."},
+    "research":{"column":"research_level","name":"Исследовательский центр","icon":"🔬","base":360,"description":"Увеличивает вместимость и открывает новые технологии."}
+})
+
 def farm_coin_upgrade_cost(module: str, level: int) -> int:
     spec = FARM_COIN_MODULES[module]
-    return int(round(spec["base"] * (1.75 ** max(0, min(level, FARM_COIN_MAX_LEVEL)))))
+    return int(round(spec["base"] * (1.34 ** min(level,40) * 1.20 ** max(0,level-40) * (1+level/18))))
 
 def farm_mining_interval(level: int, drill_level: int = 0) -> int:
     # Economy v2: all farms mine items twice as slowly. Drill improvements
     # still reduce the interval by 9% per level, as before.
-    old_interval = max(90, farm_interval_seconds(level) * (100 - 9 * max(0,min(FARM_COIN_MAX_LEVEL,int(drill_level)))) // 100)
+    old_interval = max(90, farm_interval_seconds(level) * (max(35,100 - 9*min(5,int(drill_level)) - int(1.5*max(0,int(drill_level)-5)**0.8))) // 100)
     return old_interval * 2
 
 def farm_total_capacity(level: int, warehouse_level: int = 0) -> int:
-    return farm_capacity(level) + 24 * max(0,min(FARM_COIN_MAX_LEVEL,int(warehouse_level)))
+    return farm_capacity(level) + 24*min(5,max(0,int(warehouse_level))) + int(8*max(0,int(warehouse_level)-5)**1.3)
 
 def farm_sale_price(item: dict, trader_level: int = 0) -> int:
     # Every farm resource is worth exactly twice its previous ShrekCOIN value.
     # Preserve the existing +15% per trader level and its rounding behavior.
-    old_price = max(1, int(round(int(item["coins"]) * (100 + 15 * max(0,min(FARM_COIN_MAX_LEVEL,int(trader_level)))) / 100)))
+    old_price = max(1, int(round(int(item["coins"]) * (100 + 15*min(5,max(0,int(trader_level))) + int(1.5*max(0,int(trader_level)-5)**1.2)) / 100)))
     return old_price * 2
 
 def farm_coin_modules(state) -> list[dict]:
     results = []
     for key, spec in FARM_COIN_MODULES.items():
-        level = max(0, min(FARM_COIN_MAX_LEVEL, int(state[spec["column"]] or 0)))
+        level = max(0, min(FARM_MODULE_LIMITS[key], int(state[spec["column"]] or 0)))
         results.append({
             "id":key, "name":spec["name"], "icon":spec["icon"],
             "description":spec["description"], "level":level,
-            "max_level":FARM_COIN_MAX_LEVEL,
-            "cost":farm_coin_upgrade_cost(key,level) if level<FARM_COIN_MAX_LEVEL else 0
+            "max_level":FARM_MODULE_LIMITS[key],
+            "cost":farm_coin_upgrade_cost(key,level) if level<FARM_MODULE_LIMITS[key] else 0
         })
     return results
 
@@ -453,18 +461,18 @@ def farm_upgrade_cost(level: int) -> int:
     level = max(1,min(FARM_MAX_LEVEL,int(level)))
     if level >= FARM_MAX_LEVEL:
         return 0
-    return int(round(25 * (1.48 ** (level - 1))))
+    return int(round(25 * (1.48 ** min(level-1,19)) * (1.18 ** max(0,level-20))))
 
 def farm_interval_seconds(level: int) -> int:
     level = max(1,min(FARM_MAX_LEVEL,int(level)))
-    return max(180, 600 - (level - 1) * 22)
+    return max(180, 600 - (min(level,20) - 1) * 22 - max(0,level-20)*3)
 
 def farm_capacity(level: int) -> int:
     level = max(1,min(FARM_MAX_LEVEL,int(level)))
     return 36 + level * 12
 
 def farm_stage(level: int) -> int:
-    return min(5, 1 + (max(1,int(level)) - 1)//4)
+    return min(10, 1 + (max(1,int(level)) - 1)//5)
 
 def farm_tier_weights(level: int) -> dict[str,float]:
     p = (max(1,min(FARM_MAX_LEVEL,int(level))) - 1) / max(1,FARM_MAX_LEVEL - 1)
@@ -884,6 +892,10 @@ async def init_db():
         "drill_level":"INTEGER NOT NULL DEFAULT 0",
         "warehouse_level":"INTEGER NOT NULL DEFAULT 0",
         "trader_level":"INTEGER NOT NULL DEFAULT 0",
+        "quality_level":"INTEGER NOT NULL DEFAULT 0",
+        "automation_level":"INTEGER NOT NULL DEFAULT 0",
+        "uc_generator_level":"INTEGER NOT NULL DEFAULT 0",
+        "research_level":"INTEGER NOT NULL DEFAULT 0",
     }.items():
         if col not in farm_cols:
             await conn.execute(f"ALTER TABLE farm_state ADD COLUMN {col} {ddl}")
@@ -2862,7 +2874,7 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
     trader_level = int(state["trader_level"] or 0)
     interval = farm_mining_interval(level,drill_level)
     stored = sum(int(x["qty"] or 0) for x in inv_rows)
-    cap = farm_total_capacity(level,warehouse_level)
+    cap = farm_total_capacity(level,warehouse_level) + int(state["automation_level"] or 0)*4 + int(state["research_level"] or 0)*3
     available_cycles = max(0,min(cap-stored,(now-int(state["last_mine_at"] or now))//interval))
     inventory = []
     for r in inv_rows:
@@ -2972,7 +2984,7 @@ async def farm_collect(x_telegram_init_data: str | None = Header(default=None)):
                 "SELECT COALESCE(SUM(qty),0) q FROM farm_inventory WHERE telegram_id=?",(uid,)
             )).fetchone()
             stored = int(stored_row["q"] or 0)
-            capacity = farm_total_capacity(level,int(state["warehouse_level"] or 0))
+            capacity = farm_total_capacity(level,int(state["warehouse_level"] or 0)) + int(state["automation_level"] or 0)*4 + int(state["research_level"] or 0)*3
             room = max(0,capacity-stored)
             if room <= 0:
                 await conn.execute("UPDATE farm_state SET last_mine_at=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(now,uid))
@@ -2985,7 +2997,7 @@ async def farm_collect(x_telegram_init_data: str | None = Header(default=None)):
                 raise HTTPException(409,"Добыча ещё не готова")
             mined = {}
             for _ in range(int(cycles)):
-                item = pick_farm_resource(level)
+                item = pick_farm_resource(min(FARM_MAX_LEVEL,level+int(state["quality_level"] or 0)//4))
                 mined[item["id"]] = mined.get(item["id"],0)+1
             for resource_id,qty in mined.items():
                 await conn.execute(
@@ -3136,7 +3148,7 @@ async def farm_coin_upgrade(body: FarmCoinUpgradeIn, x_telegram_init_data: str |
             await conn.execute("BEGIN IMMEDIATE")
             state = await ensure_farm_state(conn,uid)
             old_level = int(state[spec["column"]] or 0)
-            if old_level >= FARM_COIN_MAX_LEVEL:
+            if old_level >= FARM_MODULE_LIMITS[module]:
                 await conn.rollback()
                 raise HTTPException(409,"Модуль уже максимально улучшен")
             cost = farm_coin_upgrade_cost(module,old_level)
