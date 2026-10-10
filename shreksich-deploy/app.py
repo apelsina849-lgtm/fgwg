@@ -498,12 +498,30 @@ def farm_tier_weights(level: int) -> dict[str,float]:
     total = sum(weights.values()) or 1
     return {k:round(v*100/total,3) for k,v in weights.items()}
 
+def farm_item_weights(pool: list[dict]) -> list[float]:
+    # Используем базовую цену, не изменяемую бонусом торговой лавки.
+    # Степень 0.7 даёт заметную разницу без обнуления дорогого лута.
+    return [1.0 / (max(1, int(item["coins"])) ** 0.7) for item in pool]
+
+def farm_item_chances(level: int) -> dict[str,float]:
+    tier_chances = farm_tier_weights(level)
+    result = {}
+    for tier in FARM_TIER_ORDER:
+        pool = [item for item in FARM_RESOURCES if item["tier"] == tier]
+        if not pool:
+            continue
+        weights = farm_item_weights(pool)
+        total = sum(weights)
+        for item, weight in zip(pool, weights):
+            result[item["id"]] = tier_chances[tier] * weight / total
+    return result
+
 def pick_farm_resource(level: int) -> dict:
     weights = farm_tier_weights(level)
     tiers = list(FARM_TIER_ORDER)
     tier = random.choices(tiers,weights=[weights[t] for t in tiers],k=1)[0]
     pool = [x for x in FARM_RESOURCES if x["tier"] == tier]
-    return random.choice(pool)
+    return random.choices(pool, weights=farm_item_weights(pool), k=1)[0]
 
 async def ensure_farm_state(conn, uid: int):
     row = await (await conn.execute("SELECT * FROM farm_state WHERE telegram_id=?",(uid,))).fetchone()
@@ -2923,6 +2941,7 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
         "upgrade_cost":farm_upgrade_cost(level),
         "coin_upgrades":farm_coin_modules(state),
         "tier_weights":farm_tier_weights(level),
+        "item_chances":farm_item_chances(level),
         "inventory":inventory,
         "resources":[{**item,"coins":farm_sale_price(item,trader_level)} for item in FARM_RESOURCES],
         "uc_targets":[
@@ -6441,11 +6460,11 @@ function farmCatalogCards(d){
  const data=d||farmCachedData;
  if(!data)return '';
  const all=data.resources||[];
- const counts={};all.forEach(x=>{counts[x.tier]=(counts[x.tier]||0)+1});
+
  const pool=all.filter(x=>farmCatalogFilter==='ALL'||x.tier===farmCatalogFilter).slice().sort((a,b)=>FARM_TIER_ORDER_JS.indexOf(a.tier)-FARM_TIER_ORDER_JS.indexOf(b.tier)||Number(a.coins)-Number(b.coins));
  return pool.map(x=>{
-   const odds=Number((data.tier_weights||{})[x.tier]||0)/(counts[x.tier]||1);
-   const pct=odds===0?'0':odds<.01?odds.toFixed(4):odds<1?odds.toFixed(3):odds.toFixed(2);
+   const odds=Number((data.item_chances||{})[x.id]||0);
+   const pct=odds===0?'0':odds<0.0001?odds.toFixed(8):odds<0.01?odds.toFixed(6):odds<1?odds.toFixed(4):odds.toFixed(2);
    return '<div class="farm-catalog-card" data-tier="'+esc(x.tier)+'">'+farmItemSticker(x)+
    '<h4>'+esc(x.name)+'</h4><span class="farm-rarity-label '+esc(x.tier)+'">'+tierLabel(x.tier)+'</span>'+
    farmPrice(x.coins)+'<span class="farm-chance-text">Шанс: '+pct+'% на ур. '+data.level+'</span></div>';
