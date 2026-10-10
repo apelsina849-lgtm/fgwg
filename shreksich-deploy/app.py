@@ -4417,12 +4417,12 @@ async def user_uc_chat_reply(chat_id:int,body:UCChatMessageIn,x_telegram_init_da
             admins=await (await conn.execute("SELECT telegram_id FROM shop_admins")).fetchall()
             recipients={OWNER_ID,*[int(a["telegram_id"]) for a in admins]}
         finally:await conn.close()
-    notice=f"💬 Новый ответ игрока по UC #{withdrawal_id}\\n\\n{body.message.strip()}\\n\\nОткройте Админ-панель → Статистика UC → Заявка #{withdrawal_id} → История чата."
+    notice=f"💬 Новый ответ игрока по UC #{withdrawal_id}\n\n{body.message.strip()}\n\nОткройте Админ-панель → Статистика UC → Заявка #{withdrawal_id} → История чата."
     for admin_id in recipients:
         try:
             await tg("sendMessage",{"chat_id":admin_id,"text":notice})
         except Exception:
-            logger.warning("UC chat notification delivery failed for admin %s",admin_id)
+            print(f"UC chat notification delivery failed for admin {admin_id}")
     return {"ok":True}
 
 @app.get("/api/admin/uc-chats/{withdrawal_id}")
