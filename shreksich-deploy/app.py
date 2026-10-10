@@ -3699,7 +3699,7 @@ async def shop_staff_add(body: ShopAdminIn, x_telegram_init_data: str | None = H
     actor = await owner(x_telegram_init_data)
     if int(actor["id"]) != OWNER_ID:
         raise HTTPException(403,"Только владелец может назначать администраторов")
-    if body.role != "admin":
+    if body.role not in ("admin", "head_admin"):
         raise HTTPException(400,"Недопустимая роль")
     if body.telegram_id == OWNER_ID:
         raise HTTPException(400,"Владелец уже имеет доступ")
@@ -3717,6 +3717,7 @@ async def shop_staff_remove(staff_id: int, x_telegram_init_data: str | None = He
     if staff_id == OWNER_ID:
         raise HTTPException(400,"Владельца нельзя удалить")
     async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("DELETE FROM shop_admin_warnings WHERE telegram_id=?", (staff_id,))
         await conn.execute("DELETE FROM shop_admins WHERE telegram_id=?", (staff_id,))
         await conn.commit()
     return {"ok":True}
@@ -7023,7 +7024,7 @@ function adminSellers(){
  '</div>').join('')||'<div class="empty">Оплаченных заказов нет</div>');
  return html;
 }
-function shopStaffHtml(){return '<section class="card"><h2>🛡 Управление администраторами</h2><p class="muted">Добавлять и удалять администраторов может только владелец магазина.</p><input id="shopStaffId" inputmode="numeric" placeholder="Telegram ID"><select id="shopStaffRole"><option value="admin">Администратор</option></select><button id="shopStaffAdd" class="buy">Добавить / изменить роль</button><div id="shopStaffList" style="margin-top:16px">Загрузка…</div></section>'}
+function shopStaffHtml(){return '<section class="card"><h2>🛡 Управление администраторами</h2><p class="muted">Добавлять и удалять администраторов может только владелец магазина.</p><input id="shopStaffId" inputmode="numeric" placeholder="Telegram ID"><select id="shopStaffRole"><option value="admin">Администратор</option><option value="head_admin">Старший администратор</option></select><button id="shopStaffAdd" class="buy">Добавить / изменить роль</button><div id="shopStaffList" style="margin-top:16px">Загрузка…</div></section>'}
 function adminSectionHtml(){if(adminSection==='staff')return shopStaffHtml();if(adminSection==='balance')return adminBalance();if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='sellers')return adminSellers();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='withdrawals')return adminWithdrawals();if(adminSection==='ucfund')return adminUcFunding();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
 async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+'<main class="shx-owner-content">'+adminSectionHtml()+'</main></div></div>'}
 async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">Обновляем…</div>';app.innerHTML=await adminHtml();bindAdmin()}
@@ -7033,8 +7034,9 @@ function bindAdmin(){
   api('/api/admin/staff').then(rows=>{if(list)list.innerHTML=rows.map(x=>{
    const name=esc(x.first_name||'Имя не указано'),user=x.username?'@'+esc(x.username):'Юзернейм не указан';
    const date=x.created_at?new Date(x.created_at.replace(' ','T')+'Z').toLocaleString('ru-RU',{dateStyle:'medium',timeStyle:'short'}):'Дата назначения владельца не фиксируется';
-   return '<div class="order"><b>'+name+'</b><div class="muted">'+user+'</div><div>ID: '+esc(String(x.telegram_id))+' · '+esc(x.role)+'</div><div class="muted">Добавлен: '+date+'</div><div>⚠️ Выговоры: '+Number(x.warnings||0)+'</div>'+(x.role==='owner'?'<b>🔒 Владелец защищён</b>':'<div class="row" style="margin-top:10px"><button class="secondary" data-staff-warnings="'+x.telegram_id+'">Выговоры</button><button class="danger" data-staff-remove="'+x.telegram_id+'">Удалить</button></div><div id="staffWarnings'+x.telegram_id+'"></div>')+'</div>'
+   return '<div class="order"><b>'+name+'</b><div class="muted">'+user+'</div><div>ID: '+esc(String(x.telegram_id))+' · '+esc(x.role==='head_admin'?'Старший администратор':x.role==='admin'?'Администратор':'Владелец')+'</div><div class="muted">Добавлен: '+date+'</div><div>⚠️ Выговоры: '+Number(x.warnings||0)+'</div>'+(x.role==='owner'?'<b>🔒 Владелец защищён</b>':'<div class="row" style="margin-top:10px"><button class="secondary" data-staff-edit="'+x.telegram_id+'" data-role="'+esc(x.role)+'">Роль</button><button class="secondary" data-staff-warnings="'+x.telegram_id+'">Выговоры</button><button class="danger" data-staff-remove="'+x.telegram_id+'">Удалить</button></div><div id="staffWarnings'+x.telegram_id+'"></div>')+'</div>'
   }).join('');
+  document.querySelectorAll('[data-staff-edit]').forEach(b=>b.onclick=()=>{document.getElementById('shopStaffId').value=b.dataset.staffEdit;document.getElementById('shopStaffRole').value=b.dataset.role;document.getElementById('shopStaffId').scrollIntoView({behavior:'smooth',block:'center'});});
   document.querySelectorAll('[data-staff-remove]').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить администратора?'))return;try{await api('/api/admin/staff/'+b.dataset.staffRemove,{method:'DELETE'});await refreshAdmin()}catch(e){alert(e.message)}});
   document.querySelectorAll('[data-staff-warnings]').forEach(b=>b.onclick=async()=>{
    const id=b.dataset.staffWarnings,box=document.getElementById('staffWarnings'+id);if(!box)return;
