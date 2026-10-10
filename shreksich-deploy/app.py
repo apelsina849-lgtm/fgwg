@@ -341,7 +341,7 @@ FARM_DAILY_UC_CREDITS = 2
 
 # UC Credits can be redeemed for actual UC: every new farm award must be
 # backed by a pre-funded, owner-approved pool from verified NET Stars profit.
-UC_MINE_SECONDS_PER_CREDIT = 86400
+UC_MINE_SECONDS_PER_CREDIT = 172800
 def uc_mine_daily_rate(level: int) -> int:
     return max(1,min(5,1+max(1,min(FARM_MAX_LEVEL,int(level)))//5))
 
@@ -349,9 +349,9 @@ def farm_uc_progress(state, now: int):
     rate = min(5, uc_mine_daily_rate(int(state["level"] or 1)) + int(state["uc_generator_level"] or 0)//10)
     last = int(state["uc_mine_last_at"] or now)
     elapsed = min(86400,max(0,now-last))
-    progress = min(86400*rate,max(0,int(state["uc_mine_progress"] or 0))+elapsed*rate)
-    ready = int(progress//86400)
-    next_seconds = max(0,(86400-progress%86400+rate-1)//rate) if ready<rate else 0
+    progress = min(UC_MINE_SECONDS_PER_CREDIT*rate,max(0,int(state["uc_mine_progress"] or 0))+elapsed*rate)
+    ready = int(progress//UC_MINE_SECONDS_PER_CREDIT)
+    next_seconds = max(0,(UC_MINE_SECONDS_PER_CREDIT-progress%UC_MINE_SECONDS_PER_CREDIT+rate-1)//rate) if ready<rate else 0
     return int(progress),ready,rate,int(next_seconds)
 
 async def uc_fund(conn):
@@ -2898,7 +2898,7 @@ async def farm_state_api(x_telegram_init_data: str | None = Header(default=None)
         "uc_available":max(0,int(state["uc_credits"] or 0)-int(state["uc_reserved"] or 0)),
         "withdraw_min_uc":FARM_WITHDRAW_MIN_UC,
         "daily_uc_credits":FARM_DAILY_UC_CREDITS,
-        "uc_mining":{"daily_rate":mine_rate,"ready":mine_ready,
+        "uc_mining":{"daily_rate":mine_rate,"period_seconds":UC_MINE_SECONDS_PER_CREDIT,"ready":mine_ready,
             "next_seconds":mine_next,"capacity":mine_rate,
             "reserve_available":fund_available,"claimable":min(mine_ready,fund_available)},
         "interval_seconds":interval,"capacity":cap,"stored":stored,
@@ -2947,7 +2947,7 @@ async def claim_mined_uc(x_telegram_init_data: str | None = Header(default=None)
             await conn.execute(
                 "UPDATE farm_state SET uc_credits=uc_credits+?,uc_mine_last_at=?,"
                 "uc_mine_progress=?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",
-                (award,now,progress-award*86400,uid)
+                (award,now,progress-award*UC_MINE_SECONDS_PER_CREDIT,uid)
             )
             await conn.execute(
                 "UPDATE uc_mining_fund SET available_credits=available_credits-?,"
@@ -6320,7 +6320,7 @@ async function farmHtml(){
  const chanceOrder=FARM_TIER_ORDER_JS.map(t=>[t,Number((d.tier_weights||{})[t]||0)]);
  const chances=chanceOrder.filter(x=>x[1]>.0001).map(([t,p])=>'<span class="farm-chance '+tierClass(t)+'">'+tierLabel(t)+' '+Number(p).toFixed(p<1?2:1)+'%</span>').join('');
  const ucm=d.uc_mining||{daily_rate:1,ready:0,next_seconds:86400,reserve_available:0,claimable:0};
- const mineProgress=Number(ucm.ready||0)>0?100:Math.max(0,Math.min(100,100*(1-Number(ucm.next_seconds||0)*Number(ucm.daily_rate||1)/86400)));
+ const mineProgress=Number(ucm.ready||0)>0?100:Math.max(0,Math.min(100,100*(1-Number(ucm.next_seconds||0)*Number(ucm.daily_rate||1)/Number(ucm.period_seconds||86400))));
  const items=(d.inventory||[]).slice().sort((a,b)=>FARM_TIER_ORDER_JS.indexOf(a.tier)-FARM_TIER_ORDER_JS.indexOf(b.tier)||Number(a.coins)-Number(b.coins)).map(x=>
   '<div class="farm-item"><div class="farm-item-head"><div class="farm-item-icon">'+farmItemSticker(x)+'</div><div><div class="farm-item-name">'+esc(x.name)+'</div><span class="farm-rarity-label '+esc(x.tier)+'">'+tierLabel(x.tier)+'</span><div class="farm-item-meta">В наличии: '+x.qty+' шт.</div></div></div><div class="farm-item-meta">За шт.: '+farmPrice(x.coins)+'<br>Итого: '+farmPrice(x.total_coins)+'</div><button class="secondary" data-farm-sell="'+esc(x.id)+'" data-farm-qty="'+x.qty+'">Продать '+x.qty+' шт.</button></div>'
  ).join('');
@@ -6378,7 +6378,7 @@ function bindFarm(){
  if(farmUcMineTicker){clearInterval(farmUcMineTicker);farmUcMineTicker=null}
  const mineState=farmCachedData?.uc_mining||null;
  if(mineState){
-  const at=Date.now(),period=Math.ceil(86400/Math.max(1,Number(mineState.daily_rate||1)));
+  const at=Date.now(),period=Math.ceil(Number(mineState.period_seconds||86400)/Math.max(1,Number(mineState.daily_rate||1)));
   const originalReady=Number(mineState.ready||0),toNext=Math.max(0,Number(mineState.next_seconds||period));
   const capacity=Math.max(1,Number(mineState.capacity||1));
   const reserve=Math.max(0,Number(mineState.reserve_available||0));
