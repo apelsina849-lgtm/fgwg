@@ -3642,7 +3642,7 @@ async def shop_staff_add(body: ShopAdminIn, x_telegram_init_data: str | None = H
     actor = await owner(x_telegram_init_data)
     if int(actor["id"]) != OWNER_ID:
         raise HTTPException(403,"Только владелец может назначать администраторов")
-    if body.role not in ("admin", "moderator"):
+    if body.role != "admin":
         raise HTTPException(400,"Недопустимая роль")
     if body.telegram_id == OWNER_ID:
         raise HTTPException(400,"Владелец уже имеет доступ")
@@ -6966,7 +6966,7 @@ function adminSellers(){
  '</div>').join('')||'<div class="empty">Оплаченных заказов нет</div>');
  return html;
 }
-function shopStaffHtml(){return '<section class="card"><h2>🛡 Управление администраторами</h2><p class="muted">Добавлять и удалять администраторов может только владелец магазина.</p><input id="shopStaffId" inputmode="numeric" placeholder="Telegram ID"><select id="shopStaffRole"><option value="admin">Администратор</option><option value="moderator">Модератор</option></select><button id="shopStaffAdd" class="buy">Добавить / изменить роль</button><div id="shopStaffList" style="margin-top:16px">Загрузка…</div></section>'}
+function shopStaffHtml(){return '<section class="card"><h2>🛡 Управление администраторами</h2><p class="muted">Добавлять и удалять администраторов может только владелец магазина.</p><input id="shopStaffId" inputmode="numeric" placeholder="Telegram ID"><select id="shopStaffRole"><option value="admin">Администратор</option></select><button id="shopStaffAdd" class="buy">Добавить / изменить роль</button><div id="shopStaffList" style="margin-top:16px">Загрузка…</div></section>'}
 function adminSectionHtml(){if(adminSection==='staff')return shopStaffHtml();if(adminSection==='balance')return adminBalance();if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='sellers')return adminSellers();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='withdrawals')return adminWithdrawals();if(adminSection==='ucfund')return adminUcFunding();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
 async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+'<main class="shx-owner-content">'+adminSectionHtml()+'</main></div></div>'}
 async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">Обновляем…</div>';app.innerHTML=await adminHtml();bindAdmin()}
