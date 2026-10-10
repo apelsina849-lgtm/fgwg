@@ -4408,12 +4408,21 @@ async def user_uc_chat_reply(chat_id:int,body:UCChatMessageIn,x_telegram_init_da
     async with db_write_lock:
         conn=await db()
         try:
-            row=await (await conn.execute("SELECT telegram_id,status FROM uc_support_chats WHERE id=?",(chat_id,))).fetchone()
+            row=await (await conn.execute("SELECT telegram_id,status,withdrawal_id FROM uc_support_chats WHERE id=?",(chat_id,))).fetchone()
             if not row or int(row["telegram_id"])!=int(u["id"]):raise HTTPException(404,"Чат не найден")
             if row["status"]!='Открыт':raise HTTPException(409,"Чат закрыт администратором")
             await conn.execute("INSERT INTO uc_support_messages(chat_id,sender,message) VALUES(?,'user',?)",(chat_id,body.message.strip()))
             await conn.commit()
+            withdrawal_id=int(row["withdrawal_id"])
+            admins=await (await conn.execute("SELECT telegram_id FROM shop_admins")).fetchall()
+            recipients={OWNER_ID,*[int(a["telegram_id"]) for a in admins]}
         finally:await conn.close()
+    notice=f"💬 Новый ответ игрока по UC #{withdrawal_id}\\n\\n{body.message.strip()}\\n\\nОткройте Админ-панель → Статистика UC → Заявка #{withdrawal_id} → История чата."
+    for admin_id in recipients:
+        try:
+            await tg("sendMessage",{"chat_id":admin_id,"text":notice})
+        except Exception:
+            logger.warning("UC chat notification delivery failed for admin %s",admin_id)
     return {"ok":True}
 
 @app.get("/api/admin/uc-chats/{withdrawal_id}")
