@@ -3867,6 +3867,38 @@ class UCProfitFundIn(BaseModel):
     note: str = Field(min_length=4,max_length=220)
     profit_verified: bool = False
 
+class AdminUCGrantIn(BaseModel):
+    token: str = Field(min_length=5,max_length=40)
+    credits: int = Field(ge=1,le=100000)
+    reason: str = Field(min_length=5,max_length=250)
+
+@app.post("/api/admin/uc-grant")
+async def admin_uc_grant(body: AdminUCGrantIn, x_telegram_init_data: str | None = Header(default=None)):
+    actor=await owner(x_telegram_init_data)
+    if int(actor["id"]) != OWNER_ID:
+        raise HTTPException(403,"Выдавать UC может только владелец")
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            user=await telegram_id_by_token(conn,body.token)
+            if not user: raise HTTPException(404,"Игрок с таким жетоном не найден")
+            uid=int(user["telegram_id"])
+            await ensure_farm_state(conn,uid)
+            pool=await uc_fund(conn)
+            if int(pool["available_credits"] or 0)<body.credits:
+                raise HTTPException(409,"Недостаточно UC в подтверждённом фонде")
+            await conn.execute("UPDATE uc_mining_fund SET available_credits=available_credits-?,issued_credits=issued_credits+?,updated_at=CURRENT_TIMESTAMP WHERE id=1",(body.credits,body.credits))
+            await conn.execute("UPDATE farm_state SET uc_credits=uc_credits+?,updated_at=CURRENT_TIMESTAMP WHERE telegram_id=?",(body.credits,uid))
+            await conn.execute("INSERT INTO farm_log(telegram_id,action,details) VALUES(?,?,?)",(uid,"admin_uc_grant",json.dumps({"credits":body.credits,"reason":body.reason.strip(),"operator_id":int(actor["id"])},ensure_ascii=False)))
+            await conn.commit()
+            return {"ok":True,"token":body.token.strip().upper(),"credits":body.credits}
+        except Exception:
+            await conn.rollback()
+            raise
+        finally:
+            await conn.close()
+
 @app.get("/api/admin/uc-fund")
 async def admin_uc_fund(x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
@@ -6981,6 +7013,7 @@ function adminUcFunding(){
  metric('ОПЛАТЫ ⭐ (ВАЛОВЫЕ)',Number(d.gross_stars||0)+' ⭐')+
  metric('UC НА БАЛАНСАХ',Number(d.existing_liability||0)+' UC')+
  metric('UC В ЗАЯВКАХ',Number(d.reserved_liability||0)+' UC')+'</div>'+
+ '<div class="card" style="margin-top:12px;border-color:#3f8099"><h3>Выдать UC Credits игроку</h3><p class="muted">UC списываются из подтверждённого фонда и начисляются игроку по жетону. Только владелец.</p><input id="ucGrantToken" placeholder="Жетон игрока SHX-..."><input id="ucGrantAmount" type="number" min="1" max="100000" placeholder="Количество UC"><input id="ucGrantReason" maxlength="250" placeholder="Причина выдачи (минимум 5 символов)"><button class="buy" id="ucGrantBtn">Выдать UC</button></div>'+
  '<div class="card" style="margin-top:12px;border-color:#3f8099"><h3>Пополнение из подтверждённой прибыли</h3>'+
  '<div class="muted" style="line-height:1.6;margin-bottom:12px">Stars здесь показаны как валовая выручка. До пополнения вычти комиссии, возвраты, себестоимость выданного лута и покупки UC. Выделяй только UC Credits, которые уже покрыты реальной чистой прибылью. Пока фонд пуст, новые UC не выдаются.</div>'+
  '<input id="ucFundAmount" type="number" min="1" max="100000" placeholder="Количество UC Credits">'+
@@ -7089,6 +7122,7 @@ function bindAdmin(){
  document.querySelectorAll('[data-copy-token]').forEach(b=>b.addEventListener('click',async()=>{const value=b.dataset.copyToken;if(!value)return;try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(value)}else{const t=document.createElement('textarea');t.value=value;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();if(!document.execCommand('copy'))throw Error('copy');t.remove()}const old=b.innerHTML;b.innerHTML='✓ Скопировано: '+value;setTimeout(()=>{if(b.isConnected)b.innerHTML=old},1400)}catch(e){prompt('Скопируйте жетон:',value)}}));
  const sectionSelect=document.getElementById('shxAdminSectionSelect');if(sectionSelect){sectionSelect.value=adminSection;sectionSelect.addEventListener('change',()=>{adminSection=sectionSelect.value;app.innerHTML=adminNav()+'<main class="shx-owner-content">'+adminSectionHtml()+'</main></div></div>';bindAdmin()})}
  document.querySelectorAll('[data-admin]').forEach(b=>b.addEventListener('click',()=>{adminSection=b.dataset.admin;app.innerHTML=adminNav()+'<main class="shx-owner-content">'+adminSectionHtml()+'</main></div></div>';bindAdmin()}));
+ const ucGrantBtn=document.getElementById('ucGrantBtn');if(ucGrantBtn)ucGrantBtn.onclick=async()=>{const token=document.getElementById('ucGrantToken').value.trim(),credits=Number(document.getElementById('ucGrantAmount').value),reason=document.getElementById('ucGrantReason').value.trim();if(!token||!Number.isInteger(credits)||credits<1||credits>100000||reason.length<5){alert('Введите жетон, UC (1–100000) и причину от 5 символов');return}if(!confirm('Начислить '+credits+' UC игроку '+token+'? UC будут списаны из фонда.'))return;ucGrantBtn.disabled=true;try{await api('/api/admin/uc-grant',{method:'POST',body:JSON.stringify({token,credits,reason})});alert('UC начислены');await refreshAdmin()}catch(e){alert(e.message);ucGrantBtn.disabled=false}};
  const fundBtn=document.getElementById('ucFundAdd');if(fundBtn)fundBtn.addEventListener('click',async()=>{
   const credits=Number(document.getElementById('ucFundAmount').value);
   const note=document.getElementById('ucFundNote').value.trim();
