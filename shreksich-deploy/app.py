@@ -632,6 +632,8 @@ async def init_db():
       message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'Открыт',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS uc_support_chats(id INTEGER PRIMARY KEY AUTOINCREMENT,withdrawal_id INTEGER NOT NULL UNIQUE,telegram_id INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'Открыт',created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE IF NOT EXISTS uc_support_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id INTEGER NOT NULL,sender TEXT NOT NULL,message TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS spin_state(
       telegram_id INTEGER PRIMARY KEY,
@@ -4380,6 +4382,84 @@ async def admin_close_ticket(ticket_id:int, x_telegram_init_data: str | None = H
     return {"ok":True}
 
 
+class UCChatMessageIn(BaseModel):
+    message: str = Field(min_length=1,max_length=2000)
+
+class UCChatStatusIn(BaseModel):
+    status: str
+
+@app.get("/api/uc-chats")
+async def user_uc_chats(x_telegram_init_data: str | None = Header(default=None)):
+    u=await current_user(x_telegram_init_data)
+    conn=await db()
+    try:
+        rows=await (await conn.execute("SELECT c.id,c.withdrawal_id,c.status,c.created_at,w.uc_amount FROM uc_support_chats c LEFT JOIN farm_withdrawals w ON w.id=c.withdrawal_id WHERE c.telegram_id=? ORDER BY c.id DESC",(int(u["id"]),))).fetchall()
+        result=[]
+        for r in rows:
+            messages=await (await conn.execute("SELECT sender,message,created_at FROM uc_support_messages WHERE chat_id=? ORDER BY id ASC LIMIT 300",(r["id"],))).fetchall()
+            result.append({**dict(r),"messages":[dict(m) for m in messages]})
+        return result
+    finally:await conn.close()
+
+@app.post("/api/uc-chats/{chat_id}/messages")
+async def user_uc_chat_reply(chat_id:int,body:UCChatMessageIn,x_telegram_init_data:str|None=Header(default=None)):
+    u=await current_user(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            row=await (await conn.execute("SELECT telegram_id,status FROM uc_support_chats WHERE id=?",(chat_id,))).fetchone()
+            if not row or int(row["telegram_id"])!=int(u["id"]):raise HTTPException(404,"Чат не найден")
+            if row["status"]!='Открыт':raise HTTPException(409,"Чат закрыт администратором")
+            await conn.execute("INSERT INTO uc_support_messages(chat_id,sender,message) VALUES(?,'user',?)",(chat_id,body.message.strip()))
+            await conn.commit()
+        finally:await conn.close()
+    return {"ok":True}
+
+@app.get("/api/admin/uc-chats/{withdrawal_id}")
+async def admin_uc_chat_read(withdrawal_id:int,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        chat=await (await conn.execute("SELECT * FROM uc_support_chats WHERE withdrawal_id=?",(withdrawal_id,))).fetchone()
+        if not chat:return {"chat":None,"messages":[]}
+        messages=await (await conn.execute("SELECT sender,message,created_at FROM uc_support_messages WHERE chat_id=? ORDER BY id ASC LIMIT 300",(chat["id"],))).fetchall()
+        return {"chat":dict(chat),"messages":[dict(m) for m in messages]}
+    finally:await conn.close()
+
+@app.post("/api/admin/uc-chats/{withdrawal_id}/messages")
+async def admin_uc_chat_send(withdrawal_id:int,body:UCChatMessageIn,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with db_write_lock:
+        conn=await db()
+        try:
+            w=await (await conn.execute("SELECT id,telegram_id FROM farm_withdrawals WHERE id=?",(withdrawal_id,))).fetchone()
+            if not w:raise HTTPException(404,"Заявка не найдена")
+            await conn.execute("INSERT OR IGNORE INTO uc_support_chats(withdrawal_id,telegram_id) VALUES(?,?)",(withdrawal_id,int(w["telegram_id"])))
+            chat=await (await conn.execute("SELECT id,status FROM uc_support_chats WHERE withdrawal_id=?",(withdrawal_id,))).fetchone()
+            if chat["status"]!='Открыт':raise HTTPException(409,"Сначала откройте чат")
+            await conn.execute("INSERT INTO uc_support_messages(chat_id,sender,message) VALUES(?,'admin',?)",(chat["id"],body.message.strip()))
+            await conn.commit()
+            uid=int(w["telegram_id"])
+        finally:await conn.close()
+    try:await tg("sendMessage",{"chat_id":uid,"text":f"💬 Сообщение по выдаче UC #{withdrawal_id}:\\n\\n{body.message.strip()}\\n\\nОтветить можно в разделе «Поддержка» мини-приложения."})
+    except Exception:pass
+    return {"ok":True}
+
+@app.patch("/api/admin/uc-chats/{withdrawal_id}")
+async def admin_uc_chat_status(withdrawal_id:int,body:UCChatStatusIn,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    if body.status not in ("Открыт","Закрыт"):raise HTTPException(400,"Недопустимый статус")
+    async with db_write_lock:
+        conn=await db()
+        try:
+            w=await (await conn.execute("SELECT telegram_id FROM farm_withdrawals WHERE id=?",(withdrawal_id,))).fetchone()
+            if not w:raise HTTPException(404,"Заявка не найдена")
+            await conn.execute("INSERT OR IGNORE INTO uc_support_chats(withdrawal_id,telegram_id) VALUES(?,?)",(withdrawal_id,int(w["telegram_id"])))
+            await conn.execute("UPDATE uc_support_chats SET status=? WHERE withdrawal_id=?",(body.status,withdrawal_id))
+            await conn.commit()
+        finally:await conn.close()
+    return {"ok":True,"status":body.status}
+
 @app.post("/api/admin/message")
 async def admin_message(body:AdminMessageIn, x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
@@ -6826,9 +6906,9 @@ async function referralHtml(){
 }
 function bindReferral(){const b=document.getElementById('copyRef');if(b)b.addEventListener('click',async()=>{const v=document.getElementById('refLink').value;try{await navigator.clipboard.writeText(v);alert('Ссылка скопирована')}catch(_){document.getElementById('refLink').select()}})}
 
-function supportHtml(){return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Обращения попадают в Owner Panel. Бот не спамит автоматическими сообщениями.</div></div><div class="sticker-grid">'+sticker('Новости','@shreksi4PubgNEWS','news','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+sticker('Наш чат','@chatshreksi4','chat','st-cyan','data-tg="https://t.me/chatshreksi4"')+'</div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>'}
+async function supportHtml(){const chats=await api('/api/uc-chats').catch(()=>[]);return '<div class="hero"><div class="cat">ПОДДЕРЖКА</div><h1>Чем помочь?</h1><div class="muted">Обращения попадают в Owner Panel. Бот не спамит автоматическими сообщениями.</div></div><div class="sticker-grid">'+sticker('Новости','@shreksi4PubgNEWS','news','st-gold','data-tg="https://t.me/shreksi4PubgNEWS"')+sticker('Наш чат','@chatshreksi4','chat','st-cyan','data-tg="https://t.me/chatshreksi4"')+'</div><div class="card"><h3>💬 Мои чаты по UC</h3>'+(chats.map(c=>'<div class="shx-uc-contact"><b>Заявка #'+c.withdrawal_id+' · '+c.uc_amount+' UC · '+esc(c.status)+'</b>'+(c.messages||[]).map(m=>'<div class="shx-chat-msg"><b>'+(m.sender==='admin'?'Администратор':'Вы')+'</b> · '+esc(m.created_at)+'<p>'+esc(m.message)+'</p></div>').join('')+(c.status==='Открыт'?'<textarea id="ucUserReply'+c.id+'" maxlength="2000" placeholder="Ответить администратору"></textarea><button class="secondary" data-uc-user-reply="'+c.id+'">Отправить ответ</button>':'<p class="mini">Чат закрыт. Администратор может его открыть.</p>')+'</div>').join('')||'<p class="mini">Чатов пока нет.</p>')+'</div><div class="card"><select id="tc"><option>Вопрос по заказу</option><option>Оплата</option><option>Техническая проблема</option><option>Другое</option></select><textarea id="tm" placeholder="Опишите вопрос"></textarea><button class="buy" id="ticketBtn">Отправить</button></div>'}
 async function sendTicket(){try{const d=await api('/api/support',{method:'POST',body:JSON.stringify({category:document.getElementById('tc').value,message:document.getElementById('tm').value})});alert('Обращение #'+d.id+' создано');document.getElementById('tm').value=''}catch(e){alert(e.message)}}
-function bindSupport(){document.getElementById('ticketBtn').addEventListener('click',sendTicket);bindSocials()}
+function bindSupport(){document.getElementById('ticketBtn').addEventListener('click',sendTicket);document.querySelectorAll('[data-uc-user-reply]').forEach(b=>b.onclick=async()=>{const input=document.getElementById('ucUserReply'+b.dataset.ucUserReply),message=input.value.trim();if(!message)return alert('Введите сообщение');b.disabled=true;try{await api('/api/uc-chats/'+b.dataset.ucUserReply+'/messages',{method:'POST',body:JSON.stringify({message})});alert('Ответ отправлен');go('support')}catch(e){alert(e.message);b.disabled=false}});bindSocials()}
 
 let dropHistoryPeriod='all';
 async function dropHistoryHtml(){
@@ -6998,7 +7078,7 @@ function adminWithdrawals(){
  // PUBG UID is shown as a large tap-to-copy target on every withdrawal.
  const rows=adminData.farmWithdrawals||[];
  return '<h2>UC выводы</h2><div class="card"><div class="muted">После фактической выдачи UC в PUBG нажмите «Выполнен». Только тогда UC Credits окончательно списываются у игрока.</div></div>'+
- (rows.map(w=>'<div class="admin-card"><div class="cat">#'+w.id+' • '+esc(w.status)+'</div><div class="name">'+w.uc_amount+' UC • '+esc(w.token||'Без жетона')+'</div><div class="mini">'+esc(w.first_name||w.username||'Игрок')+(w.username?' @'+esc(w.username):'')+' • '+esc(w.created_at)+'</div><div class="shx-uc-uid-label">PUBG MOBILE · ID ПОЛУЧАТЕЛЯ</div><button type="button" class="shx-uc-uid-copy" data-copy-pubg-uid="'+esc(String(w.pubg_uid||''))+'" aria-label="Скопировать PUBG UID '+esc(String(w.pubg_uid||''))+'"><span class="shx-uc-uid-value">'+esc(String(w.pubg_uid||'—'))+'</span><span class="shx-uc-copy-action">📋 Копировать ID</span></button><details class="shx-uc-contact"><summary>💬 Связаться с игроком</summary><div class="mini">Сообщение придёт игроку в Telegram от бота SHREKSICH SHOP.</div><textarea id="ucMsg'+w.id+'" rows="3" maxlength="2000" placeholder="Например: Уточните PUBG UID для выдачи UC."></textarea><button type="button" class="secondary" data-uc-contact="'+w.id+'" data-uc-token="'+esc(w.token||'')+'">✉ Отправить сообщение</button>'+(w.username?'<a href="https://t.me/'+encodeURIComponent(w.username.replace(/^@/,''))+'" target="_blank" rel="noopener noreferrer">Открыть @'+esc(w.username)+' ↗</a>':'')+'</details>'+(w.status==='Ожидает'?'<div class="row" style="margin-top:8px"><button class="buy" data-farm-wd-ok="'+w.id+'">Выполнен</button><button class="danger" data-farm-wd-no="'+w.id+'">Отклонить</button></div>':'')+'</div>').join('')||'<div class="empty">Заявок пока нет.</div>')
+ (rows.map(w=>'<div class="admin-card"><div class="cat">#'+w.id+' • '+esc(w.status)+'</div><div class="name">'+w.uc_amount+' UC • '+esc(w.token||'Без жетона')+'</div><div class="mini">'+esc(w.first_name||w.username||'Игрок')+(w.username?' @'+esc(w.username):'')+' • '+esc(w.created_at)+'</div><div class="shx-uc-uid-label">PUBG MOBILE · ID ПОЛУЧАТЕЛЯ</div><button type="button" class="shx-uc-uid-copy" data-copy-pubg-uid="'+esc(String(w.pubg_uid||''))+'" aria-label="Скопировать PUBG UID '+esc(String(w.pubg_uid||''))+'"><span class="shx-uc-uid-value">'+esc(String(w.pubg_uid||'—'))+'</span><span class="shx-uc-copy-action">📋 Копировать ID</span></button><details class="shx-uc-contact"><summary>💬 Связаться с игроком</summary><div class="mini">Сообщение придёт игроку в Telegram от бота SHREKSICH SHOP.</div><textarea id="ucMsg'+w.id+'" rows="3" maxlength="2000" placeholder="Например: Уточните PUBG UID для выдачи UC."></textarea><button type="button" class="secondary" data-uc-contact="'+w.id+'" >✉ Отправить в чат</button><button type="button" class="secondary" data-uc-chat-open="'+w.id+'">📜 История / закрыть / открыть</button><div id="ucChatHistory'+w.id+'"></div>'+(w.username?'<a href="https://t.me/'+encodeURIComponent(w.username.replace(/^@/,''))+'" target="_blank" rel="noopener noreferrer">Открыть @'+esc(w.username)+' ↗</a>':'')+'</details>'+(w.status==='Ожидает'?'<div class="row" style="margin-top:8px"><button class="buy" data-farm-wd-ok="'+w.id+'">Выполнен</button><button class="danger" data-farm-wd-no="'+w.id+'">Отклонить</button></div>':'')+'</div>').join('')||'<div class="empty">Заявок пока нет.</div>')
 }
 function adminSupport(){
  return '<h2>Обращения</h2>'+adminData.tickets.map(t=>'<div class="admin-card"><div class="cat">#'+t.id+' • '+esc(t.category)+' • '+esc(t.status)+'</div><div class="mini">👤 '+esc(t.first_name||'Пользователь')+(t.username?' · @'+esc(t.username):'')+' · 🕒 '+esc(t.created_at||'Дата не указана')+' UTC</div><div style="margin:8px 0">'+esc(t.message)+'</div><div class="token-code">'+esc(t.user_token||'Без жетона')+'</div><textarea id="tr'+t.id+'" placeholder="Ответ пользователю"></textarea><div class="row"><button class="blue" data-ticket-reply="'+t.id+'">Ответить</button><button class="secondary" data-ticket-close="'+t.id+'">Закрыть</button></div></div>').join('')
@@ -7225,7 +7305,8 @@ function bindAdmin(){
  us.addEventListener('input',search);search();
 }
  document.querySelectorAll('[data-copy-pubg-uid]').forEach(b=>b.addEventListener('click',async()=>{const uid=b.dataset.copyPubgUid;if(!uid){alert('PUBG UID отсутствует в заявке');return}try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(uid)}else{const input=document.createElement('textarea');input.value=uid;input.style.position='fixed';input.style.opacity='0';document.body.appendChild(input);input.select();if(!document.execCommand('copy'))throw Error('copy failed');input.remove()}const label=b.querySelector('.shx-uc-copy-action');if(label){label.textContent='✓ ID скопирован';setTimeout(()=>{if(label.isConnected)label.textContent='📋 Копировать ID'},1800)}}catch(e){prompt('Скопируйте PUBG UID:',uid)}}));
- document.querySelectorAll('[data-uc-contact]').forEach(b=>b.addEventListener('click',async()=>{const token=b.dataset.ucToken,msg=document.getElementById('ucMsg'+b.dataset.ucContact),message=msg?.value.trim();if(!token){alert('У игрока нет жетона для связи');return}if(!message){alert('Введите сообщение игроку');return}b.disabled=true;try{await api('/api/admin/message',{method:'POST',body:JSON.stringify({token,message})});msg.value='';alert('Сообщение отправлено игроку в Telegram')}catch(e){alert(e.message)}finally{b.disabled=false}}));
+ document.querySelectorAll('[data-uc-contact]').forEach(b=>b.addEventListener('click',async()=>{const token=b.dataset.ucToken,msg=document.getElementById('ucMsg'+b.dataset.ucContact),message=msg?.value.trim();if(!token){alert('У игрока нет жетона для связи');return}if(!message){alert('Введите сообщение игроку');return}b.disabled=true;try{await api('/api/admin/uc-chats/'+b.dataset.ucContact+'/messages',{method:'POST',body:JSON.stringify({message})});msg.value='';alert('Сообщение отправлено в чат')}catch(e){alert(e.message)}finally{b.disabled=false}}));
+ document.querySelectorAll('[data-uc-chat-open]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.ucChatOpen,target=document.getElementById('ucChatHistory'+id);try{const d=await api('/api/admin/uc-chats/'+id),chat=d.chat;target.innerHTML='<div class="mini">Статус: '+esc(chat?.status||'Не создан')+'</div>'+(d.messages||[]).map(m=>'<div class="shx-chat-msg"><b>'+(m.sender==='admin'?'Администратор':'Игрок')+'</b> · '+esc(m.created_at)+'<p>'+esc(m.message)+'</p></div>').join('')+'<button type="button" class="secondary" data-uc-set-chat="'+id+'" data-next-status="'+(chat?.status==='Открыт'?'Закрыт':'Открыт')+'">'+(chat?.status==='Открыт'?'🔒 Закрыть чат':'🔓 Открыть чат')+'</button>';target.querySelector('[data-uc-set-chat]').onclick=async e=>{const btn=e.currentTarget;try{await api('/api/admin/uc-chats/'+id,{method:'PATCH',body:JSON.stringify({status:btn.dataset.nextStatus})});b.click()}catch(err){alert(err.message)}}}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-farm-wd-ok]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Подтвердить, что UC уже выданы игроку?'))return;try{await api('/api/admin/farm-withdrawals/'+b.dataset.farmWdOk,{method:'PATCH',body:JSON.stringify({status:'Выполнен'})});refreshAdmin()}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-farm-wd-no]').forEach(b=>b.addEventListener('click',async()=>{try{await api('/api/admin/farm-withdrawals/'+b.dataset.farmWdNo,{method:'PATCH',body:JSON.stringify({status:'Отклонён'})});refreshAdmin()}catch(e){alert(e.message)}}));
  const br=document.getElementById('broadcastBtn');if(br)br.addEventListener('click',async()=>{if(!confirm('Отправить всем пользователям?'))return;try{await api('/api/admin/broadcast',{method:'POST',body:JSON.stringify({message:document.getElementById('broadcastMsg').value})});alert('Рассылка запущена')}catch(e){alert(e.message)}})
