@@ -5502,7 +5502,7 @@ async function setSoundEnabled(on){
 
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function stars(n){return Number(n||0).toLocaleString('ru-RU')+' ⭐'}
-function compactCurrency(n){const v=Number(n||0);if(!Number.isFinite(v))return '0';const a=Math.abs(v);if(a<10000)return v.toLocaleString('ru-RU');const units=[[1e9,'млрд'],[1e6,'млн'],[1e3,'тыс.']];const unit=units.find(x=>a>=x[0]);if(!unit)return v.toLocaleString('ru-RU');const scaled=v/unit[0];return scaled.toLocaleString('ru-RU',{maximumFractionDigits:scaled>=100?0:scaled>=10?1:2})+' '+unit[1]}
+function compactCurrency(n){const v=Number(n||0);if(!Number.isFinite(v))return '0';const a=Math.abs(v);if(a<10000)return v.toLocaleString('ru-RU');const units=[[1e15,'квадрлн'],[1e12,'трлн'],[1e9,'млрд'],[1e6,'млн'],[1e3,'тыс.']];const unit=units.find(x=>a>=x[0]);if(!unit)return v.toLocaleString('ru-RU');const scaled=v/unit[0];return scaled.toLocaleString('ru-RU',{maximumFractionDigits:scaled>=100?0:scaled>=10?1:2})+' '+unit[1]}
 function shrAmount(n){return compactCurrency(n)}
 
 function tierClass(t){return 'tier-'+String(t||'COMMON').toLowerCase()}
