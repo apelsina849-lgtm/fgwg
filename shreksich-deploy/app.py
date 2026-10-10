@@ -5153,6 +5153,7 @@ function home(){
 }
 function bindHome(){
  document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{farmJumpTarget=b.dataset.goSection||'';go(b.dataset.go)}));
+ bindUserTokenCopy();
 }
 
 /* SUPPLIER MARKETPLACE — seller is bound to Telegram auth, not a nickname. */
