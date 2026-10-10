@@ -3545,8 +3545,11 @@ async def admin_orders(x_telegram_init_data: str | None = Header(default=None)):
     conn=await db()
     try:
         rows=await (await conn.execute(
-            "SELECT o.*,u.token user_token FROM orders o "
-            "LEFT JOIN users u ON u.telegram_id=o.telegram_id "
+            "SELECT o.*,u.token user_token,u.username buyer_username,u.first_name buyer_name, "
+            "su.token seller_token,su.username seller_username,ss.display_name seller_name "
+            "FROM orders o LEFT JOIN users u ON u.telegram_id=o.telegram_id "
+            "LEFT JOIN users su ON su.telegram_id=o.seller_id "
+            "LEFT JOIN shop_sellers ss ON ss.telegram_id=o.seller_id "
             "ORDER BY o.id DESC LIMIT 300"
         )).fetchall()
     finally:
@@ -3759,6 +3762,26 @@ async def admin_users(x_telegram_init_data: str | None = Header(default=None)):
     finally:
         await conn.close()
     return [dict(r) for r in rows]
+
+
+@app.get("/api/admin/players/{token}/details")
+async def admin_player_details(token:str,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        user=await (await conn.execute("SELECT telegram_id,token,username,first_name,created_at FROM users WHERE UPPER(token)=?",(token.strip().upper(),))).fetchone()
+        if not user: raise HTTPException(404,"Игрок не найден")
+        uid=int(user["telegram_id"])
+        farm=await (await conn.execute("SELECT * FROM farm_state WHERE telegram_id=?",(uid,))).fetchone()
+        spin=await (await conn.execute("SELECT tickets,upgrade_points FROM spin_state WHERE telegram_id=?",(uid,))).fetchone()
+        inventory=await (await conn.execute("SELECT COALESCE(SUM(qty),0) total,COUNT(*) types FROM farm_inventory WHERE telegram_id=? AND qty>0",(uid,))).fetchone()
+        cases=await (await conn.execute("SELECT COUNT(*) total,COALESCE(SUM(CASE WHEN telegram_charge_id<>'' THEN stars_amount ELSE 0 END),0) stars FROM case_openings WHERE telegram_id=? AND (opened_at<>'' OR status IN ('opened','completed','done'))",(uid,))).fetchone()
+        orders=await (await conn.execute("SELECT COUNT(*) total,COALESCE(SUM(CASE WHEN telegram_charge_id<>'' THEN stars_amount ELSE 0 END),0) stars FROM orders WHERE telegram_id=?",(uid,))).fetchone()
+        spins=await (await conn.execute("SELECT COUNT(*) total FROM spin_history WHERE telegram_id=?",(uid,))).fetchone()
+        donate=await (await conn.execute("SELECT COALESCE(SUM(tickets),0) total FROM donation_ticket_balances WHERE telegram_id=?",(uid,))).fetchone()
+        return {"user":dict(user),"farm":dict(farm) if farm else {},"spin":dict(spin) if spin else {},"inventory":dict(inventory),"cases":dict(cases),"orders":dict(orders),"spins":dict(spins),"donation_tickets":donate["total"],"stars_spent":int(cases["stars"] or 0)+int(orders["stars"] or 0)}
+    finally:
+        await conn.close()
 
 
 @app.post("/api/admin/rewards/grant")
@@ -4182,6 +4205,8 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 
 
 
+
+.shx-player-detail-btn{width:100%;text-align:left;cursor:pointer;color:#eaf4ff;background:transparent;border:0}.shx-player-name{min-width:0}.shx-player-name b,.shx-player-name small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.shx-player-name small{color:#91add0}.shx-player-detail-result{background:#061c35;border:1px solid #24629b;border-radius:12px;padding:12px;margin:6px 0 12px}.shx-player-detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.shx-player-detail-grid>div{background:#0b2948;border:1px solid #204e7c;border-radius:9px;padding:9px;min-width:0}.shx-player-detail-grid small{display:block;color:#9bbbd6;font-size:10px}.shx-player-detail-grid b{display:block;font-size:17px;margin-top:5px}.shx-order-detail{border-top:1px solid #21486d;padding:10px 2px}.shx-order-detail summary{display:flex;align-items:center;justify-content:space-between;gap:7px;cursor:pointer;font-size:12px}.shx-order-detail summary span{flex:1}.shx-order-detail summary em{color:#5ce2b3;font-size:10px}.shx-order-fields{display:grid;gap:7px;padding:12px 6px;font-size:12px;color:#bcd7ed}.shx-order-links{display:flex;flex-wrap:wrap;gap:10px}.shx-order-links a{color:#69c2ff;text-decoration:underline}@media(max-width:760px){.shx-player-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.shx-player-detail-btn{grid-template-columns:12px 25px minmax(0,1fr) 55px}.shx-player-detail-btn>span:last-child{display:none}}
 /* Exact reference layout structure: PUBG owner console */
 .shx-reference{grid-template-columns:220px minmax(0,1fr);background:#020b1b;border-color:#143a70;border-radius:15px}.shx-reference .shx-v4-sidebar{background:linear-gradient(180deg,#071d3b,#031027);padding:14px 12px}.shx-reference .shx-v4-brand{display:flex;align-items:center;gap:8px;padding:3px 4px 16px}.shx-reference .shx-v4-brand b{font-size:15px;white-space:nowrap}.shx-reference .shx-v4-brand small{margin:4px 0 0;font-size:10px}.shx-crown{font-size:29px}.shx-reference .shx-v4-sidebar nav button{display:flex;align-items:center;gap:12px;padding:10px 11px;font-size:13px}.shx-menu-icon{font-size:19px;width:22px;text-align:center;color:#a7d3ff}.shx-reference .shx-v4-main{background:radial-gradient(ellipse at 65% -15%,#1e375e,#06162d 40%,#020b1b 100%);padding:15px 12px 24px}.shx-reference .shx-v4-header{min-height:60px;padding:2px 8px 17px}.shx-reference .shx-v4-header h1{font-size:24px;font-weight:900}.shx-header-pills{display:flex;gap:9px}.shx-header-pills b{border:1px solid #224c7d;background:#061b35;border-radius:12px;padding:11px 13px;font-size:11px;white-space:nowrap}.shx-reference .shx-v4-metrics{grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}.shx-reference .shx-v4-metric{min-height:66px;padding:10px 8px}.shx-reference .shx-v4-metric>div{display:flex;align-items:center;gap:6px}.shx-reference .shx-v4-metric small{font-size:9px}.shx-reference .shx-v4-metric strong{font-size:19px;margin:8px 0}.shx-metric-icon{font-size:23px}.shx-ref-topgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:10px}.shx-reference .shx-v4-panel{padding:12px;margin-bottom:10px}.shx-reference .shx-v4-panel h2{font-size:15px!important}.shx-reference .shx-v4-actions{grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}.shx-reference .shx-v4-actions button{font-size:11px;min-height:91px}.shx-ref-user{display:grid;grid-template-columns:14px 29px minmax(0,1fr) 72px 67px;align-items:center;gap:8px;border-top:1px solid #173b64;padding:6px 4px;font-size:11px}.shx-ref-user>div{min-width:0}.shx-ref-user b,.shx-ref-user small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.shx-ref-user small{color:#91add0;margin-top:3px}.shx-ref-user button{border:1px solid #197dd1;border-radius:7px;background:#0a4c93;color:#e9f5ff;padding:7px 3px;font-size:11px}.shx-ref-avatar{font-size:22px}.shx-ref-bal{font-size:10px;color:#ffd274}.shx-ref-art{height:106px;border:1px solid #1d4c80;border-radius:12px;background:linear-gradient(110deg,#06142a 5%,#122d53 60%,#533e31);display:flex;align-items:center;justify-content:space-around;overflow:hidden;color:#bcd7f5;font-weight:900;letter-spacing:2px}.shx-ref-art span:last-child{font-size:70px}.shx-ref-bottom{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.shx-ref-bottom .shx-v4-panel{min-height:135px}.shx-ref-bottom .buy{width:100%}
 @media(max-width:1100px){.shx-reference .shx-v4-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.shx-ref-topgrid{grid-template-columns:1fr}.shx-ref-bottom{grid-template-columns:1fr 1fr}.shx-header-pills{display:none}}
@@ -6597,8 +6622,8 @@ function adminOverview(){
 const st=adminData.stats||{},orders=adminData.orders||[],users=adminData.users||[],products=adminData.products||[];
 const metrics=[['👤','ПОЛЬЗОВАТЕЛИ',st.users||0],['🛒','ЗАКАЗЫ',st.orders||0],['⭐','ВЫРУЧКА (Stars)',stars(st.stars_revenue||0)],['◈','UC ВЫВЕДЕНО',st.uc_withdrawn||0],['👥','АКТИВНЫЕ ПРОДАВЦЫ',Array.isArray(adminData.sellers)?adminData.sellers.length:0],['📦','ОТКРЫТО КЕЙСОВ',st.cases_opened||0]];
 const actions=[['🎁','Выдать награду','users'],['🔎','Найти игрока','users'],['📦','Создать товар','products'],['🎟️','Создать промокод','promos'],['➤','Сделать рассылку','bot']];
-const orderRows=orders.slice(0,4).map(o=>'<div class="shx-v4-item"><span>📦</span><div><b>#'+esc(String(o.number||o.id))+' · '+esc(o.product_name||'Заказ')+'</b><small>'+esc(o.user_token||'')+'</small></div><em>'+esc(o.status||'Новый')+'</em></div>').join('')||'<p>Пока нет заказов</p>';
-const userRows=users.slice(0,5).map((u,i)=>'<div class="shx-ref-user"><span>'+(i+1)+'</span><span class="shx-ref-avatar">👤</span><div><b>'+esc(u.username?'@'+u.username:u.first_name||'Игрок')+'</b><small>'+esc(u.token||'—')+'</small></div><span class="shx-ref-bal">'+Number(u.upgrade_points||0)+' SHR</span><button data-admin="users">Открыть</button></div>').join('')||'<p>Пока нет игроков</p>';
+const orderRows=orders.slice(0,4).map(o=>'<details class="shx-order-detail"><summary><span>📦 #'+esc(String(o.number||o.id))+' · '+esc(o.product_name||'Заказ')+'</span><b>'+stars(o.stars_amount||0)+' ⭐</b><em>'+esc(o.status||'Новый')+'</em></summary><div class="shx-order-fields"><div>Создан: '+esc(o.created_at||'—')+'</div><div>Последнее изменение: '+esc(o.updated_at||'—')+'</div><div>Завершён: '+(o.status==='Выполнен'?esc(o.updated_at||'—'):'Не завершён')+'</div><div>Покупатель: '+esc(o.buyer_username?'@'+o.buyer_username:o.buyer_name||o.user_token||'—')+'</div><div>Продавец: '+esc(o.seller_name||o.seller_username||'Магазин SHREKSICH')+'</div><div>Исполнитель: '+(o.seller_id?'Продавец заказа':'Не указан отдельно')+'</div><div class="shx-order-links">'+(o.buyer_username?'<a href="https://t.me/'+encodeURIComponent(o.buyer_username.replace(/^@/,''))+'" target="_blank" rel="noopener">Написать покупателю ↗</a>':'')+(o.seller_username?'<a href="https://t.me/'+encodeURIComponent(o.seller_username.replace(/^@/,''))+'" target="_blank" rel="noopener">Написать продавцу ↗</a>':'')+'</div></div></details>').join('')||'<p>Пока нет заказов</p>';
+const userRows=users.slice(0,5).map((u,i)=>'<button type="button" class="shx-ref-user shx-player-detail-btn" data-player-details="'+esc(u.token||'')+'"><span>'+(i+1)+'</span><span class="shx-ref-avatar">👤</span><span class="shx-player-name"><b>'+esc(u.username?'@'+u.username:u.first_name||'Игрок')+'</b><small>'+esc(u.token||'—')+'</small></span><span class="shx-ref-bal">'+Number(u.upgrade_points||0)+' SHR</span><span>Подробнее ▾</span></button><div class="shx-player-detail-result" id="detail-'+esc(u.token||'')+'" hidden></div>').join('')||'<p>Пока нет игроков</p>';
 return '<div class="shx-v4-metrics">'+metrics.map((m,i)=>'<div class="shx-v4-metric tone'+i+'"><div><span class="shx-metric-icon">'+m[0]+'</span><small>'+m[1]+'</small></div><strong>'+m[2]+'</strong><i>⌁⌁⌁</i></div>').join('')+'</div><div class="shx-ref-topgrid"><div><section class="shx-v4-panel"><h2>◉ Быстрые действия</h2><div class="shx-v4-actions">'+actions.map((a,i)=>'<button data-admin="'+a[2]+'" class="tone'+i+'"><span>'+a[0]+'</span>'+a[1]+'</button>').join('')+'</div></section><section class="shx-v4-panel"><h2>👥 Последние игроки <button data-admin="users">Все игроки →</button></h2><div class="shx-ref-userlist">'+userRows+'</div></section></div><div><section class="shx-v4-panel"><h2>◉ Последние заказы <button data-admin="orders">Все заказы →</button></h2>'+orderRows+'</section><div class="shx-ref-art"><span>SHREKSICH<br>METRO SHOP</span><span>📦</span></div></div></div><div class="shx-ref-bottom"><section class="shx-v4-panel"><h2>🎁 Выдача наград</h2><p>Быстрая выдача валют, билетов и предметов</p><button class="buy" data-admin="users">Выдать награду →</button></section><section class="shx-v4-panel"><h2>🛒 Управление товарами</h2><p>Товары в каталоге: '+products.length+'</p><button class="buy" data-admin="products">Открыть товары →</button></section><section class="shx-v4-panel"><h2>🎟️ Создание промокода</h2><p>Настройка наград и ограничений</p><button class="buy" data-admin="promos">Создать промокод →</button></section></div>';
 }
 function adminOrders(){
@@ -6733,6 +6758,15 @@ function adminSectionHtml(){if(adminSection==='orders')return adminOrders();if(a
 async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+'<main class="shx-owner-content">'+adminSectionHtml()+'</main></div></div>'}
 async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">Обновляем…</div>';app.innerHTML=await adminHtml();bindAdmin()}
 function bindAdmin(){
+ document.querySelectorAll('[data-player-details]').forEach(btn=>btn.addEventListener('click',async()=>{
+ const token=btn.dataset.playerDetails,box=document.getElementById('detail-'+token);if(!box)return;
+ if(!box.hidden){box.hidden=true;return}box.hidden=false;box.textContent='Загружаем статистику игрока…';
+ try{const d=await api('/api/admin/players/'+encodeURIComponent(token)+'/details');const f=d.farm||{},sp=d.spin||{};
+ const fields=[['Уровень фермы',f.level||1],['ShrekCOINS',f.shrek_coins||0],['UC Credits',f.uc_credits||0],['Предметы на складе',d.inventory?.total||0],['Виды ресурсов',d.inventory?.types||0],['Серия активности',f.activity_streak||0],['SHR',sp.upgrade_points||0],['Обычные билеты',sp.tickets||0],['Донат-билеты',d.donation_tickets||0],['Кейсов открыто',d.cases?.total||0],['Прокруток рулетки',d.spins?.total||0],['Заказов',d.orders?.total||0],['Stars потрачено',d.stars_spent||0]];
+ box.innerHTML='<div class="shx-player-detail-grid">'+fields.map(x=>'<div><small>'+x[0]+'</small><b>'+Number(x[1]).toLocaleString('ru-RU')+'</b></div>').join('')+'</div><small>Расход Stars рассчитан по зарегистрированным платежам за заказы и кейсы.</small>';
+ }catch(e){box.textContent='Не удалось загрузить статистику: '+e.message}
+ }));
+
  document.querySelectorAll('[data-copy-token]').forEach(b=>b.addEventListener('click',async()=>{const value=b.dataset.copyToken;if(!value)return;try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(value)}else{const t=document.createElement('textarea');t.value=value;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();if(!document.execCommand('copy'))throw Error('copy');t.remove()}const old=b.innerHTML;b.innerHTML='✓ Скопировано: '+value;setTimeout(()=>{if(b.isConnected)b.innerHTML=old},1400)}catch(e){prompt('Скопируйте жетон:',value)}}));
  document.querySelectorAll('[data-admin]').forEach(b=>b.addEventListener('click',()=>{adminSection=b.dataset.admin;app.innerHTML=adminNav()+'<main class="shx-owner-content">'+adminSectionHtml()+'</main></div></div>';bindAdmin()}));
  const fundBtn=document.getElementById('ucFundAdd');if(fundBtn)fundBtn.addEventListener('click',async()=>{
