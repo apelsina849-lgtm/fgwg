@@ -2008,8 +2008,12 @@ async def seller_request_payout(body:SellerPayoutIn,x_telegram_init_data:str|Non
             """,(uid,))).fetchone()
             reserved=await (await conn.execute("SELECT COALESCE(SUM(amount),0) n FROM seller_payout_requests WHERE seller_id=? AND status IN ('pending','approved','ready','frozen')",(uid,))).fetchone()
             available=max(0,int(eligible["n"])-int(reserved["n"]))
-            if body.amount>available:
-                raise HTTPException(409,"Недостаточно доступных средств")
+            if int(reserved["n"])>0:
+                raise HTTPException(409,"Сначала завершите или отмените предыдущую заявку")
+            if body.amount!=available or available<=0:
+                raise HTTPException(409,"Для безопасности выводите полную доступную сумму целых заказов")
+            if not ("https://" in body.proof.lower() or "http://" in body.proof.lower()):
+                raise HTTPException(400,"Добавьте ссылку на фото или видео доказательства передачи")
             await conn.execute("INSERT INTO seller_payout_requests(seller_id,amount,proof,payment_details,created_at) VALUES(?,?,?,?,?)",(uid,body.amount,body.proof.strip(),body.payment_details.strip(),int(time.time())))
             await conn.commit()
         except:
