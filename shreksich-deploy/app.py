@@ -359,7 +359,7 @@ async def uc_fund(conn):
         "SELECT available_credits,funded_credits,issued_credits FROM uc_mining_fund WHERE id=1"
     )).fetchone()
 
-FARM_TIER_ORDER = ("GRAY","CYAN","BLUE","PURPLE","PINK","RED","GOLD")
+FARM_TIER_ORDER = ("GRAY","CYAN","BLUE","PURPLE","PINK","RED","GOLD","RAINBOW")
 
 FARM_RESOURCES = [
     {"id":"postcard","name":"Открытка","tier":"GRAY","icon":"📮","coins":1},
@@ -404,6 +404,19 @@ FARM_RESOURCES = [
     {"id":"heart_of_gold","name":"Золотое ожерелье-сердце","tier":"RED","icon":"💛","coins":175},
 
     {"id":"gold_bar","name":"Золотой слиток","tier":"GOLD","icon":"🪙","coins":260},
+    # Новая премиальная коллекция: базовая стоимость сопоставимых предметов ×10.
+    {"id":"metro_quantum_watch","name":"Квантовые часы Метро","tier":"PINK","icon":"⌚","coins":1450},
+    {"id":"metro_encrypted_tablet","name":"Зашифрованный планшет","tier":"PINK","icon":"📱","coins":950},
+    {"id":"metro_royal_kettle","name":"Королевский армейский чайник","tier":"RED","icon":"🫖","coins":1600},
+    {"id":"metro_ancient_medallion","name":"Древний золотой медальон","tier":"RED","icon":"🏅","coins":1750},
+    {"id":"metro_legendary_compass","name":"Компас командира Метро","tier":"GOLD","icon":"🧭","coins":2600},
+    {"id":"metro_golden_core","name":"Золотое ядро реактора","tier":"GOLD","icon":"⚙️","coins":2600},
+    # Радужное качество: стоимость сопоставимого золотого предмета ×20.
+    {"id":"rainbow_prism","name":"Призматический артефакт","tier":"RAINBOW","icon":"💎","coins":5200},
+    {"id":"rainbow_relic","name":"Реликвия семи спектров","tier":"RAINBOW","icon":"🏆","coins":5200},
+    {"id":"rainbow_reactor","name":"Радужное ядро реактора","tier":"RAINBOW","icon":"⚡","coins":5200},
+    {"id":"rainbow_crown","name":"Корона подземного короля","tier":"RAINBOW","icon":"👑","coins":5200},
+
 ]
 FARM_RESOURCE_BY_ID = {x["id"]:x for x in FARM_RESOURCES}
 
@@ -479,8 +492,8 @@ def farm_tier_weights(level: int) -> dict[str,float]:
     # Редкие ресурсы действительно редкие. Веса меняются с уровнем, сумма всегда 100%.
     # lvl 1: 78 / 16 / 5 / 1 / 0 / 0 / 0
     # lvl 20: 65 / 20 / 9 / 4 / 1.2 / 0.5 / 0.3
-    starting = {"GRAY":78, "CYAN":16, "BLUE":5, "PURPLE":1, "PINK":0, "RED":0, "GOLD":0}
-    ending = {"GRAY":65, "CYAN":20, "BLUE":9, "PURPLE":4, "PINK":1.2, "RED":0.5, "GOLD":0.3}
+    starting = {"GRAY":78, "CYAN":16, "BLUE":5, "PURPLE":1, "PINK":0, "RED":0, "GOLD":0, "RAINBOW":0}
+    ending = {"GRAY":64.985, "CYAN":20, "BLUE":9, "PURPLE":4, "PINK":1.2, "RED":0.5, "GOLD":0.3, "RAINBOW":0.015}
     weights = {tier:starting[tier] + (ending[tier] - starting[tier])*p for tier in FARM_TIER_ORDER}
     total = sum(weights.values()) or 1
     return {k:round(v*100/total,3) for k,v in weights.items()}
@@ -2443,7 +2456,7 @@ async def spin_history_full(
     period = (period or "all").strip().lower()
     tier = (tier or "ALL").strip().upper()
     allowed_periods = {"all","24h","7d","30d","90d","custom"}
-    allowed_tiers = {"ALL","GRAY","CYAN","BLUE","PURPLE","PINK","RED","GOLD","COMMON","RARE","EPIC","LEGENDARY","MYTHIC"}
+    allowed_tiers = {"ALL","GRAY","CYAN","BLUE","PURPLE","PINK","RED","GOLD","RAINBOW","COMMON","RARE","EPIC","LEGENDARY","MYTHIC"}
     if period not in allowed_periods:
         raise HTTPException(400,"Некорректный период")
     if tier not in allowed_tiers:
@@ -3466,7 +3479,7 @@ async def wins_feed():
             continue
         for resource_id, quantity in mined.items():
             item = FARM_RESOURCE_BY_ID.get(resource_id)
-            if not item or item["tier"] not in ("PURPLE","PINK","RED","GOLD"):
+            if not item or item["tier"] not in ("PURPLE","PINK","RED","GOLD","RAINBOW"):
                 continue
             try:
                 count = max(0,int(quantity))
@@ -4269,6 +4282,7 @@ textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px}.row>*{flex:1
 .farm-overview .farm-wallet-value,.shx-wallet-count{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}.farm-overview .farm-wallet-value{font-size:clamp(15px,3.5vw,28px)!important;gap:3px}.farm-overview .farm-wallet-value svg{flex-shrink:0;max-width:28px}.farm-upgrade-explainer{font-size:12px;line-height:1.5;color:#a9c7df;padding:9px 12px;margin:5px 0 13px;background:#091e34;border:1px solid #235276;border-radius:10px}.farm-upgrade-explainer b{color:#f8cf76}@media(max-width:420px){.farm-overview .farm-wallet-value{font-size:16px!important}.farm-overview .farm-wallet-value svg{max-width:23px}}
 .farm-bulk-selector{margin:8px 0}.farm-bulk-selector select{width:100%;min-height:40px;border:1px solid #477caa;border-radius:10px;background:#0c2741;color:#eaf5ff;padding:6px;font-weight:800}.farm-module .farm-bulk-selector+button{width:100%}
 .farm-bulk-quote{margin:7px 0 10px;padding:10px;border:1px solid #37658a;border-radius:10px;background:#0b263c;color:#b9d9ef;font-size:12px;line-height:1.6}.farm-bulk-quote b{color:#f9d48b}
+.farm-collectible[data-tier="RAINBOW"]:before{background:conic-gradient(from 30deg,#fa6589,#ffcf68,#72e7a5,#65c9ff,#ae7dff,#fa6589);border:2px solid #d8b6ff;box-shadow:0 0 18px #a76fff77}.farm-rarity-label.RAINBOW{color:#f8e5ff;border-color:#b78cff;background:linear-gradient(110deg,#713a82,#245c83,#6a3979);text-shadow:0 1px 3px #000}.shx-farm-catalog .farm-catalog-card[data-tier="RAINBOW"]{border:2px solid #b08aff;background:linear-gradient(145deg,#14243c,#292047 50%,#0e2b3b);box-shadow:0 0 18px #a76fff22}
 /* Exact reference layout structure: PUBG owner console */
 .shx-reference{grid-template-columns:220px minmax(0,1fr);background:#020b1b;border-color:#143a70;border-radius:15px}.shx-reference .shx-v4-sidebar{background:linear-gradient(180deg,#071d3b,#031027);padding:14px 12px}.shx-reference .shx-v4-brand{display:flex;align-items:center;gap:8px;padding:3px 4px 16px}.shx-reference .shx-v4-brand b{font-size:15px;white-space:nowrap}.shx-reference .shx-v4-brand small{margin:4px 0 0;font-size:10px}.shx-crown{font-size:29px}.shx-reference .shx-v4-sidebar nav button{display:flex;align-items:center;gap:12px;padding:10px 11px;font-size:13px}.shx-menu-icon{font-size:19px;width:22px;text-align:center;color:#a7d3ff}.shx-reference .shx-v4-main{background:radial-gradient(ellipse at 65% -15%,#1e375e,#06162d 40%,#020b1b 100%);padding:15px 12px 24px}.shx-reference .shx-v4-header{min-height:60px;padding:2px 8px 17px}.shx-reference .shx-v4-header h1{font-size:24px;font-weight:900}.shx-header-pills{display:flex;gap:9px}.shx-header-pills b{border:1px solid #224c7d;background:#061b35;border-radius:12px;padding:11px 13px;font-size:11px;white-space:nowrap}.shx-reference .shx-v4-metrics{grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}.shx-reference .shx-v4-metric{min-height:66px;padding:10px 8px}.shx-reference .shx-v4-metric>div{display:flex;align-items:center;gap:6px}.shx-reference .shx-v4-metric small{font-size:9px}.shx-reference .shx-v4-metric strong{font-size:19px;margin:8px 0}.shx-metric-icon{font-size:23px}.shx-ref-topgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:10px}.shx-reference .shx-v4-panel{padding:12px;margin-bottom:10px}.shx-reference .shx-v4-panel h2{font-size:15px!important}.shx-reference .shx-v4-actions{grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}.shx-reference .shx-v4-actions button{font-size:11px;min-height:91px}.shx-ref-user{display:grid;grid-template-columns:14px 29px minmax(0,1fr) 72px 67px;align-items:center;gap:8px;border-top:1px solid #173b64;padding:6px 4px;font-size:11px}.shx-ref-user>div{min-width:0}.shx-ref-user b,.shx-ref-user small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.shx-ref-user small{color:#91add0;margin-top:3px}.shx-ref-user button{border:1px solid #197dd1;border-radius:7px;background:#0a4c93;color:#e9f5ff;padding:7px 3px;font-size:11px}.shx-ref-avatar{font-size:22px}.shx-ref-bal{font-size:10px;color:#ffd274}.shx-ref-art{height:106px;border:1px solid #1d4c80;border-radius:12px;background:linear-gradient(110deg,#06142a 5%,#122d53 60%,#533e31);display:flex;align-items:center;justify-content:space-around;overflow:hidden;color:#bcd7f5;font-weight:900;letter-spacing:2px}.shx-ref-art span:last-child{font-size:70px}.shx-ref-bottom{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.shx-ref-bottom .shx-v4-panel{min-height:135px}.shx-ref-bottom .buy{width:100%}
 @media(max-width:1100px){.shx-reference .shx-v4-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.shx-ref-topgrid{grid-template-columns:1fr}.shx-ref-bottom{grid-template-columns:1fr 1fr}.shx-header-pills{display:none}}
@@ -5501,7 +5515,7 @@ function utcFilterValue(value){
  return d.toISOString().slice(0,19).replace('T',' ')
 }
 function tierLabel(tier){
- const labels={GRAY:'СЕРЫЙ',CYAN:'ГОЛУБОЙ',BLUE:'СИНИЙ',PURPLE:'ФИОЛЕТОВЫЙ',PINK:'РОЗОВЫЙ',RED:'КРАСНЫЙ',GOLD:'ЗОЛОТОЙ',COMMON:'COMMON',RARE:'RARE',EPIC:'EPIC',LEGENDARY:'LEGENDARY',MYTHIC:'MYTHIC'};
+ const labels={GRAY:'СЕРЫЙ',CYAN:'ГОЛУБОЙ',BLUE:'СИНИЙ',PURPLE:'ФИОЛЕТОВЫЙ',PINK:'РОЗОВЫЙ',RED:'КРАСНЫЙ',GOLD:'ЗОЛОТОЙ',RAINBOW:'РАДУЖНЫЙ',COMMON:'COMMON',RARE:'RARE',EPIC:'EPIC',LEGENDARY:'LEGENDARY',MYTHIC:'MYTHIC'};
  return labels[String(tier||'').toUpperCase()]||String(tier||'')
 }
 function caseTierLabel(caseId,tier){
@@ -6304,7 +6318,7 @@ function farmPrice(value){return '<span class="farm-currency-inline">'+farmCoinI
 function farmVectorAsset(item){
  // Все ресурсы имеют собственные изометрические объёмные SVG-стикеры, без emoji-картинок.
  const id=item.id||'';
- const c={GRAY:'#baa981',CYAN:'#78cad1',BLUE:'#79a5e9',PURPLE:'#c88af4',PINK:'#e78cbf',RED:'#f28764',GOLD:'#f8cf5d'}[item.tier]||'#b7c6bb';
+ const c={GRAY:'#baa981',CYAN:'#78cad1',BLUE:'#79a5e9',PURPLE:'#c88af4',PINK:'#e78cbf',RED:'#f28764',GOLD:'#f8cf5d',RAINBOW:'#a884ff'}[item.tier]||'#b7c6bb';
  const metallic=item.tier==='GOLD'||id.startsWith('gold_')||id==='heart_of_gold';
  const edge=metallic?'#9b6115':'#3c3b36';
  const light=metallic?'#ffe49a':'#edeee5';
@@ -6439,7 +6453,7 @@ function farmCatalogCards(d){
 
 async function farmCatalogPage(){
  const d=await api('/api/farm');farmCachedData=d;
- const filters=[['ALL','Все'],['GRAY','Серые'],['CYAN','Голубые'],['BLUE','Синие'],['PURPLE','Фиолетовые'],['PINK','Розовые'],['RED','Красные'],['GOLD','Gold']].map(([t,name])=>'<button data-farm-filter="'+t+'" class="'+(farmCatalogFilter===t?'active':'')+'">'+name+'</button>').join('');
+ const filters=[['ALL','Все'],['GRAY','Серые'],['CYAN','Голубые'],['BLUE','Синие'],['PURPLE','Фиолетовые'],['PINK','Розовые'],['RED','Красные'],['GOLD','Золотые'],['RAINBOW','🌈 Радужные']].map(([t,name])=>'<button data-farm-filter="'+t+'" class="'+(farmCatalogFilter===t?'active':'')+'">'+name+'</button>').join('');
  return '<div class="shx-farm-catalog"><div class="shx-page-title"><button class="shx-back" id="farmCatalogBack">← Ферма</button><h1>Каталог предметов</h1></div>'+
  '<div class="shx-panel"><div class="muted">Все '+(d.resources||[]).length+' предметов • цены за ShrekCOIN • качество и реальные шансы на уровне '+d.level+'</div></div>'+
  '<div class="farm-filterbar">'+filters+'</div><div class="farm-catalog-grid" id="farmCatalogGrid">'+farmCatalogCards(d)+'</div>'+
@@ -6513,7 +6527,7 @@ function refreshFarmUcNeed(){
  if(button)button.disabled=missing>0;
 }
 
-const FARM_TIER_ORDER_JS=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD'];
+const FARM_TIER_ORDER_JS=['GRAY','CYAN','BLUE','PURPLE','PINK','RED','GOLD','RAINBOW'];
 function bindFarm(){
  if(farmUcMineTicker){clearInterval(farmUcMineTicker);farmUcMineTicker=null}
  const mineState=farmCachedData?.uc_mining||null;
