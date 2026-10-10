@@ -7411,7 +7411,7 @@ async function boot(){
   products=await api('/api/catalog');
   me=await api('/api/me');
   if(ADMIN&&!me.owner)throw new Error('Нет доступа');
-  await loadWinsFeed();setInterval(loadWinsFeed,20000);render()
+  await loadWinsFeed();setInterval(loadWinsFeed,20000);await render();if(ADMIN){refreshAdminUCUnread();setInterval(refreshAdminUCUnread,15000)}else{refreshUCUnread();setInterval(refreshUCUnread,15000)}
  }catch(e){showFatal(e.message+'\n\nОткройте приложение кнопкой из Telegram-бота.')}
 }
 boot();
