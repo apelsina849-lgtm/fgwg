@@ -5516,7 +5516,7 @@ function utcFilterValue(value){
  return d.toISOString().slice(0,19).replace('T',' ')
 }
 function tierLabel(tier){
- const labels={GRAY:'СЕРЫЙ',CYAN:'ГОЛУБОЙ',BLUE:'СИНИЙ',PURPLE:'ФИОЛЕТОВЫЙ',PINK:'РОЗОВЫЙ',RED:'КРАСНЫЙ',GOLD:'ЗОЛОТОЙ',RAINBOW:'РАДУЖНЫЙ',COMMON:'COMMON',RARE:'RARE',EPIC:'EPIC',LEGENDARY:'LEGENDARY',MYTHIC:'MYTHIC'};
+ const labels={GRAY:'ОБЫЧНЫЙ',CYAN:'УЛУЧШЕННЫЙ',BLUE:'РЕДКИЙ',PURPLE:'ЭПИЧЕСКИЙ',PINK:'ЛЕГЕНДАРНЫЙ',RED:'МИФИЧЕСКИЙ',GOLD:'РЕЛИКТОВЫЙ',RAINBOW:'УНИКАЛЬНЫЙ',COMMON:'ОБЫЧНЫЙ',RARE:'РЕДКИЙ',EPIC:'ЭПИЧЕСКИЙ',LEGENDARY:'ЛЕГЕНДАРНЫЙ',MYTHIC:'МИФИЧЕСКИЙ'};
  return labels[String(tier||'').toUpperCase()]||String(tier||'')
 }
 function caseTierLabel(caseId,tier){
@@ -6454,7 +6454,7 @@ function farmCatalogCards(d){
 
 async function farmCatalogPage(){
  const d=await api('/api/farm');farmCachedData=d;
- const filters=[['ALL','Все'],['GRAY','Серые'],['CYAN','Голубые'],['BLUE','Синие'],['PURPLE','Фиолетовые'],['PINK','Розовые'],['RED','Красные'],['GOLD','Золотые'],['RAINBOW','🌈 Радужные']].map(([t,name])=>'<button data-farm-filter="'+t+'" class="'+(farmCatalogFilter===t?'active':'')+'">'+name+'</button>').join('');
+ const filters=[['ALL','Все'],['GRAY','Серые'],['CYAN','Голубые'],['BLUE','Синие'],['PURPLE','Фиолетовые'],['PINK','Розовые'],['RED','Красные'],['GOLD','Реликтовые'],['RAINBOW','🌈 Уникальные']].map(([t,name])=>'<button data-farm-filter="'+t+'" class="'+(farmCatalogFilter===t?'active':'')+'">'+name+'</button>').join('');
  return '<div class="shx-farm-catalog"><div class="shx-page-title"><button class="shx-back" id="farmCatalogBack">← Ферма</button><h1>Каталог предметов</h1></div>'+
  '<div class="shx-panel"><div class="muted">Все '+(d.resources||[]).length+' предметов • цены за ShrekCOIN • качество и реальные шансы на уровне '+d.level+'</div></div>'+
  '<div class="farm-filterbar">'+filters+'</div><div class="farm-catalog-grid" id="farmCatalogGrid">'+farmCatalogCards(d)+'</div>'+
