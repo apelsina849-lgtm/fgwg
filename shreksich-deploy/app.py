@@ -5302,6 +5302,7 @@ box-shadow:0 13px 30px #0008;margin-bottom:18px}
 .shx-uc-contact{margin:12px 0;padding:12px;border:1px solid #2c6a9c;border-radius:12px;background:#09223c}.shx-uc-contact summary{cursor:pointer;font-weight:850;color:#b5e6ff;padding:5px}.shx-uc-contact textarea{width:100%;margin:12px 0 8px;min-height:95px}.shx-uc-contact button{width:100%;min-height:46px}.shx-uc-contact a{display:block;margin-top:12px;color:#8bd6ff;text-align:center;font-weight:750}
 .shx-chat-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:15px 0}.shx-chat-tabs button{font-size:12px;padding:10px 4px;min-width:0}.shx-chat-filter-active{border-color:#48baff!important;color:#fff!important;background:#145180!important}.shx-user-chat summary{display:flex;justify-content:space-between;align-items:center;gap:8px;list-style:none}.shx-user-chat summary::-webkit-details-marker{display:none}.shx-chat-status{font-size:12px;border-radius:20px;padding:5px 9px;white-space:nowrap}.shx-chat-status.is-open{background:#164f42;color:#91f5ca}.shx-chat-status.is-closed{background:#47343e;color:#ffc0ce}.shx-chat-msg{padding:10px;margin:9px 0;border:1px solid #25476a;border-radius:9px;overflow-wrap:anywhere}.shx-chat-msg p{white-space:pre-wrap;margin:6px 0 0}
 .shx-unread-badge:empty{display:none!important}.shx-unread-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:2px 6px;border-radius:20px;background:#f34e65;color:#fff;font-weight:900;font-size:12px;margin-left:7px;vertical-align:middle}
+.shx-player-detail-grid{min-width:0}.shx-player-detail-grid>div{min-width:0;overflow:hidden}.shx-player-detail-grid b{display:block;max-width:100%;overflow-wrap:anywhere;word-break:break-word;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -7265,7 +7266,7 @@ function bindAdmin(){
  if(!box.hidden){box.hidden=true;return}box.hidden=false;box.textContent='Загружаем статистику игрока…';
  try{const d=await api('/api/admin/players/'+encodeURIComponent(token)+'/details');const f=d.farm||{},sp=d.spin||{};
  const fields=[['Уровень фермы',f.level||1],['ShrekCOINS',f.shrek_coins||0],['UC Credits',f.uc_credits||0],['Предметы на складе',d.inventory?.total||0],['Виды ресурсов',d.inventory?.types||0],['Серия активности',f.activity_streak||0],['SHR',sp.upgrade_points||0],['Обычные билеты',sp.tickets||0],['Донат-билеты',d.donation_tickets||0],['Кейсов открыто',d.cases?.total||0],['Прокруток рулетки',d.spins?.total||0],['Заказов',d.orders?.total||0],['Stars потрачено',d.stars_spent||0]];
- box.innerHTML='<div class="shx-player-detail-grid">'+fields.map(x=>'<div><small>'+x[0]+'</small><b>'+Number(x[1]).toLocaleString('ru-RU')+'</b></div>').join('')+'</div><small>Расход Stars рассчитан по зарегистрированным платежам за заказы и кейсы.</small>';
+ box.innerHTML='<div class="shx-player-detail-grid">'+fields.map(x=>'<div title="'+Number(x[1]||0).toLocaleString('ru-RU')+' '+esc(x[0])+'"><small>'+x[0]+'</small><b>'+compactCurrency(x[1])+'</b></div>').join('')+'</div><small>Наведите на сумму, чтобы увидеть точное значение. Расход Stars рассчитан по зарегистрированным платежам за заказы и кейсы.</small>';
  }catch(e){box.textContent='Не удалось загрузить статистику: '+e.message}
  }));
 
