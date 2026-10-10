@@ -1087,11 +1087,14 @@ def keyboard(user_id: int):
 
 
 async def send_start(chat_id: int, user_id: int):
+    kb = keyboard(user_id)
+    if user_id != OWNER_ID and await is_shop_admin(user_id):
+        kb["inline_keyboard"].append([{"text":"⚙️ Админ-панель","web_app":{"url":ADMIN_URL}}])
     await tg("sendMessage", {
       "chat_id": chat_id,
       "parse_mode": "HTML",
       "text": f"<b>Добро пожаловать в {html.escape(APP_NAME)}</b>\n\nМагазин товаров и услуг для PUBG Mobile • Metro Royale.\n\nВыберите нужный раздел:",
-      "reply_markup": keyboard(user_id)
+      "reply_markup": kb
     })
 
 
@@ -2181,7 +2184,7 @@ async def catalog():
 @app.get("/api/me")
 async def me(x_telegram_init_data: str | None = Header(default=None)):
     u = await current_user(x_telegram_init_data)
-    return {"token":u["token"],"first_name":u.get("first_name"),"username":u.get("username"),"owner":int(u["id"])==OWNER_ID}
+    return {"token":u["token"],"first_name":u.get("first_name"),"username":u.get("username"),"owner":await is_shop_admin(int(u["id"])), "super_owner":int(u["id"])==OWNER_ID}
 
 
 @app.post("/api/orders")
@@ -3608,10 +3611,58 @@ async def run_broadcast(message: str):
     print(f"broadcast done sent={sent} failed={failed}", flush=True)
 
 
+async def is_shop_admin(uid: int) -> bool:
+    if uid == OWNER_ID:
+        return True
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("CREATE TABLE IF NOT EXISTS shop_admins (telegram_id INTEGER PRIMARY KEY, role TEXT NOT NULL DEFAULT 'admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+        row = await (await conn.execute("SELECT telegram_id FROM shop_admins WHERE telegram_id=?", (uid,))).fetchone()
+        return row is not None
+
 async def owner(init_data: str | None):
     u = await current_user(init_data)
-    if int(u["id"]) != OWNER_ID: raise HTTPException(403,"Нет доступа")
+    if not await is_shop_admin(int(u["id"])):
+        raise HTTPException(403,"Нет доступа")
     return u
+
+class ShopAdminIn(BaseModel):
+    telegram_id: int = Field(gt=0)
+    role: str = "admin"
+
+@app.get("/api/admin/staff")
+async def shop_staff_list(x_telegram_init_data: str | None = Header(default=None)):
+    await owner(x_telegram_init_data)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("CREATE TABLE IF NOT EXISTS shop_admins (telegram_id INTEGER PRIMARY KEY, role TEXT NOT NULL DEFAULT 'admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+        rows = await (await conn.execute("SELECT telegram_id,role,created_at FROM shop_admins ORDER BY created_at DESC")).fetchall()
+    return [{"telegram_id": OWNER_ID, "role": "owner"}] + [{"telegram_id": r[0], "role": r[1], "created_at": r[2]} for r in rows]
+
+@app.post("/api/admin/staff")
+async def shop_staff_add(body: ShopAdminIn, x_telegram_init_data: str | None = Header(default=None)):
+    actor = await owner(x_telegram_init_data)
+    if int(actor["id"]) != OWNER_ID:
+        raise HTTPException(403,"Только владелец может назначать администраторов")
+    if body.role not in ("admin", "moderator"):
+        raise HTTPException(400,"Недопустимая роль")
+    if body.telegram_id == OWNER_ID:
+        raise HTTPException(400,"Владелец уже имеет доступ")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("CREATE TABLE IF NOT EXISTS shop_admins (telegram_id INTEGER PRIMARY KEY, role TEXT NOT NULL DEFAULT 'admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+        await conn.execute("INSERT INTO shop_admins(telegram_id,role) VALUES(?,?) ON CONFLICT(telegram_id) DO UPDATE SET role=excluded.role", (body.telegram_id,body.role))
+        await conn.commit()
+    return {"ok":True}
+
+@app.delete("/api/admin/staff/{staff_id}")
+async def shop_staff_remove(staff_id: int, x_telegram_init_data: str | None = Header(default=None)):
+    actor = await owner(x_telegram_init_data)
+    if int(actor["id"]) != OWNER_ID:
+        raise HTTPException(403,"Только владелец может удалять администраторов")
+    if staff_id == OWNER_ID:
+        raise HTTPException(400,"Владельца нельзя удалить")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("DELETE FROM shop_admins WHERE telegram_id=?", (staff_id,))
+        await conn.commit()
+    return {"ok":True}
 
 
 @app.get("/api/admin/orders")
@@ -6771,7 +6822,7 @@ async function loadAdminData(){
  adminData={stats:r[0],orders:r[1],users:r[2],products:r[3],promos:r[4],tickets:r[5],spins:r[6],upgrades:r[7],referrals:r[8],cases:r[9],farmWithdrawals:r[10],ucFund:r[11],sellers:r[12]}
 }
 function adminNav(){
-const items=[['overview','♟','Главная'],['users','♟','Игроки'],['users','🎁','Выдача наград'],['orders','▤','Заказы'],['products','⚑','Товары'],['sellers','♟','Продавцы'],['cases','⬡','Кейсы'],['rewards','◉','Рулетки'],['promos','◆','Промокоды'],['ucfund','◈','Финансы'],['withdrawals','▥','Статистика UC'],['bot','✉','Рассылки'],['support','?','Поддержка'],['bot','⚙','Настройки']];
+const items=[['overview','♟','Главная'],['users','♟','Игроки'],['users','🎁','Выдача наград'],['orders','▤','Заказы'],['products','⚑','Товары'],['sellers','♟','Продавцы'],['cases','⬡','Кейсы'],['rewards','◉','Рулетки'],['promos','◆','Промокоды'],['ucfund','◈','Финансы'],['withdrawals','▥','Статистика UC'],['bot','✉','Рассылки'],['support','?','Поддержка'],['bot','⚙','Настройки'],['staff','🛡','Администраторы']];
 const active=items.find(x=>x[0]===adminSection)||items[0];
 return '<div class="shx-v4 shx-reference"><aside class="shx-v4-sidebar"><div class="shx-v4-brand"><span class="shx-crown">👑</span><div><b>SHREKSICH SHOP</b><small>АДМИН ПАНЕЛЬ</small></div></div><nav>'+items.map(x=>'<button data-admin="'+x[0]+'" class="'+(adminSection===x[0]?'active':'')+'"><span class="shx-menu-icon">'+x[1]+'</span>'+x[2]+'</button>').join('')+'</nav><div class="shx-v4-online">● Бот онлайн</div></aside><div class="shx-v4-main"><header class="shx-v4-header"><div><h1>'+(adminSection==='overview'?'Панель управления':active[2])+'</h1><span>'+(adminSection==='overview'?'Добро пожаловать в SHREKSICH SHOP':'Управление разделом · SHREKSICH SHOP')+'</span></div><div class="shx-header-pills"><b>🟢 Бот онлайн</b><b>◷ <span id="shxAdminClock">—</span></b></div></header><nav class="shx-v4-mobile">'+items.map(x=>'<button data-admin="'+x[0]+'" class="'+(adminSection===x[0]?'active':'')+'">'+x[1]+' '+x[2]+'</button>').join('')+'</nav>';
 }
@@ -6915,10 +6966,17 @@ function adminSellers(){
  '</div>').join('')||'<div class="empty">Оплаченных заказов нет</div>');
  return html;
 }
-function adminSectionHtml(){if(adminSection==='balance')return adminBalance();if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='sellers')return adminSellers();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='withdrawals')return adminWithdrawals();if(adminSection==='ucfund')return adminUcFunding();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
+function shopStaffHtml(){return '<section class="card"><h2>🛡 Управление администраторами</h2><p class="muted">Добавлять и удалять администраторов может только владелец магазина.</p><input id="shopStaffId" inputmode="numeric" placeholder="Telegram ID"><select id="shopStaffRole"><option value="admin">Администратор</option><option value="moderator">Модератор</option></select><button id="shopStaffAdd" class="buy">Добавить / изменить роль</button><div id="shopStaffList" style="margin-top:16px">Загрузка…</div></section>'}
+function adminSectionHtml(){if(adminSection==='staff')return shopStaffHtml();if(adminSection==='balance')return adminBalance();if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='sellers')return adminSellers();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='withdrawals')return adminWithdrawals();if(adminSection==='ucfund')return adminUcFunding();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
 async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+'<main class="shx-owner-content">'+adminSectionHtml()+'</main></div></div>'}
 async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">Обновляем…</div>';app.innerHTML=await adminHtml();bindAdmin()}
 function bindAdmin(){
+ if(adminSection==='staff'){
+  const list=document.getElementById('shopStaffList');
+  api('/api/admin/staff').then(rows=>{if(list)list.innerHTML=rows.map(x=>'<div class="order"><b>'+esc(String(x.telegram_id))+'</b> · '+esc(x.role)+(x.role==='owner'?' · защищён':' <button class="danger" data-staff-remove="'+x.telegram_id+'">Удалить</button>')+'</div>').join('');document.querySelectorAll('[data-staff-remove]').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить администратора?'))return;try{await api('/api/admin/staff/'+b.dataset.staffRemove,{method:'DELETE'});await refreshAdmin()}catch(e){alert(e.message)}})}).catch(e=>{if(list)list.textContent=e.message});
+  const add=document.getElementById('shopStaffAdd');if(add)add.onclick=async()=>{const telegram_id=Number(document.getElementById('shopStaffId').value),role=document.getElementById('shopStaffRole').value;if(!Number.isSafeInteger(telegram_id)||telegram_id<=0){alert('Введите корректный Telegram ID');return}try{await api('/api/admin/staff',{method:'POST',body:JSON.stringify({telegram_id,role})});await refreshAdmin()}catch(e){alert(e.message)}};
+ }
+
  document.querySelectorAll('[data-player-details]').forEach(btn=>btn.addEventListener('click',async()=>{
  const token=btn.dataset.playerDetails,box=document.getElementById('detail-'+token);if(!box)return;
  if(!box.hidden){box.hidden=true;return}box.hidden=false;box.textContent='Загружаем статистику игрока…';
