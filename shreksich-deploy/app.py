@@ -3619,6 +3619,29 @@ async def is_shop_admin(uid: int) -> bool:
         row = await (await conn.execute("SELECT telegram_id FROM shop_admins WHERE telegram_id=?", (uid,))).fetchone()
         return row is not None
 
+SHOP_ROLE_LEVELS = {"moderator":1,"admin":2,"head_admin":3,"deputy_owner":4,"co_owner":5}
+SHOP_ROLE_NAMES = {"moderator":"Модератор","admin":"Администратор","head_admin":"Старший администратор","deputy_owner":"Заместитель владельца","co_owner":"Совладелец"}
+
+async def shop_actor_level(uid: int) -> int:
+    if uid == OWNER_ID:
+        return 6
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute("CREATE TABLE IF NOT EXISTS shop_admins (telegram_id INTEGER PRIMARY KEY, role TEXT NOT NULL DEFAULT 'admin', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+        row = await (await conn.execute("SELECT role FROM shop_admins WHERE telegram_id=?", (uid,))).fetchone()
+    return SHOP_ROLE_LEVELS.get(row[0],0) if row else 0
+
+async def shop_require_staff_power(actor_id: int, target_id: int, new_role: str | None = None):
+    actor_level = await shop_actor_level(actor_id)
+    if actor_level < 3:
+        raise HTTPException(403,"Управление администраторами доступно старшему составу")
+    if target_id == OWNER_ID:
+        raise HTTPException(403,"Владельца нельзя изменить или удалить")
+    target_level = await shop_actor_level(target_id)
+    if target_level >= actor_level:
+        raise HTTPException(403,"Нельзя управлять равным или старшим званием")
+    if new_role is not None and SHOP_ROLE_LEVELS.get(new_role,0) >= actor_level:
+        raise HTTPException(403,"Нельзя назначить равное или более высокое звание")
+
 async def owner(init_data: str | None):
     u = await current_user(init_data)
     if not await is_shop_admin(int(u["id"])):
@@ -3670,8 +3693,7 @@ async def shop_staff_warnings(staff_id: int, x_telegram_init_data: str | None = 
 @app.post("/api/admin/staff/{staff_id}/warnings")
 async def shop_staff_warn(staff_id: int, body: ShopWarningIn, x_telegram_init_data: str | None = Header(default=None)):
     actor = await owner(x_telegram_init_data)
-    if int(actor["id"]) != OWNER_ID:
-        raise HTTPException(403,"Только владелец может выдавать выговоры")
+    await shop_require_staff_power(int(actor["id"]), staff_id)
     if staff_id == OWNER_ID:
         raise HTTPException(400,"Владельцу нельзя выдать выговор")
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -3686,8 +3708,7 @@ async def shop_staff_warn(staff_id: int, body: ShopWarningIn, x_telegram_init_da
 @app.delete("/api/admin/staff/{staff_id}/warnings/{warning_id}")
 async def shop_staff_unwarn(staff_id: int, warning_id: int, x_telegram_init_data: str | None = Header(default=None)):
     actor = await owner(x_telegram_init_data)
-    if int(actor["id"]) != OWNER_ID:
-        raise HTTPException(403,"Только владелец может снимать выговоры")
+    await shop_require_staff_power(int(actor["id"]), staff_id)
     async with aiosqlite.connect(DB_PATH) as conn:
         await ensure_shop_staff_schema(conn)
         await conn.execute("DELETE FROM shop_admin_warnings WHERE id=? AND telegram_id=?", (warning_id,staff_id))
@@ -3697,9 +3718,8 @@ async def shop_staff_unwarn(staff_id: int, warning_id: int, x_telegram_init_data
 @app.post("/api/admin/staff")
 async def shop_staff_add(body: ShopAdminIn, x_telegram_init_data: str | None = Header(default=None)):
     actor = await owner(x_telegram_init_data)
-    if int(actor["id"]) != OWNER_ID:
-        raise HTTPException(403,"Только владелец может назначать администраторов")
-    if body.role not in ("admin", "head_admin"):
+    await shop_require_staff_power(int(actor["id"]), body.telegram_id, body.role)
+    if body.role not in SHOP_ROLE_LEVELS:
         raise HTTPException(400,"Недопустимая роль")
     if body.telegram_id == OWNER_ID:
         raise HTTPException(400,"Владелец уже имеет доступ")
@@ -3712,8 +3732,7 @@ async def shop_staff_add(body: ShopAdminIn, x_telegram_init_data: str | None = H
 @app.delete("/api/admin/staff/{staff_id}")
 async def shop_staff_remove(staff_id: int, x_telegram_init_data: str | None = Header(default=None)):
     actor = await owner(x_telegram_init_data)
-    if int(actor["id"]) != OWNER_ID:
-        raise HTTPException(403,"Только владелец может удалять администраторов")
+    await shop_require_staff_power(int(actor["id"]), staff_id)
     if staff_id == OWNER_ID:
         raise HTTPException(400,"Владельца нельзя удалить")
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -7024,7 +7043,7 @@ function adminSellers(){
  '</div>').join('')||'<div class="empty">Оплаченных заказов нет</div>');
  return html;
 }
-function shopStaffHtml(){return '<section class="card"><h2>🛡 Управление администраторами</h2><p class="muted">Добавлять и удалять администраторов может только владелец магазина.</p><input id="shopStaffId" inputmode="numeric" placeholder="Telegram ID"><select id="shopStaffRole"><option value="admin">Администратор</option><option value="head_admin">Старший администратор</option></select><button id="shopStaffAdd" class="buy">Добавить / изменить роль</button><div id="shopStaffList" style="margin-top:16px">Загрузка…</div></section>'}
+function shopStaffHtml(){return '<section class="card"><h2>🛡 Управление администраторами</h2><p class="muted">Старший состав может управлять только нижестоящими. Владелец защищён от любых изменений.</p><input id="shopStaffId" inputmode="numeric" placeholder="Telegram ID"><select id="shopStaffRole"><option value="admin">Администратор</option><option value="head_admin">Старший администратор</option><option value="deputy_owner">Заместитель владельца</option><option value="co_owner">Совладелец</option></select><button id="shopStaffAdd" class="buy">Добавить / изменить роль</button><div id="shopStaffList" style="margin-top:16px">Загрузка…</div></section>'}
 function adminSectionHtml(){if(adminSection==='staff')return shopStaffHtml();if(adminSection==='balance')return adminBalance();if(adminSection==='orders')return adminOrders();if(adminSection==='users')return adminUsers();if(adminSection==='products')return adminProducts();if(adminSection==='sellers')return adminSellers();if(adminSection==='cases')return adminCases();if(adminSection==='promos')return adminPromos();if(adminSection==='rewards')return adminRewards();if(adminSection==='withdrawals')return adminWithdrawals();if(adminSection==='ucfund')return adminUcFunding();if(adminSection==='support')return adminSupport();if(adminSection==='bot')return adminBot();return adminOverview()}
 async function adminHtml(){if(!adminData)await loadAdminData();return adminNav()+'<main class="shx-owner-content">'+adminSectionHtml()+'</main></div></div>'}
 async function refreshAdmin(){adminData=null;app.innerHTML='<div class="empty">Обновляем…</div>';app.innerHTML=await adminHtml();bindAdmin()}
@@ -7034,7 +7053,7 @@ function bindAdmin(){
   api('/api/admin/staff').then(rows=>{if(list)list.innerHTML=rows.map(x=>{
    const name=esc(x.first_name||'Имя не указано'),user=x.username?'@'+esc(x.username):'Юзернейм не указан';
    const date=x.created_at?new Date(x.created_at.replace(' ','T')+'Z').toLocaleString('ru-RU',{dateStyle:'medium',timeStyle:'short'}):'Дата назначения владельца не фиксируется';
-   return '<div class="order"><b>'+name+'</b><div class="muted">'+user+'</div><div>ID: '+esc(String(x.telegram_id))+' · '+esc(x.role==='head_admin'?'Старший администратор':x.role==='admin'?'Администратор':'Владелец')+'</div><div class="muted">Добавлен: '+date+'</div><div>⚠️ Выговоры: '+Number(x.warnings||0)+'</div>'+(x.role==='owner'?'<b>🔒 Владелец защищён</b>':'<div class="row" style="margin-top:10px"><button class="secondary" data-staff-edit="'+x.telegram_id+'" data-role="'+esc(x.role)+'">Роль</button><button class="secondary" data-staff-warnings="'+x.telegram_id+'">Выговоры</button><button class="danger" data-staff-remove="'+x.telegram_id+'">Удалить</button></div><div id="staffWarnings'+x.telegram_id+'"></div>')+'</div>'
+   return '<div class="order"><b>'+name+'</b><div class="muted">'+user+'</div><div>ID: '+esc(String(x.telegram_id))+' · '+esc(({owner:'Владелец',co_owner:'Совладелец',deputy_owner:'Заместитель владельца',head_admin:'Старший администратор',admin:'Администратор',moderator:'Модератор'}[x.role]||x.role))+'</div><div class="muted">Добавлен: '+date+'</div><div>⚠️ Выговоры: '+Number(x.warnings||0)+'</div>'+(x.role==='owner'?'<b>🔒 Владелец защищён</b>':'<div class="row" style="margin-top:10px"><button class="secondary" data-staff-edit="'+x.telegram_id+'" data-role="'+esc(x.role)+'">Роль</button><button class="secondary" data-staff-warnings="'+x.telegram_id+'">Выговоры</button><button class="danger" data-staff-remove="'+x.telegram_id+'">Удалить</button></div><div id="staffWarnings'+x.telegram_id+'"></div>')+'</div>'
   }).join('');
   document.querySelectorAll('[data-staff-edit]').forEach(b=>b.onclick=()=>{document.getElementById('shopStaffId').value=b.dataset.staffEdit;document.getElementById('shopStaffRole').value=b.dataset.role;document.getElementById('shopStaffId').scrollIntoView({behavior:'smooth',block:'center'});});
   document.querySelectorAll('[data-staff-remove]').forEach(b=>b.onclick=async()=>{if(!confirm('Удалить администратора?'))return;try{await api('/api/admin/staff/'+b.dataset.staffRemove,{method:'DELETE'});await refreshAdmin()}catch(e){alert(e.message)}});
