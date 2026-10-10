@@ -6779,7 +6779,19 @@ function bindAdmin(){
  document.querySelectorAll('[data-ticket-reply]').forEach(b=>b.addEventListener('click',async()=>{const id=b.dataset.ticketReply;try{await api('/api/admin/tickets/'+id+'/reply',{method:'POST',body:JSON.stringify({message:document.getElementById('tr'+id).value})});alert('Ответ отправлен');refreshAdmin()}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-ticket-close]').forEach(b=>b.addEventListener('click',async()=>{try{await api('/api/admin/tickets/'+b.dataset.ticketClose+'/close',{method:'POST'});refreshAdmin()}catch(e){alert(e.message)}}));
  const bs=document.getElementById('botSendBtn');if(bs)bs.addEventListener('click',async()=>{try{await api('/api/admin/message',{method:'POST',body:JSON.stringify({token:document.getElementById('botUserToken').value,message:document.getElementById('botUserMsg').value})});alert('Сообщение отправлено')}catch(e){alert(e.message)}});
- const us=document.getElementById('userSearch');if(us)us.addEventListener('input',()=>{const q=us.value.trim().toLowerCase();document.querySelectorAll('.user-row').forEach(r=>r.style.display=!q||String(r.dataset.search||'').includes(q)?'':'none')});
+ const us=document.getElementById('userSearch');if(us){
+ const players=Array.from(document.querySelectorAll('.user-row'));
+ const hint=document.createElement('div');hint.id='adminSearchHint';hint.style.cssText='color:#9bc7df;font-size:13px;margin:-5px 0 14px;line-height:1.4';us.closest('.shx-grant-field')?.appendChild(hint);
+ const search=()=>{
+  const q=us.value.trim().toLocaleLowerCase('ru-RU').replace(/^@/,'');
+  const found=players.filter(row=>{const name=String(row.dataset.search||'').toLocaleLowerCase('ru-RU');const match=!q||name.includes(q)||name.replace(/[-_\\s]/g,'').includes(q.replace(/[-_\\s]/g,''));row.style.display=match?'':'none';return match});
+  const recipient=document.getElementById('grantToken');
+  if(q&&found.length===1){const token=found[0].querySelector('[data-grant-player]')?.dataset.grantPlayer;if(token&&recipient)recipient.value=token}
+  if(q&&found.length===0&&/^shx[-_]/i.test(us.value.trim())){if(recipient)recipient.value=us.value.trim().toUpperCase();hint.textContent='Игрок не найден в загруженном списке. Жетон подставлен для проверки при выдаче.'}
+  else hint.textContent=q?(found.length?'Найдено игроков: '+found.length+(found.length===1?' · Жетон выбран автоматически':' · Нажмите «Выбрать для выдачи» у нужного игрока'):'Игрок не найден. Проверьте ник или жетон.'):'Введите ник, имя или жетон для поиска.';
+ };
+ us.addEventListener('input',search);search();
+}
  document.querySelectorAll('[data-farm-wd-ok]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Подтвердить, что UC уже выданы игроку?'))return;try{await api('/api/admin/farm-withdrawals/'+b.dataset.farmWdOk,{method:'PATCH',body:JSON.stringify({status:'Выполнен'})});refreshAdmin()}catch(e){alert(e.message)}}));
  document.querySelectorAll('[data-farm-wd-no]').forEach(b=>b.addEventListener('click',async()=>{try{await api('/api/admin/farm-withdrawals/'+b.dataset.farmWdNo,{method:'PATCH',body:JSON.stringify({status:'Отклонён'})});refreshAdmin()}catch(e){alert(e.message)}}));
  const br=document.getElementById('broadcastBtn');if(br)br.addEventListener('click',async()=>{if(!confirm('Отправить всем пользователям?'))return;try{await api('/api/admin/broadcast',{method:'POST',body:JSON.stringify({message:document.getElementById('broadcastMsg').value})});alert('Рассылка запущена')}catch(e){alert(e.message)}})
