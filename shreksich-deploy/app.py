@@ -4,6 +4,8 @@ import hmac
 import html
 import json
 import os
+import uuid
+import pathlib
 import random
 import secrets
 import string
@@ -14,7 +16,7 @@ from urllib.parse import parse_qsl
 
 import aiosqlite
 import httpx
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
 
@@ -765,6 +767,8 @@ async def init_db():
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS seller_payout_files(id TEXT PRIMARY KEY,seller_id INTEGER NOT NULL,payout_id INTEGER NOT NULL DEFAULT 0,original_name TEXT NOT NULL,size_bytes INTEGER NOT NULL,created_at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_payout_files_owner ON seller_payout_files(seller_id,payout_id);
     CREATE TABLE IF NOT EXISTS seller_payout_requests(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       seller_id INTEGER NOT NULL,
@@ -1985,11 +1989,62 @@ class SellerPayoutIn(BaseModel):
     amount: int = Field(ge=1,le=10000000)
     proof: str = Field(min_length=15,max_length=1500)
     payment_details: str = Field(min_length=5,max_length=500)
+    file_ids: list[str] = Field(min_length=1,max_length=10)
 
 class SellerPayoutDecisionIn(BaseModel):
     action: str
     reason: str = Field(default="",max_length=1000)
     payment_reference: str = Field(default="",max_length=500)
+
+
+PAYOUT_FILES_DIR=pathlib.Path(os.path.dirname(DB_PATH))/"seller_payout_evidence"
+PAYOUT_FILE_LIMIT=500*1024*1024
+
+@app.post("/api/seller/payout-files")
+async def upload_seller_payout_file(request:Request,x_telegram_init_data:str|None=Header(default=None),x_filename:str|None=Header(default=None)):
+    uid=int((await current_user(x_telegram_init_data))["id"])
+    filename=os.path.basename(x_filename or "file")[:180]
+    if os.path.splitext(filename)[1].lower() not in (".jpg",".jpeg",".png",".webp",".gif",".mp4",".mov",".webm",".pdf",".heic"):
+        raise HTTPException(415,"Разрешены фото, видео и PDF")
+    async with db_write_lock:
+        conn=await db()
+        try:
+            seller=await (await conn.execute("SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,))).fetchone()
+            usage=await (await conn.execute("SELECT COUNT(*) n,COALESCE(SUM(size_bytes),0) total FROM seller_payout_files WHERE seller_id=? AND payout_id=0",(uid,))).fetchone()
+            if not seller or seller["status"]!="approved": raise HTTPException(403,"Продавец не одобрен")
+            if usage["n"]>=10 or usage["total"]>=PAYOUT_FILE_LIMIT: raise HTTPException(413,"Лимит 10 файлов / 500 МБ")
+            fid=uuid.uuid4().hex
+            PAYOUT_FILES_DIR.mkdir(parents=True,exist_ok=True)
+            path=PAYOUT_FILES_DIR/fid
+            size=0
+            try:
+                with open(path,"xb") as out:
+                    async for chunk in request.stream():
+                        size+=len(chunk)
+                        if size+usage["total"]>PAYOUT_FILE_LIMIT: raise HTTPException(413,"Превышено 500 МБ")
+                        out.write(chunk)
+                if not size: raise HTTPException(400,"Пустой файл")
+                await conn.execute("INSERT INTO seller_payout_files(id,seller_id,original_name,size_bytes,created_at) VALUES(?,?,?,?,?)",(fid,uid,filename,size,int(time.time())))
+                await conn.commit()
+            except:
+                path.unlink(missing_ok=True)
+                raise
+        finally:
+            await conn.close()
+    return {"id":fid,"name":filename,"size":size}
+
+@app.get("/api/admin/seller-payout-files/{file_id}")
+async def download_seller_payout_file(file_id:str,x_telegram_init_data:str|None=Header(default=None)):
+    await owner(x_telegram_init_data)
+    conn=await db()
+    try:
+        f=await (await conn.execute("SELECT original_name FROM seller_payout_files WHERE id=? AND payout_id>0",(file_id,))).fetchone()
+        if not f: raise HTTPException(404,"Файл не найден")
+    finally:
+        await conn.close()
+    path=PAYOUT_FILES_DIR/file_id
+    if not path.is_file(): raise HTTPException(404,"Файл не найден")
+    return FileResponse(str(path),filename=f["original_name"],media_type="application/octet-stream")
 
 @app.post("/api/seller/payouts")
 async def seller_request_payout(body:SellerPayoutIn,x_telegram_init_data:str|None=Header(default=None)):
@@ -2012,9 +2067,14 @@ async def seller_request_payout(body:SellerPayoutIn,x_telegram_init_data:str|Non
                 raise HTTPException(409,"Сначала завершите или отмените предыдущую заявку")
             if body.amount!=available or available<=0:
                 raise HTTPException(409,"Для безопасности выводите полную доступную сумму целых заказов")
-            if not ("https://" in body.proof.lower() or "http://" in body.proof.lower()):
-                raise HTTPException(400,"Добавьте ссылку на фото или видео доказательства передачи")
-            await conn.execute("INSERT INTO seller_payout_requests(seller_id,amount,proof,payment_details,created_at) VALUES(?,?,?,?,?)",(uid,body.amount,body.proof.strip(),body.payment_details.strip(),int(time.time())))
+            if not body.payment_details.startswith("@") or len(body.payment_details)>40 or not body.payment_details[1:].replace("_","").isalnum():
+                raise HTTPException(400,"Укажите @username Telegram Wallet")
+            if len(set(body.file_ids))!=len(body.file_ids): raise HTTPException(400,"Повторяющиеся файлы")
+            marks=",".join("?" for _ in body.file_ids)
+            attached=await (await conn.execute("SELECT id,size_bytes FROM seller_payout_files WHERE seller_id=? AND payout_id=0 AND id IN ("+marks+")",(uid,*body.file_ids))).fetchall()
+            if len(attached)!=len(body.file_ids) or sum(f["size_bytes"] for f in attached)>PAYOUT_FILE_LIMIT: raise HTTPException(400,"Некорректные вложения")
+            cur=await conn.execute("INSERT INTO seller_payout_requests(seller_id,amount,proof,payment_details,created_at) VALUES(?,?,?,?,?)",(uid,body.amount,body.proof.strip(),body.payment_details.strip(),int(time.time())))
+            await conn.execute("UPDATE seller_payout_files SET payout_id=? WHERE seller_id=? AND payout_id=0 AND id IN ("+marks+")",(cur.lastrowid,uid,*body.file_ids))
             await conn.commit()
         except:
             await conn.rollback()
@@ -2094,6 +2154,7 @@ async def admin_sellers(x_telegram_init_data: str | None = Header(default=None))
             "WHERE p.seller_id>0 ORDER BY p.id DESC LIMIT 500"
         )).fetchall()
         payouts=await (await conn.execute("SELECT p.*,s.display_name FROM seller_payout_requests p LEFT JOIN shop_sellers s ON s.telegram_id=p.seller_id ORDER BY p.id DESC LIMIT 200")).fetchall()
+        payout_files=await (await conn.execute("SELECT id,payout_id,original_name,size_bytes FROM seller_payout_files WHERE payout_id>0 ORDER BY created_at DESC LIMIT 1000")).fetchall()
         removals=await (await conn.execute("SELECT seller_id,display_name,reason,removed_at FROM seller_removals ORDER BY id DESC LIMIT 200")).fetchall()
         jobs=await (await conn.execute(
             "SELECT o.id,o.number,o.product_name,o.status,o.stars_amount,o.seller_share_stars,"
@@ -2106,7 +2167,7 @@ async def admin_sellers(x_telegram_init_data: str | None = Header(default=None))
     finally:
         await conn.close()
     return {"sellers":[dict(x) for x in sellers],"listings":[dict(x) for x in listings],
-            "orders":[dict(x) for x in jobs],"removals":[dict(x) for x in removals],"payouts":[dict(x) for x in payouts]}
+            "orders":[dict(x) for x in jobs],"removals":[dict(x) for x in removals],"payouts":[dict(x) for x in payouts],"payout_files":[dict(x) for x in payout_files]}
 
 
 
@@ -5855,7 +5916,7 @@ async function sellerHtml(){
  const toSettle=completed.reduce((a,x)=>a+Number(x.seller_share_stars||0),0); const reserved=(d.payouts||[]).filter(x=>['pending','approved','ready','frozen'].includes(x.status)).reduce((a,x)=>a+Number(x.amount||0),0);
  html+='<div class="seller-income-row"><div><span>К РАСЧЁТУ · УЧЁТ ⭐</span><b>'+toSettle+' ⭐</b></div><div><span>ОТМЕЧЕНО РАСЧЁТОВ · ⭐</span><b>'+paidSum+' ⭐</b></div></div>'+
  '<div class="seller-help">Доли рассчитываются от оплаты за товар после скидок. Это учёт обязательств в эквиваленте Stars, а не автоматический перевод Stars. Расчёты проводит администрация отдельно.</div>'+
- '<div class="shx-panel"><h3>💸 Вывод средств</h3><div class="mini">Доступно к заявке: '+Math.max(0,toSettle-reserved)+' ⭐. После одобрения администратора действует ожидание 24 суток. Выплата только вручную после проверки.</div><div class="seller-inputs"><input id="sellerPayoutAmount" type="number" min="1" max="'+Math.max(0,toSettle-reserved)+'" placeholder="Сумма ⭐"><textarea id="sellerPayoutProof" maxlength="1500" placeholder="Обязательные доказательства передачи: ссылки на скриншоты/видео, номера заказов и описание"></textarea><textarea id="sellerPayoutDetails" maxlength="500" placeholder="Способ выплаты и реквизиты (не указывайте пароли или коды)"></textarea><button class="buy" id="sellerRequestPayout">💸 ЗАПРОСИТЬ ВЫВОД</button></div><h3>История заявок</h3>'+((d.payouts||[]).map(x=>'<div class="seller-market-card">#'+x.id+' · '+x.amount+' ⭐ · '+esc(x.status)+(x.available_at?'<div class="mini">Не ранее: '+new Date(x.available_at*1000).toLocaleString('ru-RU')+'</div>':'')+(x.reason?'<div class="mini">'+esc(x.reason)+'</div>':'')+'</div>').join('')||'<div class="mini">Заявок пока нет</div>')+'</div>'+
+ '<div class="shx-panel"><h3>💸 Вывод средств</h3><div class="mini">Доступно к заявке: '+Math.max(0,toSettle-reserved)+' ⭐. После одобрения администратора действует ожидание 24 суток. Выплата только вручную после проверки.</div><div class="seller-inputs"><input id="sellerPayoutAmount" type="number" min="1" max="'+Math.max(0,toSettle-reserved)+'" placeholder="Сумма ⭐"><textarea id="sellerPayoutProof" maxlength="1500" placeholder="Номера заказов и описание передачи (от 15 символов)"></textarea><input id="sellerPayoutDetails" maxlength="40" placeholder="@username Telegram Wallet"><input id="sellerPayoutFiles" type="file" accept="image/*,video/*,.pdf" multiple><div class="mini">До 10 файлов, общим объёмом до 500 МБ</div><div id="sellerUploadStatus" class="mini"></div><button class="buy" id="sellerRequestPayout">💸 ЗАПРОСИТЬ ВЫВОД</button></div><h3>История заявок</h3>'+((d.payouts||[]).map(x=>'<div class="seller-market-card">#'+x.id+' · '+x.amount+' ⭐ · '+esc(x.status)+(x.available_at?'<div class="mini">Не ранее: '+new Date(x.available_at*1000).toLocaleString('ru-RU')+'</div>':'')+(x.reason?'<div class="mini">'+esc(x.reason)+'</div>':'')+'</div>').join('')||'<div class="mini">Заявок пока нет</div>')+'</div>'+
  '<div class="shx-panel"><h3>➕ Добавить товар</h3><div class="seller-inputs">'+
  '<input id="sellerListingName" maxlength="120" placeholder="Название товара">'+
  '<select id="sellerListingCategory"><option value="Metro Royale">🎒 Metro Royale · предметы</option><option value="Ресурсы">💎 Ресурсы</option><option value="Буст">🚀 Буст и помощь</option><option value="Квесты">🎯 Квесты</option><option value="Другое">📦 Другое</option></select>'+
@@ -5900,7 +5961,7 @@ function bindSeller(){
    experience:document.getElementById('sellerExperience').value,rules_confirmed:document.getElementById('sellerRules').checked
   })});await refresh()}catch(e){alert(e.message);apply.disabled=false}
  });
- const payout=document.getElementById('sellerRequestPayout');if(payout)payout.addEventListener('click',async()=>{payout.disabled=true;try{await api('/api/seller/payouts',{method:'POST',body:JSON.stringify({amount:Number(document.getElementById('sellerPayoutAmount').value),proof:document.getElementById('sellerPayoutProof').value,payment_details:document.getElementById('sellerPayoutDetails').value})});await refresh()}catch(e){alert(e.message);payout.disabled=false}});
+ const payout=document.getElementById('sellerRequestPayout');if(payout)payout.addEventListener('click',async()=>{payout.disabled=true;try{const files=Array.from(document.getElementById('sellerPayoutFiles').files||[]);if(!files.length||files.length>10||files.reduce((n,f)=>n+f.size,0)>500*1024*1024)throw Error('Выберите 1–10 файлов общим размером до 500 МБ');const file_ids=[];for(let i=0;i<files.length;i++){const f=files[i];document.getElementById('sellerUploadStatus').textContent='Загрузка '+(i+1)+'/'+files.length;const res=await fetch('/api/seller/payout-files',{method:'POST',headers:Object.assign({},headers,{'Content-Type':f.type||'application/octet-stream','X-Filename':f.name}),body:f});const d=await res.json();if(!res.ok)throw Error(d.detail||'Ошибка загрузки');file_ids.push(d.id)}await api('/api/seller/payouts',{method:'POST',body:JSON.stringify({amount:Number(document.getElementById('sellerPayoutAmount').value),proof:document.getElementById('sellerPayoutProof').value,payment_details:document.getElementById('sellerPayoutDetails').value,file_ids})});await refresh()}catch(e){alert(e.message);payout.disabled=false}});
  const add=document.getElementById('sellerAddListing');
  if(add)add.addEventListener('click',async()=>{
   const name=document.getElementById('sellerListingName').value.trim(),price=Number(document.getElementById('sellerListingStars').value),stock=Number(document.getElementById('sellerListingStock').value);
@@ -7457,6 +7518,7 @@ function bindAdmin(){
   try{await api('/api/admin/uc-fund',{method:'POST',body:JSON.stringify({credits,note,profit_verified})});await refreshAdmin()}catch(e){alert(e.message);fundBtn.disabled=false}
  });
 
+ document.querySelectorAll('[data-payout-file]').forEach(b=>b.addEventListener('click',async()=>{const res=await fetch('/api/admin/seller-payout-files/'+b.dataset.payoutFile,{headers});if(!res.ok){alert('Не удалось открыть файл');return}const blob=await res.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=b.dataset.filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000)}));
  document.querySelectorAll('[data-payout-action]').forEach(b=>b.addEventListener('click',async()=>{const action=b.dataset.payoutAction,id=b.dataset.payoutId;let reason='',payment_reference='';if(['freeze','reject'].includes(action)){reason=prompt('Причина (не менее 5 символов):')||'';if(reason.length<5)return}if(action==='paid'){payment_reference=prompt('Идентификатор и подтверждение ФАКТИЧЕСКОГО перевода:')||'';if(payment_reference.length<6)return}if(!confirm('Подтвердить действие '+action+' для заявки #'+id+'?'))return;b.disabled=true;try{await api('/api/admin/seller-payouts/'+id,{method:'POST',body:JSON.stringify({action,reason,payment_reference})});await refreshAdmin()}catch(e){alert(e.message);b.disabled=false}}));
  const adminSellerChange=async(sellerId,status)=>{
   try{await api('/api/admin/sellers/'+sellerId,{method:'PATCH',body:JSON.stringify({status,commission_pct:30})});await refreshAdmin()}catch(e){alert(e.message)}
