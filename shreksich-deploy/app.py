@@ -765,6 +765,21 @@ async def init_db():
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS seller_payout_requests(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      seller_id INTEGER NOT NULL,
+      amount INTEGER NOT NULL CHECK(amount>0),
+      proof TEXT NOT NULL,
+      payment_details TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL,
+      approved_at INTEGER NOT NULL DEFAULT 0,
+      available_at INTEGER NOT NULL DEFAULT 0,
+      reviewed_by INTEGER NOT NULL DEFAULT 0,
+      reason TEXT NOT NULL DEFAULT '',
+      paid_note TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_seller_payout_requests_seller ON seller_payout_requests(seller_id,status);
     CREATE TABLE IF NOT EXISTS seller_settlement_log(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL UNIQUE,
@@ -1753,6 +1768,7 @@ async def seller_dashboard(x_telegram_init_data: str | None = Header(default=Non
             "FROM orders WHERE seller_id=? AND telegram_charge_id<>'' ORDER BY id DESC LIMIT 100",
             (uid,)
         )).fetchall()
+        payouts=await (await conn.execute("SELECT id,amount,status,created_at,available_at,reason FROM seller_payout_requests WHERE seller_id=? ORDER BY id DESC LIMIT 50",(uid,))).fetchall()
         settlements=await (await conn.execute(
             "SELECT order_id,seller_stars,note FROM seller_settlement_log WHERE seller_id=? "
             "ORDER BY id DESC LIMIT 100",(uid,)
@@ -1763,7 +1779,7 @@ async def seller_dashboard(x_telegram_init_data: str | None = Header(default=Non
     return {"profile":dict(profile) if profile else None,
             "listings":[dict(x) for x in listings],
             "orders":[{**dict(x),"settled":int(x["id"]) in paid_ids} for x in jobs],
-            "settlements":[dict(x) for x in settlements]}
+            "settlements":[dict(x) for x in settlements],"payouts":[dict(x) for x in payouts]}
 
 @app.post("/api/seller/apply")
 async def seller_apply(body: SellerApplicationIn, x_telegram_init_data: str | None = Header(default=None)):
@@ -1964,6 +1980,101 @@ async def seller_mark_delivered(order_id:int,body:SellerDeliveryIn,
         pass
     return {"ok":True,"status":"Проверка выдачи"}
 
+
+class SellerPayoutIn(BaseModel):
+    amount: int = Field(ge=1,le=10000000)
+    proof: str = Field(min_length=15,max_length=1500)
+    payment_details: str = Field(min_length=5,max_length=500)
+
+class SellerPayoutDecisionIn(BaseModel):
+    action: str
+    reason: str = Field(default="",max_length=1000)
+    payment_reference: str = Field(default="",max_length=500)
+
+@app.post("/api/seller/payouts")
+async def seller_request_payout(body:SellerPayoutIn,x_telegram_init_data:str|None=Header(default=None)):
+    uid=int((await current_user(x_telegram_init_data))["id"])
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            seller=await (await conn.execute("SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,))).fetchone()
+            if not seller or seller["status"]!="approved":
+                raise HTTPException(403,"Продавец не одобрен")
+            eligible=await (await conn.execute("""
+                SELECT COALESCE(SUM(o.seller_share_stars),0) n FROM orders o
+                LEFT JOIN seller_settlement_log l ON l.order_id=o.id
+                WHERE o.seller_id=? AND o.status='Выполнен' AND o.telegram_charge_id<>'' AND l.id IS NULL
+            """,(uid,))).fetchone()
+            reserved=await (await conn.execute("SELECT COALESCE(SUM(amount),0) n FROM seller_payout_requests WHERE seller_id=? AND status IN ('pending','approved','ready','frozen')",(uid,))).fetchone()
+            available=max(0,int(eligible["n"])-int(reserved["n"]))
+            if body.amount>available:
+                raise HTTPException(409,"Недостаточно доступных средств")
+            await conn.execute("INSERT INTO seller_payout_requests(seller_id,amount,proof,payment_details,created_at) VALUES(?,?,?,?,?)",(uid,body.amount,body.proof.strip(),body.payment_details.strip(),int(time.time())))
+            await conn.commit()
+        except:
+            await conn.rollback()
+            raise
+        finally:
+            await conn.close()
+    try:
+        await tg("sendMessage",{"chat_id":OWNER_ID,"text":f"💸 Новая заявка на выплату от продавца {uid}: {body.amount} ⭐. Проверьте доказательства в админке."})
+    except Exception:
+        pass
+    return {"ok":True}
+
+@app.post("/api/admin/seller-payouts/{payout_id}")
+async def admin_seller_payout_decision(payout_id:int,body:SellerPayoutDecisionIn,x_telegram_init_data:str|None=Header(default=None)):
+    admin=await owner(x_telegram_init_data)
+    action=body.action
+    if action not in ("approve","freeze","reject","unfreeze","paid"):
+        raise HTTPException(400,"Недопустимое действие")
+    async with db_write_lock:
+        conn=await db()
+        try:
+            await conn.execute("BEGIN IMMEDIATE")
+            p=await (await conn.execute("SELECT * FROM seller_payout_requests WHERE id=?",(payout_id,))).fetchone()
+            if not p:
+                raise HTTPException(404,"Заявка не найдена")
+            status=p["status"]
+            now=int(time.time())
+            if action=="approve" and status=="pending":
+                await conn.execute("UPDATE seller_payout_requests SET status='approved',approved_at=?,available_at=?,reviewed_by=? WHERE id=?",(now,now+24*86400,OWNER_ID,payout_id))
+            elif action=="freeze" and status in ("pending","approved","ready"):
+                if len(body.reason.strip())<5: raise HTTPException(400,"Укажите причину блокировки")
+                await conn.execute("UPDATE seller_payout_requests SET status='frozen',reason=? WHERE id=?",(body.reason.strip(),payout_id))
+            elif action=="reject" and status in ("pending","approved","ready","frozen"):
+                if len(body.reason.strip())<5: raise HTTPException(400,"Укажите причину отказа")
+                await conn.execute("UPDATE seller_payout_requests SET status='rejected',reason=? WHERE id=?",(body.reason.strip(),payout_id))
+            elif action=="unfreeze" and status=="frozen" and int(p["approved_at"])>0:
+                await conn.execute("UPDATE seller_payout_requests SET status='approved',reason='' WHERE id=?",(payout_id,))
+            elif action=="paid" and status in ("approved","ready") and now>=int(p["available_at"])>0:
+                if len(body.payment_reference.strip())<6: raise HTTPException(400,"Укажите подтверждение реального перевода")
+                seller=await (await conn.execute("SELECT status FROM shop_sellers WHERE telegram_id=?",(p["seller_id"],))).fetchone()
+                if not seller or seller["status"]!="approved": raise HTTPException(409,"Продавец заблокирован")
+                rows=await (await conn.execute("""
+                    SELECT o.id,o.seller_share_stars FROM orders o LEFT JOIN seller_settlement_log l ON l.order_id=o.id
+                    WHERE o.seller_id=? AND o.status='Выполнен' AND o.telegram_charge_id<>'' AND l.id IS NULL ORDER BY o.id
+                """,(p["seller_id"],))).fetchall()
+                remaining=int(p["amount"])
+                for o in rows:
+                    if remaining<=0: break
+                    # A partial order payout is deliberately forbidden to preserve one-order-one-settlement accounting.
+                    if int(o["seller_share_stars"])>remaining: continue
+                    await conn.execute("INSERT INTO seller_settlement_log(order_id,seller_id,seller_stars,note) VALUES(?,?,?,?)",(o["id"],p["seller_id"],o["seller_share_stars"],"Заявка #"+str(payout_id)+" · "+body.payment_reference.strip()))
+                    remaining-=int(o["seller_share_stars"])
+                if remaining: raise HTTPException(409,"Сумма не соответствует целым неоплаченным заказам; выплата не зафиксирована")
+                await conn.execute("UPDATE seller_payout_requests SET status='paid',paid_note=? WHERE id=?",(body.payment_reference.strip(),payout_id))
+            else:
+                raise HTTPException(409,"Недопустимый переход статуса или срок ожидания ещё не истёк")
+            await conn.commit()
+        except:
+            await conn.rollback()
+            raise
+        finally:
+            await conn.close()
+    return {"ok":True}
+
 @app.get("/api/admin/sellers")
 async def admin_sellers(x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
@@ -1978,6 +2089,7 @@ async def admin_sellers(x_telegram_init_data: str | None = Header(default=None))
             "LEFT JOIN shop_sellers s ON s.telegram_id=p.seller_id "
             "WHERE p.seller_id>0 ORDER BY p.id DESC LIMIT 500"
         )).fetchall()
+        payouts=await (await conn.execute("SELECT p.*,s.display_name FROM seller_payout_requests p LEFT JOIN shop_sellers s ON s.telegram_id=p.seller_id ORDER BY p.id DESC LIMIT 200")).fetchall()
         removals=await (await conn.execute("SELECT seller_id,display_name,reason,removed_at FROM seller_removals ORDER BY id DESC LIMIT 200")).fetchall()
         jobs=await (await conn.execute(
             "SELECT o.id,o.number,o.product_name,o.status,o.stars_amount,o.seller_share_stars,"
@@ -1990,7 +2102,7 @@ async def admin_sellers(x_telegram_init_data: str | None = Header(default=None))
     finally:
         await conn.close()
     return {"sellers":[dict(x) for x in sellers],"listings":[dict(x) for x in listings],
-            "orders":[dict(x) for x in jobs],"removals":[dict(x) for x in removals]}
+            "orders":[dict(x) for x in jobs],"removals":[dict(x) for x in removals],"payouts":[dict(x) for x in payouts]}
 
 
 
@@ -2140,6 +2252,7 @@ async def admin_seller_listing(listing_id:int,body:AdminSellerListingDecisionIn,
 async def admin_settle_seller_order(order_id:int,body:AdminSellerSettlementIn,
                                    x_telegram_init_data: str | None = Header(default=None)):
     await owner(x_telegram_init_data)
+    raise HTTPException(409,"Прямые расчёты отключены: используйте защищённые заявки продавцов")
     async with db_write_lock:
         conn=await db()
         try:
@@ -5735,9 +5848,10 @@ async function sellerHtml(){
  html+='<div class="seller-help">✅ Вы зарегистрированы как продавец. Повторная заявка не требуется — добавляйте товары ниже.</div>';
  const orders=d.orders||[],settled=orders.filter(x=>x.settled),completed=orders.filter(x=>x.status==='Выполнен'&&!x.settled);
  const paidSum=settled.reduce((a,x)=>a+Number(x.seller_share_stars||0),0);
- const toSettle=completed.reduce((a,x)=>a+Number(x.seller_share_stars||0),0);
+ const toSettle=completed.reduce((a,x)=>a+Number(x.seller_share_stars||0),0); const reserved=(d.payouts||[]).filter(x=>['pending','approved','ready','frozen'].includes(x.status)).reduce((a,x)=>a+Number(x.amount||0),0);
  html+='<div class="seller-income-row"><div><span>К РАСЧЁТУ · УЧЁТ ⭐</span><b>'+toSettle+' ⭐</b></div><div><span>ОТМЕЧЕНО РАСЧЁТОВ · ⭐</span><b>'+paidSum+' ⭐</b></div></div>'+
  '<div class="seller-help">Доли рассчитываются от оплаты за товар после скидок. Это учёт обязательств в эквиваленте Stars, а не автоматический перевод Stars. Расчёты проводит администрация отдельно.</div>'+
+ '<div class="shx-panel"><h3>💸 Вывод средств</h3><div class="mini">Доступно к заявке: '+Math.max(0,toSettle-reserved)+' ⭐. После одобрения администратора действует ожидание 24 суток. Выплата только вручную после проверки.</div><div class="seller-inputs"><input id="sellerPayoutAmount" type="number" min="1" max="'+Math.max(0,toSettle-reserved)+'" placeholder="Сумма ⭐"><textarea id="sellerPayoutProof" maxlength="1500" placeholder="Обязательные доказательства передачи: ссылки на скриншоты/видео, номера заказов и описание"></textarea><textarea id="sellerPayoutDetails" maxlength="500" placeholder="Способ выплаты и реквизиты (не указывайте пароли или коды)"></textarea><button class="buy" id="sellerRequestPayout">💸 ЗАПРОСИТЬ ВЫВОД</button></div><h3>История заявок</h3>'+((d.payouts||[]).map(x=>'<div class="seller-market-card">#'+x.id+' · '+x.amount+' ⭐ · '+esc(x.status)+(x.available_at?'<div class="mini">Не ранее: '+new Date(x.available_at*1000).toLocaleString('ru-RU')+'</div>':'')+(x.reason?'<div class="mini">'+esc(x.reason)+'</div>':'')+'</div>').join('')||'<div class="mini">Заявок пока нет</div>')+'</div>'+
  '<div class="shx-panel"><h3>➕ Добавить товар</h3><div class="seller-inputs">'+
  '<input id="sellerListingName" maxlength="120" placeholder="Название товара">'+
  '<select id="sellerListingCategory"><option value="Metro Royale">🎒 Metro Royale · предметы</option><option value="Ресурсы">💎 Ресурсы</option><option value="Буст">🚀 Буст и помощь</option><option value="Квесты">🎯 Квесты</option><option value="Другое">📦 Другое</option></select>'+
@@ -5782,6 +5896,7 @@ function bindSeller(){
    experience:document.getElementById('sellerExperience').value,rules_confirmed:document.getElementById('sellerRules').checked
   })});await refresh()}catch(e){alert(e.message);apply.disabled=false}
  });
+ const payout=document.getElementById('sellerRequestPayout');if(payout)payout.addEventListener('click',async()=>{payout.disabled=true;try{await api('/api/seller/payouts',{method:'POST',body:JSON.stringify({amount:Number(document.getElementById('sellerPayoutAmount').value),proof:document.getElementById('sellerPayoutProof').value,payment_details:document.getElementById('sellerPayoutDetails').value})});await refresh()}catch(e){alert(e.message);payout.disabled=false}});
  const add=document.getElementById('sellerAddListing');
  if(add)add.addEventListener('click',async()=>{
   const name=document.getElementById('sellerListingName').value.trim(),price=Number(document.getElementById('sellerListingStars').value),stock=Number(document.getElementById('sellerListingStock').value);
@@ -7268,6 +7383,7 @@ function adminSellers(){
  '<button class="secondary" data-seller-listing-pause="'+x.id+'">Скрыть</button>'+
  '<button class="danger" data-seller-listing-reject="'+x.id+'">Отклонить</button></div></div>').join('')||
  '<div class="empty">Продавцы пока не добавляли товары</div>');
+ html+='<h3 style="margin:18px 0 9px">💸 Заявки на выплаты</h3>'+((d.payouts||[]).map(p=>'<div class="seller-admin-box"><b>#'+p.id+' · '+esc(p.display_name||String(p.seller_id))+' · '+p.amount+' ⭐ · '+esc(p.status)+'</b><div class="mini">Доказательства: '+esc(p.proof)+'</div><div class="mini">Реквизиты: '+esc(p.payment_details)+'</div>'+(p.available_at?'<div class="mini">Доступно не ранее: '+new Date(p.available_at*1000).toLocaleString('ru-RU')+'</div>':'')+(p.reason?'<div class="mini">Причина: '+esc(p.reason)+'</div>':'')+'<div class="seller-market-actions">'+(p.status==='pending'?'<button class="buy" data-payout-action="approve" data-payout-id="'+p.id+'">Одобрить · 24 суток</button>':'')+(['pending','approved','ready'].includes(p.status)?'<button class="danger" data-payout-action="freeze" data-payout-id="'+p.id+'">Заморозить</button>':'')+(p.status==='frozen'&&p.approved_at?'<button class="secondary" data-payout-action="unfreeze" data-payout-id="'+p.id+'">Разморозить</button>':'')+(['pending','approved','ready','frozen'].includes(p.status)?'<button class="danger" data-payout-action="reject" data-payout-id="'+p.id+'">Отклонить</button>':'')+(['approved','ready'].includes(p.status)&&Date.now()>=p.available_at*1000?'<button class="buy" data-payout-action="paid" data-payout-id="'+p.id+'">Подтвердить перевод</button>':'')+'</div></div>').join('')||'<div class="empty">Заявок на выплаты нет</div>');
  html+='<h3 style="margin:18px 0 9px">Оплаченные заказы продавцов</h3>'+
  (orders.map(x=>'<div class="seller-admin-box"><div class="mini">#'+x.number+
  ' · '+esc(x.seller_name)+' · '+esc(x.status)+'</div>'+
@@ -7337,6 +7453,7 @@ function bindAdmin(){
   try{await api('/api/admin/uc-fund',{method:'POST',body:JSON.stringify({credits,note,profit_verified})});await refreshAdmin()}catch(e){alert(e.message);fundBtn.disabled=false}
  });
 
+ document.querySelectorAll('[data-payout-action]').forEach(b=>b.addEventListener('click',async()=>{const action=b.dataset.payoutAction,id=b.dataset.payoutId;let reason='',payment_reference='';if(['freeze','reject'].includes(action)){reason=prompt('Причина (не менее 5 символов):')||'';if(reason.length<5)return}if(action==='paid'){payment_reference=prompt('Идентификатор и подтверждение ФАКТИЧЕСКОГО перевода:')||'';if(payment_reference.length<6)return}if(!confirm('Подтвердить действие '+action+' для заявки #'+id+'?'))return;b.disabled=true;try{await api('/api/admin/seller-payouts/'+id,{method:'POST',body:JSON.stringify({action,reason,payment_reference})});await refreshAdmin()}catch(e){alert(e.message);b.disabled=false}}));
  const adminSellerChange=async(sellerId,status)=>{
   try{await api('/api/admin/sellers/'+sellerId,{method:'PATCH',body:JSON.stringify({status,commission_pct:30})});await refreshAdmin()}catch(e){alert(e.message)}
  };
