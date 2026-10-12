@@ -1539,16 +1539,45 @@ async def polling():
             await asyncio.sleep(3)
 
 
+async def payout_file_cleanup_loop():
+    # Remove evidence files 24 hours after upload, including orphaned files.
+    while True:
+        try:
+            cutoff=int(time.time())-24*60*60
+            async with db_write_lock:
+                conn=await db()
+                try:
+                    expired=await (await conn.execute(
+                        "SELECT id FROM seller_payout_files WHERE created_at<=?",(cutoff,)
+                    )).fetchall()
+                    for item in expired:
+                        (PAYOUT_FILES_DIR/item["id"]).unlink(missing_ok=True)
+                    await conn.execute("DELETE FROM seller_payout_files WHERE created_at<=?",(cutoff,))
+                    await conn.commit()
+                finally:
+                    await conn.close()
+            if PAYOUT_FILES_DIR.is_dir():
+                for path in PAYOUT_FILES_DIR.iterdir():
+                    if path.is_file() and path.stat().st_mtime<=cutoff:
+                        path.unlink(missing_ok=True)
+        except Exception as exc:
+            print("payout evidence cleanup error:",repr(exc),flush=True)
+        await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     task = asyncio.create_task(polling())
+    cleanup_task = asyncio.create_task(payout_file_cleanup_loop())
     yield
     task.cancel()
-    try:
-        await task
-    except BaseException:
-        pass
+    cleanup_task.cancel()
+    for background_task in (task,cleanup_task):
+        try:
+            await background_task
+        except BaseException:
+            pass
 
 
 app = FastAPI(title="Shreksich Shop", lifespan=lifespan)
@@ -1998,7 +2027,7 @@ class SellerPayoutDecisionIn(BaseModel):
 
 
 PAYOUT_FILES_DIR=pathlib.Path(os.path.dirname(DB_PATH))/"seller_payout_evidence"
-PAYOUT_FILE_LIMIT=500*1024*1024
+PAYOUT_FILE_LIMIT=10*1024*1024
 
 @app.post("/api/seller/payout-files")
 async def upload_seller_payout_file(request:Request,x_telegram_init_data:str|None=Header(default=None),x_filename:str|None=Header(default=None)):
@@ -2012,7 +2041,7 @@ async def upload_seller_payout_file(request:Request,x_telegram_init_data:str|Non
             seller=await (await conn.execute("SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,))).fetchone()
             usage=await (await conn.execute("SELECT COUNT(*) n,COALESCE(SUM(size_bytes),0) total FROM seller_payout_files WHERE seller_id=? AND payout_id=0",(uid,))).fetchone()
             if not seller or seller["status"]!="approved": raise HTTPException(403,"Продавец не одобрен")
-            if usage["n"]>=10 or usage["total"]>=PAYOUT_FILE_LIMIT: raise HTTPException(413,"Лимит 10 файлов / 500 МБ")
+            if usage["n"]>=10 or usage["total"]>=PAYOUT_FILE_LIMIT: raise HTTPException(413,"Лимит 10 файлов / 10 МБ")
             fid=uuid.uuid4().hex
             PAYOUT_FILES_DIR.mkdir(parents=True,exist_ok=True)
             path=PAYOUT_FILES_DIR/fid
@@ -2021,7 +2050,7 @@ async def upload_seller_payout_file(request:Request,x_telegram_init_data:str|Non
                 with open(path,"xb") as out:
                     async for chunk in request.stream():
                         size+=len(chunk)
-                        if size+usage["total"]>PAYOUT_FILE_LIMIT: raise HTTPException(413,"Превышено 500 МБ")
+                        if size+usage["total"]>PAYOUT_FILE_LIMIT: raise HTTPException(413,"Превышено 10 МБ")
                         out.write(chunk)
                 if not size: raise HTTPException(400,"Пустой файл")
                 await conn.execute("INSERT INTO seller_payout_files(id,seller_id,original_name,size_bytes,created_at) VALUES(?,?,?,?,?)",(fid,uid,filename,size,int(time.time())))
@@ -5916,7 +5945,7 @@ async function sellerHtml(){
  const toSettle=completed.reduce((a,x)=>a+Number(x.seller_share_stars||0),0); const reserved=(d.payouts||[]).filter(x=>['pending','approved','ready','frozen'].includes(x.status)).reduce((a,x)=>a+Number(x.amount||0),0);
  html+='<div class="seller-income-row"><div><span>К РАСЧЁТУ · УЧЁТ ⭐</span><b>'+toSettle+' ⭐</b></div><div><span>ОТМЕЧЕНО РАСЧЁТОВ · ⭐</span><b>'+paidSum+' ⭐</b></div></div>'+
  '<div class="seller-help">Доли рассчитываются от оплаты за товар после скидок. Это учёт обязательств в эквиваленте Stars, а не автоматический перевод Stars. Расчёты проводит администрация отдельно.</div>'+
- '<div class="shx-panel"><h3>💸 Вывод средств</h3><details style="margin:10px 0 14px"><summary style="cursor:pointer;font-weight:700;padding:10px;border-radius:10px;background:rgba(100,150,220,.12)">❓ Как вывести средства? Нажмите, чтобы открыть инструкцию</summary><div class="mini" style="padding:12px;line-height:1.7">1. Выполните заказы и подготовьте доказательства передачи товара.<br>2. Укажите доступную сумму и @username Telegram Wallet.<br>3. Прикрепите от 1 до 10 фото, видео или PDF (общий размер до 500 МБ).<br>4. Укажите номера заказов и нажмите «Запросить вывод».<br>5. Проверка администратором занимает <b>до 7 дней</b>.<br>6. После одобрения начинается ожидание <b>24 суток</b>. В этот период вывод могут заблокировать при жалобах или нарушениях.<br>7. После ожидания администратор вручную проводит выплату.<br>⚠️ Не передавайте пароли, коды и секретные фразы кошелька. Поддельные доказательства запрещены.</div></details><div class="mini">Доступно к заявке: '+Math.max(0,toSettle-reserved)+' ⭐. После одобрения администратора действует ожидание 24 суток. Выплата только вручную после проверки.</div><div class="seller-inputs"><input id="sellerPayoutAmount" type="number" min="1" max="'+Math.max(0,toSettle-reserved)+'" placeholder="Сумма ⭐"><textarea id="sellerPayoutProof" maxlength="1500" placeholder="Номера заказов и описание передачи (от 15 символов)"></textarea><input id="sellerPayoutDetails" maxlength="40" placeholder="@username Telegram Wallet"><input id="sellerPayoutFiles" type="file" accept="image/*,video/*,.pdf" multiple><div class="mini">До 10 файлов, общим объёмом до 500 МБ</div><div id="sellerUploadStatus" class="mini"></div><button class="buy" id="sellerRequestPayout">💸 ЗАПРОСИТЬ ВЫВОД</button></div><h3>История заявок</h3>'+((d.payouts||[]).map(x=>'<div class="seller-market-card">#'+x.id+' · '+x.amount+' ⭐ · '+esc(x.status)+(x.available_at?'<div class="mini">Не ранее: '+new Date(x.available_at*1000).toLocaleString('ru-RU')+'</div>':'')+(x.reason?'<div class="mini">'+esc(x.reason)+'</div>':'')+'</div>').join('')||'<div class="mini">Заявок пока нет</div>')+'</div>'+
+ '<div class="shx-panel"><h3>💸 Вывод средств</h3><details style="margin:10px 0 14px"><summary style="cursor:pointer;font-weight:700;padding:10px;border-radius:10px;background:rgba(100,150,220,.12)">❓ Как вывести средства? Нажмите, чтобы открыть инструкцию</summary><div class="mini" style="padding:12px;line-height:1.7">1. Выполните заказы и подготовьте доказательства передачи товара.<br>2. Укажите доступную сумму и @username Telegram Wallet.<br>3. Прикрепите от 1 до 10 фото, видео или PDF (общий размер до 10 МБ). Файлы автоматически удаляются с сервера через 24 часа после загрузки — администратор должен проверить их за это время.<br>4. Укажите номера заказов и нажмите «Запросить вывод».<br>5. Проверка заявки администратором занимает <b>до 7 дней</b>, но сами файлы доступны только первые 24 часа.<br>6. После одобрения начинается ожидание <b>24 суток</b>. В этот период вывод могут заблокировать при жалобах или нарушениях.<br>7. После ожидания администратор вручную проводит выплату.<br>⚠️ Не передавайте пароли, коды и секретные фразы кошелька. Поддельные доказательства запрещены.</div></details><div class="mini">Доступно к заявке: '+Math.max(0,toSettle-reserved)+' ⭐. После одобрения администратора действует ожидание 24 суток. Выплата только вручную после проверки.</div><div class="seller-inputs"><input id="sellerPayoutAmount" type="number" min="1" max="'+Math.max(0,toSettle-reserved)+'" placeholder="Сумма ⭐"><textarea id="sellerPayoutProof" maxlength="1500" placeholder="Номера заказов и описание передачи (от 15 символов)"></textarea><input id="sellerPayoutDetails" maxlength="40" placeholder="@username Telegram Wallet"><input id="sellerPayoutFiles" type="file" accept="image/*,video/*,.pdf" multiple><div class="mini">До 10 файлов, общим объёмом до 10 МБ</div><div id="sellerUploadStatus" class="mini"></div><button class="buy" id="sellerRequestPayout">💸 ЗАПРОСИТЬ ВЫВОД</button></div><h3>История заявок</h3>'+((d.payouts||[]).map(x=>'<div class="seller-market-card">#'+x.id+' · '+x.amount+' ⭐ · '+esc(x.status)+(x.available_at?'<div class="mini">Не ранее: '+new Date(x.available_at*1000).toLocaleString('ru-RU')+'</div>':'')+(x.reason?'<div class="mini">'+esc(x.reason)+'</div>':'')+'</div>').join('')||'<div class="mini">Заявок пока нет</div>')+'</div>'+
  '<div class="shx-panel"><h3>➕ Добавить товар</h3><div class="seller-inputs">'+
  '<input id="sellerListingName" maxlength="120" placeholder="Название товара">'+
  '<select id="sellerListingCategory"><option value="Metro Royale">🎒 Metro Royale · предметы</option><option value="Ресурсы">💎 Ресурсы</option><option value="Буст">🚀 Буст и помощь</option><option value="Квесты">🎯 Квесты</option><option value="Другое">📦 Другое</option></select>'+
@@ -5961,7 +5990,7 @@ function bindSeller(){
    experience:document.getElementById('sellerExperience').value,rules_confirmed:document.getElementById('sellerRules').checked
   })});await refresh()}catch(e){alert(e.message);apply.disabled=false}
  });
- const payout=document.getElementById('sellerRequestPayout');if(payout)payout.addEventListener('click',async()=>{payout.disabled=true;try{const files=Array.from(document.getElementById('sellerPayoutFiles').files||[]);if(!files.length||files.length>10||files.reduce((n,f)=>n+f.size,0)>500*1024*1024)throw Error('Выберите 1–10 файлов общим размером до 500 МБ');const file_ids=[];for(let i=0;i<files.length;i++){const f=files[i];document.getElementById('sellerUploadStatus').textContent='Загрузка '+(i+1)+'/'+files.length;const res=await fetch('/api/seller/payout-files',{method:'POST',headers:Object.assign({},headers,{'Content-Type':f.type||'application/octet-stream','X-Filename':f.name}),body:f});const d=await res.json();if(!res.ok)throw Error(d.detail||'Ошибка загрузки');file_ids.push(d.id)}await api('/api/seller/payouts',{method:'POST',body:JSON.stringify({amount:Number(document.getElementById('sellerPayoutAmount').value),proof:document.getElementById('sellerPayoutProof').value,payment_details:document.getElementById('sellerPayoutDetails').value,file_ids})});await refresh()}catch(e){alert(e.message);payout.disabled=false}});
+ const payout=document.getElementById('sellerRequestPayout');if(payout)payout.addEventListener('click',async()=>{payout.disabled=true;try{const files=Array.from(document.getElementById('sellerPayoutFiles').files||[]);if(!files.length||files.length>10||files.reduce((n,f)=>n+f.size,0)>10*1024*1024)throw Error('Выберите 1–10 файлов общим размером до 10 МБ');const file_ids=[];for(let i=0;i<files.length;i++){const f=files[i];document.getElementById('sellerUploadStatus').textContent='Загрузка '+(i+1)+'/'+files.length;const res=await fetch('/api/seller/payout-files',{method:'POST',headers:Object.assign({},headers,{'Content-Type':f.type||'application/octet-stream','X-Filename':f.name}),body:f});const d=await res.json();if(!res.ok)throw Error(d.detail||'Ошибка загрузки');file_ids.push(d.id)}await api('/api/seller/payouts',{method:'POST',body:JSON.stringify({amount:Number(document.getElementById('sellerPayoutAmount').value),proof:document.getElementById('sellerPayoutProof').value,payment_details:document.getElementById('sellerPayoutDetails').value,file_ids})});await refresh()}catch(e){alert(e.message);payout.disabled=false}});
  const add=document.getElementById('sellerAddListing');
  if(add)add.addEventListener('click',async()=>{
   const name=document.getElementById('sellerListingName').value.trim(),price=Number(document.getElementById('sellerListingStars').value),stock=Number(document.getElementById('sellerListingStock').value);
