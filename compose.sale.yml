@@ -1,0 +1,11 @@
+services:
+  shreksich-ai:
+    build: .
+    restart: unless-stopped
+    env_file: .env.sale
+    environment:
+      SHREKSICH_AI_DB: /data/shreksich_ai.db
+    volumes:
+      - shreksich_ai_data:/data
+volumes:
+  shreksich_ai_data:
