@@ -2035,31 +2035,45 @@ async def upload_seller_payout_file(request:Request,x_telegram_init_data:str|Non
     filename=os.path.basename(x_filename or "file")[:180]
     if os.path.splitext(filename)[1].lower() not in (".jpg",".jpeg",".png",".webp",".gif",".mp4",".mov",".webm",".pdf",".heic"):
         raise HTTPException(415,"Разрешены фото, видео и PDF")
-    async with db_write_lock:
-        conn=await db()
-        try:
-            seller=await (await conn.execute("SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,))).fetchone()
-            usage=await (await conn.execute("SELECT COUNT(*) n,COALESCE(SUM(size_bytes),0) total FROM seller_payout_files WHERE seller_id=? AND payout_id=0",(uid,))).fetchone()
-            if not seller or seller["status"]!="approved": raise HTTPException(403,"Продавец не одобрен")
-            if usage["n"]>=10 or usage["total"]>=PAYOUT_FILE_LIMIT: raise HTTPException(413,"Лимит 10 файлов / 10 МБ")
-            fid=uuid.uuid4().hex
-            PAYOUT_FILES_DIR.mkdir(parents=True,exist_ok=True)
-            path=PAYOUT_FILES_DIR/fid
-            size=0
+    if request.headers.get("content-length","").isdigit() and int(request.headers["content-length"])>PAYOUT_FILE_LIMIT:
+        raise HTTPException(413,"Файл превышает лимит 10 МБ")
+    conn=await db()
+    try:
+        seller=await (await conn.execute("SELECT status FROM shop_sellers WHERE telegram_id=?",(uid,))).fetchone()
+        if not seller or seller["status"]!="approved": raise HTTPException(403,"Продавец не одобрен")
+    finally:
+        await conn.close()
+    fid=uuid.uuid4().hex
+    PAYOUT_FILES_DIR.mkdir(parents=True,exist_ok=True)
+    path=PAYOUT_FILES_DIR/fid
+    size=0
+    try:
+        with open(path,"xb") as out:
+            async for chunk in request.stream():
+                size+=len(chunk)
+                if size>PAYOUT_FILE_LIMIT: raise HTTPException(413,"Превышено 10 МБ")
+                out.write(chunk)
+        if not size: raise HTTPException(400,"Пустой файл")
+        # Only lock SQLite while checking quota and committing metadata.
+        async with db_write_lock:
+            conn=await db()
             try:
-                with open(path,"xb") as out:
-                    async for chunk in request.stream():
-                        size+=len(chunk)
-                        if size+usage["total"]>PAYOUT_FILE_LIMIT: raise HTTPException(413,"Превышено 10 МБ")
-                        out.write(chunk)
-                if not size: raise HTTPException(400,"Пустой файл")
+                await conn.execute("BEGIN IMMEDIATE")
+                usage=await (await conn.execute(
+                    "SELECT COUNT(*) n,COALESCE(SUM(size_bytes),0) total FROM seller_payout_files WHERE seller_id=? AND payout_id=0",(uid,)
+                )).fetchone()
+                if usage["n"]>=10 or usage["total"]+size>PAYOUT_FILE_LIMIT:
+                    raise HTTPException(413,"Лимит 10 файлов / 10 МБ")
                 await conn.execute("INSERT INTO seller_payout_files(id,seller_id,original_name,size_bytes,created_at) VALUES(?,?,?,?,?)",(fid,uid,filename,size,int(time.time())))
                 await conn.commit()
             except:
-                path.unlink(missing_ok=True)
+                await conn.rollback()
                 raise
-        finally:
-            await conn.close()
+            finally:
+                await conn.close()
+    except:
+        path.unlink(missing_ok=True)
+        raise
     return {"id":fid,"name":filename,"size":size}
 
 @app.get("/api/admin/seller-payout-files/{file_id}")
