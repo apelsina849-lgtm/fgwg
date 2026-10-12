@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+!.env.sale.example
+*.db
+*.db-shm
+*.db-wal
+__pycache__/
+*.pyc
+backups/
