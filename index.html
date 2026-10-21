@@ -47,7 +47,7 @@
     </div>
   </section>
   <section id="intro" class="intro">
-    <div class="intro-noise"></div><div class="intro-content"><div class="intro-orbit"><span>◈</span></div><div class="eyebrow">ПЕРВЫЙ ОСКОЛОК ВСЕЛЕННОЙ</div><h1>WORLD <em>SHIFT</em></h1><p>Меняй законы реальности. Исследуй затерянный остров. Собирай осколки энергии и испытывай возможности ядра.</p><div class="intro-features"><div>◈ <span>3D МИР</span></div><div>⇵ <span>ГРАВИТАЦИЯ</span></div><div>⚡ <span>ЭНЕРГИЯ</span></div></div><button id="startButton" class="start-button">НАЧАТЬ ИССЛЕДОВАНИЕ <span>↗</span></button><div class="intro-footnote">АЛЬФА 0.2 · РАБОТАЕТ БЕЗ СЕТИ ПОСЛЕ ЗАГРУЗКИ · БЕЗ РЕГИСТРАЦИИ</div></div>
+    <div class="intro-noise"></div><div class="intro-content"><div class="intro-orbit"><span>◈</span></div><div class="eyebrow">ПЕРВЫЙ ОСКОЛОК ВСЕЛЕННОЙ</div><h1>WORLD <em>SHIFT</em></h1><p>Меняй законы реальности. Исследуй затерянный остров. Собирай осколки энергии и испытывай возможности ядра.</p><div class="intro-features"><div>◈ <span>3D МИР</span></div><div>⇵ <span>ГРАВИТАЦИЯ</span></div><div>⚡ <span>ЭНЕРГИЯ</span></div></div><button id="startButton" class="start-button">НАЧАТЬ ИССЛЕДОВАНИЕ <span>↗</span></button><div class="intro-footnote">АЛЬФА 0.2.2 · ИГРАЙ В БРАУЗЕРЕ · БЕЗ РЕГИСТРАЦИИ</div></div>
   </section>
   <div id="error" class="error hidden">WebGL недоступен в этом браузере. Попробуй открыть игру в Safari или Chrome.</div>
   <script>'use strict';
@@ -122,7 +122,7 @@ let toastTimer=0;
 function toast(message){const el=$('toast');el.textContent=message;el.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('visible'),2800);}
 function updateUI(){let p=Math.round(state.energy);$('energyValue').textContent=p+'%';$('energyFill').style.width=p+'%';$('shardCount').textContent=state.shards;$('shiftTag').hidden=!state.core;$('physicsTag').textContent=`G ${settings.gravity}% · V ${settings.speed}%`;$('objectiveText').textContent=state.won?'Испытание пройдено! Исследуй остров':`Собери 8 осколков энергии`;}
 function resetCore(){state.core=false;settings.gravity=100;settings.speed=100;updateUI();toast('Обычная физика восстановлена');}
-function jump(){if(!state.running||!$panel.classList.contains('hidden'))return;if(player.y<=elevation(player.x,player.z)+.13){player.vy=8/Math.sqrt(Math.max(.2,settings.gravity/100));}}
+function jump(){if(!state.running||!$panel.classList.contains('hidden'))return;if(player.y<=elevation(player.x,player.z)+.13){player.vy=8/Math.sqrt(Math.max(.2,(state.core?settings.gravity:100)/100));}}
 const joy=$('joystick'),knob=$('joy-knob');let joyPointer=null,lookPointer=null,lookX=0,lookY=0;
 function joyMove(e){const r=joy.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,d=Math.min(r.width*.31,54),dx=e.clientX-cx,dy=e.clientY-cy,m=Math.max(d,Math.hypot(dx,dy));state.moveX=dx/m;state.moveY=dy/m;knob.style.transform=`translate(${state.moveX*d}px,${state.moveY*d}px)`;}
 joy.addEventListener('pointerdown',e=>{e.preventDefault();joyPointer=e.pointerId;joy.setPointerCapture(e.pointerId);joyMove(e);});joy.addEventListener('pointermove',e=>{if(e.pointerId===joyPointer)joyMove(e);});const joyEnd=e=>{if(e.pointerId!==joyPointer)return;joyPointer=null;state.moveX=state.moveY=0;knob.style.transform='translate(0,0)';};joy.addEventListener('pointerup',joyEnd);joy.addEventListener('pointercancel',joyEnd);
@@ -135,9 +135,9 @@ $('gravity').addEventListener('input',()=>{settings.gravity=+$('gravity').value;
 function syncSliders(){ $('gravityValue').textContent=settings.gravity+'%';$('speedValue').textContent=settings.speed+'%';$('drainValue').textContent=(1.5+Math.abs(settings.gravity-100)*.065+Math.abs(settings.speed-100)*.04).toFixed(1)+' энергии/с'; document.querySelectorAll('.preset').forEach(b=>b.classList.remove('chosen'));}
 const presets={lunar:[35,135],turbo:[100,225],heavy:[185,75]};document.querySelectorAll('.preset').forEach(b=>b.addEventListener('click',()=>{let [g,s]=presets[b.dataset.mode];settings.gravity=g;settings.speed=s;$('gravity').value=g;$('speed').value=s;syncSliders();b.classList.add('chosen');}));
 $('activateButton').addEventListener('click',()=>{if(state.energy<5){toast('Ядро разряжено! Собирай осколки.');return;}state.core=true;$panel.classList.add('hidden');updateUI();toast('SHIFT активирован — законы изменены');});$('resetButton').addEventListener('click',()=>{resetCore();$panel.classList.add('hidden');});$('startButton').addEventListener('click',()=>{$intro.classList.add('hidden');state.running=true;state.last=performance.now();toast('Найди восемь сияющих осколков!');});
-function simulation(dt){state.time+=dt;if(!state.running||!$panel.classList.contains('hidden'))return;let mx=state.moveX,my=state.moveY;if(keys.KeyW||keys.ArrowUp)my=-1;if(keys.KeyS||keys.ArrowDown)my=1;if(keys.KeyA||keys.ArrowLeft)mx=-1;if(keys.KeyD||keys.ArrowRight)mx=1;let magnitude=Math.min(1,Math.hypot(mx,my));let yaw=state.camYaw;let forward=[-Math.sin(yaw),-Math.cos(yaw)],right=[Math.cos(yaw),-Math.sin(yaw)];let dx=right[0]*mx-forward[0]*my,dz=right[1]*mx-forward[1]*my;let len=Math.hypot(dx,dz)||1,spd=5.3*(settings.speed/100)*magnitude;player.x+=dx/len*spd*dt;player.z+=dz/len*spd*dt;
+function simulation(dt){state.time+=dt;if(!state.running||!$panel.classList.contains('hidden'))return;let mx=state.moveX,my=state.moveY;if(keys.KeyW||keys.ArrowUp)my=-1;if(keys.KeyS||keys.ArrowDown)my=1;if(keys.KeyA||keys.ArrowLeft)mx=-1;if(keys.KeyD||keys.ArrowRight)mx=1;let magnitude=Math.min(1,Math.hypot(mx,my));let yaw=state.camYaw;let forward=[-Math.sin(yaw),-Math.cos(yaw)],right=[Math.cos(yaw),-Math.sin(yaw)];let dx=right[0]*mx-forward[0]*my,dz=right[1]*mx-forward[1]*my;let len=Math.hypot(dx,dz)||1,spd=5.3*((state.core?settings.speed:100)/100)*magnitude;player.x+=dx/len*spd*dt;player.z+=dz/len*spd*dt;
 player.x=Math.max(-33,Math.min(33,player.x));player.z=Math.max(-33,Math.min(33,player.z));
-let floor=elevation(player.x,player.z);if(player.y<=floor&&player.vy<=0){player.y=floor;player.vy=0;}else{player.vy-=19.6*(settings.gravity/100)*dt;player.y+=player.vy*dt;}if(player.y<floor){player.y=floor;player.vy=0;}
+let floor=elevation(player.x,player.z);if(player.y<=floor&&player.vy<=0){player.y=floor;player.vy=0;}else{player.vy-=19.6*((state.core?settings.gravity:100)/100)*dt;player.y+=player.vy*dt;}if(player.y<floor){player.y=floor;player.vy=0;}
 if(magnitude>.03){let tyaw=Math.atan2(dx,dz);player.yaw=tyaw;}
 if(state.core){state.energy-= (1.5+Math.abs(settings.gravity-100)*.065+Math.abs(settings.speed-100)*.04)*dt;if(state.energy<=0){state.energy=0;state.core=false;settings.gravity=100;settings.speed=100;toast('Энергия закончилась — SHIFT отключён');}}
 else state.energy=Math.min(100,state.energy+5*dt);
@@ -154,9 +154,7 @@ function frame(t){let delta=Math.min(.045,(t-(state.last||t))/1000||0);state.las
 window.addEventListener('resize',viewport);
 window.addEventListener('pagehide',()=>{try{localStorage.setItem('worldshift_record',String(state.shards));}catch(_){}});
 syncSliders();updateUI();
-if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
-  navigator.serviceWorker.register('./sw.js').catch(err=>console.info('Офлайн-кэш недоступен:',err));
-}
+// Standalone branch preview is dependency-free: no service worker registration is necessary.
 })();
 </script>
 </body>
