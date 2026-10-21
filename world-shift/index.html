@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#071629"><meta name="apple-mobile-web-app-capable" content="yes">
+<title>WORLD SHIFT • Mobile Alpha</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#091d2e;color:#e9faff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}canvas{display:block;position:absolute;inset:0;width:100%;height:100%;touch-action:none}button{font-family:inherit;cursor:pointer}.hud{position:fixed;inset:0;pointer-events:none}.hud>*{pointer-events:auto}.top{position:absolute;left:calc(env(safe-area-inset-left) + 17px);right:calc(env(safe-area-inset-right) + 17px);top:calc(env(safe-area-inset-top) + 13px);display:flex;justify-content:space-between;align-items:flex-start;gap:15px;pointer-events:none}.title{font-size:clamp(17px,2.5vw,25px);letter-spacing:2px;font-weight:950;text-shadow:0 3px 11px #071320}.title span{color:#77e2ff}.subtitle{font-size:9px;letter-spacing:2px;opacity:.8;margin-top:3px}.status{font-size:10px;letter-spacing:1px;background:#092036b3;border:1px solid #9ae4ff59;border-radius:20px;padding:10px 13px;white-space:nowrap}.dot{display:inline-block;background:#67efab;width:7px;height:7px;border-radius:50%;margin-right:4px;box-shadow:0 0 10px #67efab}.stats{position:absolute;top:calc(env(safe-area-inset-top) + 79px);left:calc(env(safe-area-inset-left) + 17px);background:#081d30c9;border:1px solid #9ae4ff50;border-radius:12px;padding:11px 13px;min-width:210px;backdrop-filter:blur(9px)}.statrow{display:flex;justify-content:space-between;font-size:10px;gap:15px;font-weight:800;letter-spacing:.5px}.statrow b{color:#8fe9ff}.bar{width:100%;height:5px;border-radius:5px;background:#24445b;margin:8px 0 7px;overflow:hidden}.bar>div{height:100%;background:linear-gradient(90deg,#3eaaff,#8bf4ff);width:100%}.hint{font-size:9px;opacity:.83;letter-spacing:.2px}.goal{position:absolute;top:calc(env(safe-area-inset-top) + 79px);right:calc(env(safe-area-inset-right) + 17px);font-size:11px;background:#081d30c9;border:1px solid #9ae4ff50;border-radius:12px;padding:12px;max-width:185px}.goal small{color:#77ddff;font-size:9px;letter-spacing:1px;display:block;margin-bottom:3px}.stick{position:absolute;left:calc(env(safe-area-inset-left) + 22px);bottom:calc(env(safe-area-inset-bottom) + 35px);width:136px;height:136px;border:2px solid #9be0ffa1;border-radius:50%;background:#0a324880;box-shadow:0 0 0 8px #b9eeff14,inset 0 0 35px #041827;touch-action:none}.stick:before,.stick:after{content:"";position:absolute;background:#caecff44}.stick:before{width:1px;height:88%;left:50%;top:6%}.stick:after{height:1px;width:88%;top:50%;left:6%}.knob{position:absolute;width:62px;height:62px;left:35px;top:35px;border-radius:50%;border:2px solid #c2eeff;background:linear-gradient(145deg,#62bbefa8,#196289d9);box-shadow:0 6px 20px #041a27;pointer-events:none}.actions{position:absolute;right:calc(env(safe-area-inset-right) + 22px);bottom:calc(env(safe-area-inset-bottom) + 27px);display:flex;flex-direction:column;gap:10px}.action{height:63px;width:108px;color:#e1f8ff;font-weight:900;font-size:11px;letter-spacing:1px;border:1px solid #98dfff9f;background:#0a2f4ac9;border-radius:15px;box-shadow:0 5px 24px #0016}.action.primary{background:linear-gradient(145deg,#2288b5e8,#124461ee)}.action .symbol{display:block;font-size:21px;color:#8ee9ff;margin-bottom:2px}.actions button:active{filter:brightness(1.3);transform:scale(.97)}.toast{position:absolute;left:50%;top:22%;transform:translate(-50%,-10px);text-align:center;max-width:80vw;background:#092741e8;border:1px solid #74def7;border-radius:12px;padding:12px 18px;opacity:0;transition:.25s;font-size:12px;font-weight:700;pointer-events:none}.toast.show{opacity:1;transform:translate(-50%,0)}.cross{position:absolute;left:50%;top:52%;width:16px;height:16px;margin:-8px;border:1px solid #e6f7ffab;border-radius:50%;pointer-events:none}.overlay{position:fixed;inset:0;background:#04101cdb;display:flex;align-items:center;justify-content:center;z-index:6;padding:15px;backdrop-filter:blur(14px)}.overlay.hidden{display:none}.panel{width:min(440px,100%);max-height:calc(100dvh - 22px);overflow:auto;touch-action:pan-y;border:1px solid #74cef99c;border-radius:22px;background:linear-gradient(155deg,#1b3d59,#081b2e 85%);box-shadow:0 20px 70px #0009;padding:21px 24px;text-align:left}.panel h1{font-size:33px;letter-spacing:2px;margin:4px 0}.panel h1 em{font-style:normal;color:#89e5ff}.eyebrow{color:#95e1ff;letter-spacing:3px;font-size:10px;font-weight:900}.desc{font-size:13px;color:#bacfdb;line-height:1.6;margin:15px 0 18px}.panel label{display:flex;justify-content:space-between;margin:19px 0 8px;font-size:12px;font-weight:850}.panel label output{color:#94eaff;font-size:17px}.panel input{width:100%;accent-color:#64d6ff;height:26px;touch-action:pan-x}.presets{display:flex;gap:7px}.presets button{flex:1;border:1px solid #79cbef83;border-radius:10px;color:#d9f6ff;background:#193e5a;padding:14px 4px;font-size:10px;font-weight:800}.panel button.main{width:100%;height:49px;background:linear-gradient(90deg,#5ac6fd,#99f2ff);color:#08233a;border:0;border-radius:11px;margin-top:16px;font-size:12px;letter-spacing:1px;font-weight:950}.panel button.secondary{width:100%;height:43px;background:none;border:1px solid #7594aa77;border-radius:10px;color:#d5ecff;margin-top:10px;font-weight:700}.intro{text-align:center;max-width:460px}.intro .mark{font-size:66px;color:#8fe8ff;text-shadow:0 0 50px #73e9ff}.intro h1{font-size:clamp(35px,8vw,60px);margin:0 0 10px;letter-spacing:3px}.intro h1 span{color:#85e9ff}.intro p{color:#c2deec;font-size:14px;line-height:1.65}.intro .features{font-size:11px;color:#92e5ff;letter-spacing:1px;margin:20px 0 5px}.intro button{width:100%;height:55px;border-radius:13px;border:0;background:linear-gradient(90deg,#65ccff,#a4f7ff);color:#072239;font-weight:1000;letter-spacing:1px;font-size:13px;margin-top:13px}.intro small{display:block;margin-top:15px;opacity:.68;font-size:10px}.error{position:absolute;bottom:10px;left:10px;right:10px;background:#522b2b;color:white;padding:10px;font-size:12px;display:none;z-index:10}@media(max-height:420px){.stats{top:calc(env(safe-area-inset-top) + 58px);padding:6px 10px}.goal{top:calc(env(safe-area-inset-top) + 58px);padding:8px}.stick{width:110px;height:110px;bottom:calc(env(safe-area-inset-bottom) + 15px)}.knob{left:25px;top:25px;width:56px;height:56px}.action{height:53px;width:97px}.actions{bottom:calc(env(safe-area-inset-bottom) + 13px);gap:6px}.panel{padding:12px 19px}.panel h1{font-size:24px}.panel .desc{margin:7px 0}.panel label{margin:8px 0 2px}}@media(orientation:portrait){.goal{top:calc(env(safe-area-inset-top) + 140px)}.stats{max-width:55vw;min-width:0}.stick{bottom:calc(env(safe-area-inset-bottom) + 75px)}.actions{bottom:calc(env(safe-area-inset-bottom) + 75px)}} 
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div class="hud">
+<div class="top"><div><div class="title">◈ WORLD<span>SHIFT</span></div><div class="subtitle">MOBILE ALPHA · FIRST ISLAND</div></div><div class="status"><span class="dot"></span> ОДИНОЧНАЯ ИГРА</div></div>
+<div class="stats"><div class="statrow"><span>⚡ ЭНЕРГИЯ ЯДРА</span><b id="energyText">100%</b></div><div class="bar"><div id="energyFill"></div></div><div class="hint">◈ ОСКОЛКИ: <b id="shardsText">0 / 8</b> · <span id="modeText">NORMAL</span></div></div>
+<div class="goal"><small>ЗАДАНИЕ</small><span id="goalText">Собери 8 осколков энергии</span></div>
+<div class="cross"></div>
+<div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+<div class="actions"><button class="action primary" id="coreBtn"><span class="symbol">◈</span>SHIFT CORE</button><button class="action" id="jumpBtn"><span class="symbol">↑</span>ПРЫЖОК</button></div>
+<div class="toast" id="toast"></div>
+</div>
+<div class="overlay" id="intro"><div class="intro"><div class="mark">◈</div><h1>WORLD <span>SHIFT</span></h1><p>Добро пожаловать на первый осколок вселенной. Собирай кристаллы энергии и меняй законы физики прямо во время движения.</p><div class="features">3D ОСТРОВ · ГРАВИТАЦИЯ · SHIFT CORE · ИСПЫТАНИЕ</div><button id="startBtn">НАЧАТЬ ИССЛЕДОВАНИЕ →</button><small>БЕСПЛАТНО · БЕЗ РЕГИСТРАЦИИ · АЛЬФА</small></div></div>
+<div class="overlay hidden" id="modal"><div class="panel"><div class="eyebrow">РЕДАКТОР РЕАЛЬНОСТИ</div><h1>SHIFT <em>CORE</em></h1><p class="desc">Поменяй гравитацию и скорость. Необычная физика расходует энергию, обычная — восстанавливает её.</p><div class="presets"><button data-g="35" data-s="135">☾ ЛУНА</button><button data-g="100" data-s="220">» ТУРБО</button><button data-g="180" data-s="70">◆ ТЯЖЕСТЬ</button></div><label>ГРАВИТАЦИЯ <output id="gravVal">35%</output></label><input id="grav" type="range" min="20" max="200" step="5" value="35"><label>СКОРОСТЬ <output id="speedVal">135%</output></label><input id="speed" type="range" min="50" max="250" step="5" value="135"><button class="main" id="applyBtn">АКТИВИРОВАТЬ SHIFT →</button><button class="secondary" id="normalBtn">ОБЫЧНАЯ ФИЗИКА</button><button class="secondary" id="closeBtn">ЗАКРЫТЬ</button></div></div>
+<div id="error" class="error"></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+const el=id=>document.getElementById(id);
+const game=el('game'), energyText=el('energyText'), energyFill=el('energyFill'), shardsText=el('shardsText'), modeText=el('modeText'), intro=el('intro'), modal=el('modal');
+let renderer;
+try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'default'});}catch(e){el('error').style.display='block';el('error').textContent='3D недоступно: '+e.message;throw e;}
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
+renderer.setSize(innerWidth,innerHeight);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;game.appendChild(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x83b7d0);scene.fog=new THREE.FogExp2(0x83b7d0,.013);
+const camera=new THREE.PerspectiveCamera(64,innerWidth/innerHeight,.1,150);const hemi=new THREE.HemisphereLight(0xdaf4ff,0x4d443e,2.1);scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xffe2ad,2.6);sun.position.set(-18,25,13);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-28;sun.shadow.camera.right=28;sun.shadow.camera.top=28;sun.shadow.camera.bottom=-28;scene.add(sun);
+const mat=(c,rough=1)=>new THREE.MeshStandardMaterial({color:c,roughness:rough,metalness:0});
+const grass=mat(0x4c9169),soil=mat(0x6d6658),rock=mat(0x83959c),wood=mat(0x7f5941),foliage=mat(0x247459),foliage2=mat(0x398664),water=mat(0x3693a6,.3);
+const ground=new THREE.Mesh(new THREE.CylinderGeometry(15,13.4,2.3,12,1),grass);ground.position.y=-1.18;ground.receiveShadow=true;scene.add(ground);
+const cliff=new THREE.Mesh(new THREE.CylinderGeometry(13.2,7.8,4.4,12,1),soil);cliff.position.y=-4.3;cliff.receiveShadow=true;scene.add(cliff);
+const lower=new THREE.Mesh(new THREE.ConeGeometry(8.2,8.2,11),rock);lower.position.y=-9.8;lower.rotation.y=.3;scene.add(lower);
+const border=new THREE.Mesh(new THREE.TorusGeometry(15,.13,8,64),mat(0x95d7e9));border.rotation.x=Math.PI/2;border.position.y=.04;scene.add(border);
+const sea=new THREE.Mesh(new THREE.PlaneGeometry(280,280),water);sea.rotation.x=-Math.PI/2;sea.position.y=-23;scene.add(sea);
+const islandRnd=(i)=>Math.sin(i*127.1)*43758.5453%1;
+function rnd(i){const n=Math.sin(i*127.1+3.7)*43758.5453;return n-Math.floor(n)}
+const cylinder=(r1,r2,h,m,x,y,z,n=8)=>{const mesh=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,n),m);mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);return mesh};
+function tree(x,z,s){cylinder(.17*s,.27*s,2*s,wood,x,1*s,z,7);const crown=new THREE.Mesh(new THREE.ConeGeometry(1.15*s,2.6*s,7),rnd(x*z)>.5?foliage:foliage2);crown.position.set(x,2.8*s,z);crown.castShadow=true;scene.add(crown);}
+for(let i=0;i<31;i++){const a=rnd(i*3)*Math.PI*2,r=6+rnd(i*5+1)*7.4,x=Math.cos(a)*r,z=Math.sin(a)*r;if(Math.abs(x)<3&&Math.abs(z)<6)continue;tree(x,z,.72+rnd(i*9)*.65)}
+for(let i=0;i<27;i++){const a=rnd(i+110)*6.283,r=5+rnd(i*17)*8.7,x=Math.cos(a)*r,z=Math.sin(a)*r;const b=new THREE.Mesh(new THREE.DodecahedronGeometry(.25+rnd(i*8)*.8,0),rock);b.position.set(x,.13,z);b.rotation.y=rnd(i*4)*5;b.castShadow=true;scene.add(b)}
+const gate= new THREE.Group();const gateStone=mat(0x516778),gateGlow=new THREE.MeshBasicMaterial({color:0x79eaff,transparent:true,opacity:.55,side:THREE.DoubleSide});
+function beam(x,y,z,w,h,d){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),gateStone);m.position.set(x,y,z);m.castShadow=true;gate.add(m)}
+beam(-1.4,2,-10,0.65,4.2,.85);beam(1.4,2,-10,.65,4.2,.85);beam(0,4.15,-10,3.5,.65,.95);
+const lightPlane=new THREE.Mesh(new THREE.PlaneGeometry(2.3,3.5),gateGlow);lightPlane.position.set(0,2,-10);gate.add(lightPlane);scene.add(gate);
+const portalLight=new THREE.PointLight(0x5dddff,16,10);portalLight.position.set(0,2,-9.8);scene.add(portalLight);
+for(let i=0;i<8;i++){const x=-10+i*2.8;const m=new THREE.Mesh(new THREE.BoxGeometry(2,.36,2),rock);m.position.set(x,.22,-6);m.castShadow=true;m.receiveShadow=true;scene.add(m)}
+const player=new THREE.Group();
+const suit=mat(0x2875ba,.65),skin=mat(0xe6b68d),visor=mat(0x08344c,.2),boots=mat(0x16263b);
+function bodyPart(geo,m,x,y,z){const mesh=new THREE.Mesh(geo,m);mesh.position.set(x,y,z);mesh.castShadow=true;player.add(mesh);return mesh}
+bodyPart(new THREE.CapsuleGeometry(.36,.75,4,8),suit,0,1.12,0);
+bodyPart(new THREE.SphereGeometry(.30,10,8),skin,0,1.92,0);
+bodyPart(new THREE.BoxGeometry(.48,.21,.12),visor,0,1.94,-.26);
+bodyPart(new THREE.BoxGeometry(.23,.62,.23),boots,-.19,.38,0);
+bodyPart(new THREE.BoxGeometry(.23,.62,.23),boots,.19,.38,0);
+bodyPart(new THREE.BoxGeometry(.17,.68,.19),suit,-.46,1.08,0);
+bodyPart(new THREE.BoxGeometry(.17,.68,.19),suit,.46,1.08,0);
+player.position.set(0,.04,7);scene.add(player);
+const crystalMaterial=new THREE.MeshStandardMaterial({color:0x9befff,emissive:0x40bcf5,emissiveIntensity:1.4,roughness:.25,metalness:.2});
+const crystals=[];
+for(let i=0;i<8;i++){const a=(i/8)*Math.PI*2+.4,r=6.8+(i%3)*1.5;const mesh=new THREE.Mesh(new THREE.OctahedronGeometry(.53,0),crystalMaterial);mesh.position.set(Math.cos(a)*r,1.15,Math.sin(a)*r);mesh.castShadow=true;scene.add(mesh);crystals.push({mesh,used:false})}
+const mountains=[];
+for(let i=0;i<9;i++){const a=i*6.283/9,r=36+(i%3)*11;const group=new THREE.Group();const base=new THREE.Mesh(new THREE.CylinderGeometry(6+(i%3),5,1.3,7),grass);base.position.y=-.8;group.add(base);const base2=new THREE.Mesh(new THREE.ConeGeometry(5.5,9,7),rock);base2.rotation.z=Math.PI;base2.position.y=-6;group.add(base2);const t=new THREE.Mesh(new THREE.ConeGeometry(2,5.5,6),foliage2);t.position.set(1,2.3,0);group.add(t);group.position.set(Math.cos(a)*r, -2+(i%2)*3,Math.sin(a)*r);scene.add(group);mountains.push(group)}
+let started=false,paused=false,active=false,gravity=1,speed=1,energy=100,shards=0,vy=0,yaw=0,pitch=.25,clock=performance.now(),joy={x:0,y:0},touchView=-1,lastView={x:0,y:0};const keys={};
+function toast(s){const t=el('toast');t.textContent=s;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),2500)}
+function setNormal(){active=false;gravity=1;speed=1;modeText.textContent='NORMAL';toast('Обычная физика восстановлена')}
+function sync(){energyText.textContent=Math.round(energy)+'%';energyFill.style.width=energy+'%';shardsText.textContent=shards+' / 8'}
+const stick=el('stick'),knob=el('knob');
+function moveStick(e){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;const dx=(e.clientX-cx)/(r.width*.39),dy=(e.clientY-cy)/(r.height*.39),len=Math.max(1,Math.hypot(dx,dy));joy.x=dx/len;joy.y=dy/len;knob.style.transform='translate('+(joy.x*(r.width*.27))+'px,'+(joy.y*(r.height*.27))+'px)'}
+stick.addEventListener('pointerdown',e=>{e.preventDefault();stick.setPointerCapture(e.pointerId);moveStick(e)});
+stick.addEventListener('pointermove',e=>{if(stick.hasPointerCapture(e.pointerId)){e.preventDefault();moveStick(e)}});
+function release(){joy.x=0;joy.y=0;knob.style.transform='translate(0,0)'}
+stick.addEventListener('pointerup',release);stick.addEventListener('pointercancel',release);
+renderer.domElement.addEventListener('pointerdown',e=>{if(e.clientX<innerWidth*.32)return;touchView=e.pointerId;lastView={x:e.clientX,y:e.clientY};renderer.domElement.setPointerCapture(e.pointerId)});
+renderer.domElement.addEventListener('pointermove',e=>{if(e.pointerId!==touchView)return;const dx=e.clientX-lastView.x,dy=e.clientY-lastView.y;yaw-=dx*.005;pitch=THREE.MathUtils.clamp(pitch+dy*.003,-.12,.85);lastView={x:e.clientX,y:e.clientY}});
+renderer.domElement.addEventListener('pointerup',e=>{if(e.pointerId===touchView)touchView=-1});
+addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Space'){e.preventDefault();jump()}if(e.code==='KeyE'){modal.classList.remove('hidden');paused=true}if(e.code==='KeyQ')active?setNormal():openCore()});
+addEventListener('keyup',e=>keys[e.code]=false);
+function jump(){if(!started||paused)return;if(player.position.y<.065){vy=8.5/Math.sqrt(Math.max(.22,gravity));toast(gravity<.55?'Лунный прыжок!':'Прыжок')}}
+el('jumpBtn').addEventListener('click',jump);
+function openCore(){modal.classList.remove('hidden');paused=true}
+el('coreBtn').addEventListener('click',openCore);
+el('closeBtn').addEventListener('click',()=>{modal.classList.add('hidden');paused=false});
+el('normalBtn').addEventListener('click',()=>{setNormal();modal.classList.add('hidden');paused=false});
+for(const b of document.querySelectorAll('.presets button'))b.addEventListener('click',()=>{el('grav').value=b.dataset.g;el('speed').value=b.dataset.s;syncSliders()});
+function syncSliders(){el('gravVal').textContent=el('grav').value+'%';el('speedVal').textContent=el('speed').value+'%'}
+el('grav').addEventListener('input',syncSliders);el('speed').addEventListener('input',syncSliders);
+el('applyBtn').addEventListener('click',()=>{if(energy<8){toast('Недостаточно энергии');return}gravity=Number(el('grav').value)/100;speed=Number(el('speed').value)/100;active=true;modeText.textContent='SHIFT ACTIVE';modal.classList.add('hidden');paused=false;toast('SHIFT CORE активирован')});
+el('startBtn').addEventListener('click',()=>{started=true;intro.classList.add('hidden');toast('Собери все 8 осколков!')});
+function update(dt){if(!started||paused)return;const horizontal=joy.x+(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0);const vertical=-joy.y+(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0);const vector=new THREE.Vector2(horizontal,vertical);if(vector.length()>1)vector.normalize();
+const vx=(Math.sin(yaw)*vector.y+Math.cos(yaw)*vector.x)*speed*6.3;
+const vz=(-Math.cos(yaw)*vector.y+Math.sin(yaw)*vector.x)*speed*6.3;
+let nx=player.position.x+vx*dt,nz=player.position.z+vz*dt;if(Math.hypot(nx,nz)<14.1){player.position.x=nx;player.position.z=nz}
+if(vector.length()>.01){player.rotation.y=Math.atan2(-vx,-vz);player.children[2].rotation.z=Math.sin(performance.now()*.012)*.03}
+if(player.position.y>.02||vy>0){vy-=20*gravity*dt;player.position.y+=vy*dt;if(player.position.y<=.02){player.position.y=.02;vy=0}}
+if(active){energy=Math.max(0,energy-dt*(2.4+Math.abs(1-gravity)*8+Math.abs(1-speed)*4));if(energy===0){setNormal();toast('Энергия ядра исчерпана')}}else energy=Math.min(100,energy+dt*8);
+for(let i=0;i<crystals.length;i++){const c=crystals[i];if(c.used)continue;c.mesh.rotation.y+=dt*1.25;c.mesh.position.y=1.1+Math.sin(performance.now()*.002+i)*.22;if(Math.hypot(player.position.x-c.mesh.position.x,player.position.z-c.mesh.position.z)<1.15){c.used=true;scene.remove(c.mesh);shards++;energy=Math.min(100,energy+15);toast('Осколок найден! +15 энергии');if(shards>=8){el('goalText').textContent='Все осколки собраны!';toast('Миссия выполнена! Найди портал на севере')}}}
+if(Math.hypot(player.position.x,player.position.z+10)<2.0&&shards===8){el('goalText').textContent='Мир пройден! ◈';if(!update.win){update.win=true;toast('ПОБЕДА! Первый остров спасён!')}}
+sync()}
+function animate(t){const dt=Math.min(.05,(t-clock)/1000||0);clock=t;update(dt);
+const radius=7.6,py=player.position.y+1.5;
+const cx=player.position.x+Math.sin(yaw)*Math.cos(pitch)*radius,cz=player.position.z+Math.cos(yaw)*Math.cos(pitch)*radius;
+camera.position.lerp(new THREE.Vector3(cx,py+Math.sin(pitch)*radius+2,cz),.15);camera.lookAt(player.position.x,player.position.y+1.2,player.position.z);
+lightPlane.material.opacity=.42+Math.sin(t*.002)*.15;
+renderer.render(scene,camera);requestAnimationFrame(animate)}
+function resize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)}
+addEventListener('resize',resize);syncSliders();sync();requestAnimationFrame(animate);
+</script>
+</body>
+</html>
