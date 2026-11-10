@@ -359,14 +359,14 @@ func _build_loading(root: Control) -> void:
     center.add_child(phase)
 
 func _run_boot() -> void:
-    var progress: ProgressBar = loading_root.get_node("VBoxContainer/BootProgress") if loading_root.has_node("VBoxContainer/BootProgress") else _find_named(loading_root, "BootProgress")
-    var phase: Label = _find_named(loading_root, "BootPhase")
+    var progress := _find_named(loading_root, "BootProgress") as ProgressBar
+    var phase := _find_named(loading_root, "BootPhase") as Label
     var phases := ["BOOTING INCIDENT CORE", "VERIFYING PERSONNEL CACHE", "RESTORING CAMERA LINK", "SEALING ARCHIVE DOOR", "READY"]
     for i in range(101):
         if progress:
             progress.value = i
         if phase:
-            phase.text = phases[min(i / 20, phases.size() - 1)] + "  " + str(i) + "%"
+            phase.text = phases[mini(int(i / 20), phases.size() - 1)] + "  " + str(i) + "%"
         await get_tree().create_timer(0.045).timeout
     var tween := create_tween()
     tween.tween_property(loading_root, "modulate:a", 0.0, 0.45)
@@ -610,7 +610,7 @@ func _show_visitor() -> void:
     record_label.text = _t("record") + "\n\n" + v["name"] + "\nID: " + v["id"] + "\nDIVISION: " + v["division"]
     var statements: Dictionary = v["statement"]
     statement_label.text = _t("statement") + "\n\n" + str(statements.get(language_code, statements.get("en", "")))
-    terminal_title.text = _t("terminal") + "\n" + _t("visitor") + " " + str(current + 1).pad_zeros(2) + " / " + str(visitors.size()).pad_zeros(2)
+    terminal_title.text = _t("terminal") + "\n" + _t("visitor") + " " + ("%02d" % (current + 1)) + " / " + ("%02d" % visitors.size())
     scan_label.text = "..."
     scan_used = false
     scan_button.disabled = false
@@ -726,7 +726,7 @@ func _apply_settings() -> void:
         vsync_check.button_pressed = vsync
     if shake_check:
         shake_check.button_pressed = shake_enabled
-    var slider: HSlider = _find_named(settings_root, "VolumeSlider")
+    var slider := _find_named(settings_root, "VolumeSlider") as HSlider
     if slider:
         slider.value = volume
     DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
@@ -774,7 +774,7 @@ func _refresh_texts() -> void:
         scan_button.text = _t("scan")
         allow_button.text = _t("allow")
         deny_button.text = _t("deny")
-        var hint: Label = _find_named(terminal_root, "ControlsHint")
+        var hint := _find_named(terminal_root, "ControlsHint") as Label
         if hint:
             hint.text = _t("controls")
         if terminal_root.visible and current < visitors.size():
