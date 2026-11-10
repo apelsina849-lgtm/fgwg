@@ -1,0 +1,171 @@
+name: NIGHT PROTOCOL Windows Build
+
+on:
+  push:
+    branches:
+      - night-protocol-build
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download Godot 4.7.2 and export templates
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "4.7.2"
+          $tag = "$version-stable"
+          $godotZip = "$env:RUNNER_TEMP\godot.zip"
+          $templates = "$env:RUNNER_TEMP\templates.tpz"
+          $templatesZip = "$env:RUNNER_TEMP\templates.zip"
+          $godotDir = "$env:RUNNER_TEMP\godot"
+          $templateExtract = "$env:RUNNER_TEMP\template_extract"
+          $godotUrl = "https://github.com/godotengine/godot/releases/download/" + $tag + "/Godot_v" + $tag + "_win64.exe.zip"
+          $templateUrl = "https://github.com/godotengine/godot/releases/download/" + $tag + "/Godot_v" + $tag + "_export_templates.tpz"
+          Invoke-WebRequest -Uri $godotUrl -OutFile $godotZip
+          Expand-Archive -Path $godotZip -DestinationPath $godotDir -Force
+          $godot = Get-ChildItem $godotDir -Filter "Godot*.exe" | Select-Object -First 1
+          if (-not $godot) { throw "Godot executable not found" }
+          "GODOT_EXE=$($godot.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          Invoke-WebRequest -Uri $templateUrl -OutFile $templates
+          Copy-Item $templates $templatesZip -Force
+          Expand-Archive -Path $templatesZip -DestinationPath $templateExtract -Force
+          $target = Join-Path $env:APPDATA "Godot\export_templates\4.7.2.stable"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          $sourceTemplates = Join-Path $templateExtract "templates"
+          Copy-Item "$sourceTemplates\*" $target -Recurse -Force
+          Write-Host "Godot: $($godot.FullName)"
+          Write-Host "Templates: $target"
+
+      - name: Validate game scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          & "$env:GODOT_EXE" --headless --path game --editor --quit-after 3 --log-file "$pwd\game-validate.log"
+          $exit = $LASTEXITCODE
+          if (Test-Path "$pwd\game-validate.log") {
+            Get-Content "$pwd\game-validate.log"
+            $bad = Select-String -Path "$pwd\game-validate.log" -Pattern "Parse Error|SCRIPT ERROR|Used tab character" -Quiet
+            if ($bad) { throw "Game script validation found a parse/script error" }
+          }
+          if ($exit -ne 0) { throw "Godot game validation exited with $exit" }
+
+      - name: Validate launcher scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          & "$env:GODOT_EXE" --headless --path launcher --editor --quit-after 3 --log-file "$pwd\launcher-validate.log"
+          $exit = $LASTEXITCODE
+          if (Test-Path "$pwd\launcher-validate.log") {
+            Get-Content "$pwd\launcher-validate.log"
+            $bad = Select-String -Path "$pwd\launcher-validate.log" -Pattern "Parse Error|SCRIPT ERROR|Used tab character" -Quiet
+            if ($bad) { throw "Launcher script validation found a parse/script error" }
+          }
+          if ($exit -ne 0) { throw "Godot launcher validation exited with $exit" }
+
+      - name: Export Windows executables
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path "$pwd\dist\game" | Out-Null
+          & "$env:GODOT_EXE" --headless --path game --export-release "Windows Desktop" "$pwd\dist\game\NIGHT_PROTOCOL.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Game export failed" }
+          & "$env:GODOT_EXE" --headless --path launcher --export-release "Windows Desktop" "$pwd\dist\NIGHT_PROTOCOL_Launcher.exe"
+          if ($LASTEXITCODE -ne 0) { throw "Launcher export failed" }
+
+          $game = Get-Item "$pwd\dist\game\NIGHT_PROTOCOL.exe"
+          $launcher = Get-Item "$pwd\dist\NIGHT_PROTOCOL_Launcher.exe"
+          if ($game.Length -lt 1000000) { throw "Game executable is unexpectedly small" }
+          if ($launcher.Length -lt 1000000) { throw "Launcher executable is unexpectedly small" }
+          Write-Host "Game bytes: $($game.Length)"
+          Write-Host "Launcher bytes: $($launcher.Length)"
+
+      - name: Smoke-test exported game and launcher
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          & "$pwd\dist\game\NIGHT_PROTOCOL.exe" --headless --quit-after 20 --log-file "$pwd\game-smoke.log"
+          $gameExit = $LASTEXITCODE
+          if (Test-Path "$pwd\game-smoke.log") {
+            Get-Content "$pwd\game-smoke.log"
+            if (Select-String -Path "$pwd\game-smoke.log" -Pattern "Parse Error|SCRIPT ERROR|Used tab character" -Quiet) {
+              throw "Exported game smoke-test found a script error"
+            }
+          }
+          if ($gameExit -ne 0) { throw "Exported game smoke-test exited with $gameExit" }
+
+          & "$pwd\dist\NIGHT_PROTOCOL_Launcher.exe" --headless --quit-after 20 --log-file "$pwd\launcher-smoke.log"
+          $launcherExit = $LASTEXITCODE
+          if (Test-Path "$pwd\launcher-smoke.log") {
+            Get-Content "$pwd\launcher-smoke.log"
+            if (Select-String -Path "$pwd\launcher-smoke.log" -Pattern "Parse Error|SCRIPT ERROR|Used tab character" -Quiet) {
+              throw "Exported launcher smoke-test found a script error"
+            }
+          }
+          if ($launcherExit -ne 0) { throw "Exported launcher smoke-test exited with $launcherExit" }
+
+      - name: Package portable build and update payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Copy-Item README.md "$pwd\dist\README.txt"
+          Compress-Archive -Path "$pwd\dist\game" -DestinationPath "$pwd\dist\NIGHT_PROTOCOL_Update.zip" -Force
+
+          $portable = "$pwd\dist\NIGHT_PROTOCOL_Portable"
+          New-Item -ItemType Directory -Force -Path $portable | Out-Null
+          Copy-Item "$pwd\dist\NIGHT_PROTOCOL_Launcher.exe" $portable
+          Copy-Item "$pwd\dist\game" "$portable\game" -Recurse
+          Copy-Item README.md "$portable\README.txt"
+          Compress-Archive -Path "$portable\*" -DestinationPath "$pwd\NIGHT_PROTOCOL_Windows_v0.1.0.zip" -Force
+
+          $updateHash = (Get-FileHash "$pwd\dist\NIGHT_PROTOCOL_Update.zip" -Algorithm SHA256).Hash.ToLower()
+          $manifest = @{
+            version = "0.1.0"
+            channel = "alpha"
+            url = "https://raw.githubusercontent.com/apelsina849-lgtm/fgwg/night-protocol-release/NIGHT_PROTOCOL_Update.zip"
+            sha256 = $updateHash
+            notes = "Initial WLzar Company Windows build"
+          } | ConvertTo-Json
+          Set-Content -Path "$pwd\dist\manifest.json" -Value $manifest -Encoding UTF8
+
+      - name: Publish launcher update channel
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $pub = Join-Path $env:RUNNER_TEMP "night-protocol-release"
+          New-Item -ItemType Directory -Force -Path $pub | Out-Null
+          Copy-Item "$pwd\dist\NIGHT_PROTOCOL_Update.zip" "$pub\NIGHT_PROTOCOL_Update.zip"
+          Copy-Item "$pwd\dist\manifest.json" "$pub\manifest.json"
+
+          git config user.name "WLzar Build Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan night-protocol-release
+          git rm -rf .
+          Copy-Item "$pub\NIGHT_PROTOCOL_Update.zip" "$pwd\NIGHT_PROTOCOL_Update.zip"
+          Copy-Item "$pub\manifest.json" "$pwd\manifest.json"
+          git add NIGHT_PROTOCOL_Update.zip manifest.json
+          git commit -m "Publish NIGHT PROTOCOL 0.1.0 update channel"
+          git push origin HEAD:night-protocol-release --force
+
+      - name: Upload ready Windows game
+        uses: actions/upload-artifact@v4
+        with:
+          name: NIGHT_PROTOCOL_Windows_v0.1.0
+          path: NIGHT_PROTOCOL_Windows_v0.1.0.zip
+          if-no-files-found: error
+          retention-days: 30
