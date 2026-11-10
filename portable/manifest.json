@@ -1,0 +1,19 @@
+{
+  "version": "0.1.0",
+  "channel": "alpha",
+  "notes": "Initial portable Windows build with WLzar Company loading screen and MARA VOSS preview.",
+  "files": [
+    {
+      "path": "game/index.html",
+      "url": "https://raw.githubusercontent.com/apelsina849-lgtm/fgwg/night-protocol-portable/portable/game/index.html"
+    },
+    {
+      "path": "game/style.css",
+      "url": "https://raw.githubusercontent.com/apelsina849-lgtm/fgwg/night-protocol-portable/portable/game/style.css"
+    },
+    {
+      "path": "game/app.js",
+      "url": "https://raw.githubusercontent.com/apelsina849-lgtm/fgwg/night-protocol-portable/portable/game/app.js"
+    }
+  ]
+}
